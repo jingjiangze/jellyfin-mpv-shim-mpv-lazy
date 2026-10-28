@@ -10,6 +10,91 @@
   var ALL = [];
   var ROW_CAP = 24;   // 轨道只渲前 24 张：一次挂 300+ 张远程海报会被 CDN 限流
 
+  /* 区域：/cdn-cgi/trace 在 Pages 上不给 loc，只能用客户端信号。
+     时区优先（VPN 下比语言准），语言兜底。 */
+  var REGION_CN = (function () {
+    try {
+      var tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || '');
+      if (/^Asia\/(Shanghai|Chongqing|Urumqi|Harbin)$/.test(tz)) return true;
+      if (tz) return false;
+      return /^zh(-|$)/i.test(navigator.language || '');
+    } catch (e) { return false; }
+  })();
+
+  /* ---------- 追番（本地 + GitHub Gist 可选同步） ---------- */
+  var FOLLOW_KEY = 'bgm_follow_v1', GIST_KEY = 'bgm_gist_cfg';
+  function follows() {
+    try { return JSON.parse(localStorage.getItem(FOLLOW_KEY) || '[]'); } catch (e) { return []; }
+  }
+  function saveFollows(list) {
+    localStorage.setItem(FOLLOW_KEY, JSON.stringify(list));
+    document.dispatchEvent(new CustomEvent('follow-change'));
+  }
+  function fkey(it) { return String(it.key || it.id || it.name); }
+  function isFollowed(k) { return follows().indexOf(k) >= 0; }
+  function toggleFollow(k) {
+    var list = follows(), i = list.indexOf(k);
+    if (i >= 0) list.splice(i, 1); else list.push(k);
+    saveFollows(list);
+    return i < 0;
+  }
+  function gistCfg() {
+    try { return JSON.parse(localStorage.getItem(GIST_KEY) || '{}'); } catch (e) { return {}; }
+  }
+  function pushGist() {
+    var cfg = gistCfg();
+    if (!cfg.token) { alert('先在「追番同步」里填 GitHub Token（只存在本机浏览器）'); return; }
+    var body = {
+      description: '番组计划 · 我的追番',
+      public: true,
+      files: { 'bgm-follow.json': { content: JSON.stringify({ updated: new Date().toISOString(), list: follows() }, null, 1) } }
+    };
+    var url = cfg.gistId ? 'https://api.github.com/gists/' + cfg.gistId : 'https://api.github.com/gists';
+    fetch(url, {
+      method: cfg.gistId ? 'PATCH' : 'POST',
+      headers: { 'Authorization': 'token ' + cfg.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.id) { cfg.gistId = d.id; localStorage.setItem(GIST_KEY, JSON.stringify(cfg)); alert('已同步到 Gist：' + d.html_url); }
+      else alert('同步失败：' + (d.message || '未知错误'));
+    }).catch(function (e) { alert('同步失败：' + e.message); });
+  }
+  function pullGist() {
+    var cfg = gistCfg();
+    if (!cfg.token || !cfg.gistId) { alert('先填 Token 并推送一次，才能拉取'); return; }
+    fetch('https://api.github.com/gists/' + cfg.gistId, { headers: { 'Authorization': 'token ' + cfg.token } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var f = (d.files || {})['bgm-follow.json'];
+        if (!f) return alert('Gist 里没有 bgm-follow.json');
+        var data = JSON.parse(f.content || '{}');
+        saveFollows((data.list || []).map(String));
+        alert('已从 Gist 恢复 ' + (data.list || []).length + ' 条追番');
+        location.reload();
+      }).catch(function (e) { alert('拉取失败：' + e.message); });
+  }
+  function exportFollows() {
+    var blob = new Blob([JSON.stringify({ list: follows() }, null, 1)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'bgm-follow.json'; a.click();
+  }
+  function importFollows() {
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json';
+    inp.onchange = function () {
+      var f = inp.files[0]; if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        try {
+          var d = JSON.parse(rd.result);
+          saveFollows(((d.list || d || [])).map(String));
+          alert('已导入 ' + follows().length + ' 条'); location.reload();
+        } catch (e) { alert('文件格式不对'); }
+      };
+      rd.readAsText(f);
+    };
+    inp.click();
+  }
+
 
   var FMT = { TV: 'TV', TV_SHORT: '短片', ONA: '网络放送', OVA: 'OVA', MOVIE: '剧场版',
               SPECIAL: '特别篇', MUSIC: '音乐' };
@@ -46,8 +131,9 @@
   };
 
   function bvidOf(it) {
-    if (!it.id || !DATA.bili) return '';
-    return DATA.bili[it.id] || '';
+    if (it.id && DATA.bili && DATA.bili[it.id]) return DATA.bili[it.id];
+    if (it.key && DATA.bili_fresh && DATA.bili_fresh[it.key]) return DATA.bili_fresh[it.key];
+    return '';
   }
 
   function cardHTML(it) {
@@ -60,6 +146,9 @@
       + (it.trailer ? '<span class="trailer-mark">预告</span>' : '')
       + (it.st === 'RELEASING' ? '<span class="ep" style="left:8px;right:auto;bottom:auto;top:8px;background:rgba(240,145,153,.92);color:#181820">连载</span>' : '')
       + '</div>';
+    var k = fkey(it), fv = isFollowed(k);
+    html += '<span class="fav' + (fv ? ' on' : '') + '" data-fav="' + esc(k) + '" title="追番">'
+      + (fv ? '★' : '☆') + '</span>';
     html += '<div class="t">' + esc(it.name) + '</div>';
     var sub = [];
     if (it.st === 'RELEASING' && it.next_at) sub.push(countdown(it.next_at));
@@ -72,7 +161,16 @@
 
   function bindCards(root) {
     root.querySelectorAll('.card').forEach(function (el) {
-      el.onclick = function () {
+      el.onclick = function (ev) {
+        var fv = ev.target.closest ? ev.target.closest('.fav') : null;
+        if (fv) {
+          ev.stopPropagation();
+          var on = toggleFollow(fv.dataset.fav);
+          fv.classList.toggle('on', on);
+          fv.textContent = on ? '★' : '☆';
+          if (PAGE === 'home' && location.hash !== 'skip') renderHome();
+          return;
+        }
         var k = el.dataset.key;
         var it = ALL.find(function (x) { return String(x.key || x.id || x.name) === k; });
         if (it) openModal(it);
@@ -125,8 +223,14 @@
       h += '</div>';
     }
     h += '<div class="acts">';
-    if (bv) h += '<span class="btn pri" onclick="playBili(\'' + esc(bv) + '\')">▶ B站播放</span>';
-    if (it.trailer) h += '<span class="btn' + (bv ? '' : ' pri') + '" onclick="playTrailer(\'' + esc(it.trailer) + '\')">▶ 预告</span>';
+    var cn = REGION_CN;
+    if (bv) {
+      h += '<span class="btn' + (cn ? ' pri' : '') + '" onclick="playBili(&#39;' + esc(bv) + '&#39;,' + (cn ? 'true' : 'false') + ')">▶ B站播放</span>';
+    }
+    if (it.trailer) {
+      h += '<span class="btn' + (bv && cn ? '' : ' pri') + '" onclick="playTrailer(&#39;' + esc(it.trailer) + '&#39;)">▶ 预告</span>';
+    }
+    h += '<span class="pill" style="align-self:center;color:var(--dim)">' + (cn ? '国内线路 · 优先 B 站' : '海外线路 · 优先预告') + '</span>';
     if (!isFresh && it.id) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc((window.JF || 'http://127.0.0.1:8100')) + '/web/#/details?id=' + esc(it.id) + '">Jellyfin</a>';
     if (it.url) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(it.url) + '">来源页</a>';
     if (it.name) h += '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name) + '">B站搜索</a>';
@@ -134,7 +238,8 @@
     $('#modal').innerHTML = h;
     $('#mask').classList.add('on');
     document.body.style.overflow = 'hidden';
-    if (it.trailer) playTrailer(it.trailer);
+    if (REGION_CN && bv) playBili(bv, true);
+    else if (it.trailer) playTrailer(it.trailer);
   }
 
   function playTrailer(vid) {
@@ -142,9 +247,10 @@
       + '?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
   }
 
-  function playBili(bvid) {
+  function playBili(bvid, auto) {
     $('#trailer').innerHTML = '<iframe src="//player.bilibili.com/player.html?bvid=' + encodeURIComponent(bvid)
-      + '&page=1&high_quality=1&danmaku=0&autoplay=0" allowfullscreen scrolling="no"></iframe>';
+      + '&page=1&high_quality=1&danmaku=0&autoplay=' + (auto ? '1' : '0')
+      + '" allowfullscreen scrolling="no" allow="autoplay; fullscreen"></iframe>';
   }
 
   function closeM() {
@@ -153,24 +259,126 @@
     document.body.style.overflow = '';
   }
 
+  /* ---------- 大图轮换（自动 + 拖拽/滑动 + 圆点） ---------- */
+  var heroTimer = null, heroIdx = 0, heroN = 0;
+  function showSlide(n) {
+    if (!heroN) return;
+    heroIdx = (n + heroN) % heroN;
+    document.querySelectorAll('#hero .slide').forEach(function (el, i) {
+      el.classList.toggle('on', i === heroIdx);
+    });
+    document.querySelectorAll('#hero .dots i').forEach(function (el, i) {
+      el.classList.toggle('on', i === heroIdx);
+    });
+  }
+  function initHero() {
+    var hero = $('#hero');
+    if (!hero) return;
+    heroN = hero.querySelectorAll('.slide').length;
+    if (heroN < 2) return;
+    clearInterval(heroTimer);
+    heroTimer = setInterval(function () { showSlide(heroIdx + 1); }, 6000);
+    hero.querySelectorAll('.dots i').forEach(function (d) {
+      d.onclick = function () { showSlide(+d.dataset.dot); restartHero(); };
+    });
+    var x0 = null;
+    hero.addEventListener('pointerdown', function (e) { x0 = e.clientX; hero.classList.add('grab'); });
+    hero.addEventListener('pointerup', function (e) {
+      hero.classList.remove('grab');
+      if (x0 === null) return;
+      var dx = e.clientX - x0; x0 = null;
+      if (Math.abs(dx) > 60) { showSlide(heroIdx + (dx < 0 ? 1 : -1)); restartHero(); }
+    });
+    hero.addEventListener('pointerleave', function () { x0 = null; hero.classList.remove('grab'); });
+    hero.addEventListener('mouseenter', function () { clearInterval(heroTimer); });
+    hero.addEventListener('mouseleave', function () { restartHero(); });
+    hero.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+    hero.addEventListener('touchend', function (e) {
+      if (x0 === null) return;
+      var dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (Math.abs(dx) > 45) { showSlide(heroIdx + (dx < 0 ? 1 : -1)); restartHero(); }
+    });
+  }
+  function restartHero() {
+    clearInterval(heroTimer);
+    if (heroN > 1) heroTimer = setInterval(function () { showSlide(heroIdx + 1); }, 6000);
+  }
+
+  /* ---------- 看板娘（自绘 SVG 胖鱼拟人，无第三方素材/无授权负担） ---------- */
+  var MASCOT_SVG = ''
+    + '<svg viewBox="0 0 120 140" width="100%" height="100%" aria-hidden="true">'
+    + '<ellipse cx="60" cy="66" rx="42" ry="38" fill="#f09199"/>'
+    + '<path d="M18 56c-14-6-16 10-6 16 4 2 8 1 10-2z" fill="#e07f88"/>'
+    + '<path d="M102 56c14-6 16 10 6 16-4 2-8 1-10-2z" fill="#e07f88"/>'
+    + '<path d="M60 28c10 0 18 6 22 14-6 4-14 6-22 6s-16-2-22-6c4-8 12-14 22-14z" fill="#f7b0b6"/>'
+    + '<ellipse cx="45" cy="72" rx="9" ry="10" fill="#fff"/><ellipse cx="75" cy="72" rx="9" ry="10" fill="#fff"/>'
+    + '<circle cx="46" cy="73" r="4.6" fill="#2b2b33"/><circle cx="76" cy="73" r="4.6" fill="#2b2b33"/>'
+    + '<circle cx="47.6" cy="71.4" r="1.5" fill="#fff"/><circle cx="77.6" cy="71.4" r="1.5" fill="#fff"/>'
+    + '<path d="M52 92q8 6 16 0" stroke="#8a4a50" stroke-width="3" fill="none" stroke-linecap="round"/>'
+    + '<ellipse cx="34" cy="88" rx="6" ry="3.4" fill="#e8808a" opacity=".55"/>'
+    + '<ellipse cx="86" cy="88" rx="6" ry="3.4" fill="#e8808a" opacity=".55"/>'
+    + '<path d="M88 116q10-8 6-18" stroke="#c06a72" stroke-width="4" fill="none" stroke-linecap="round"/>'
+    + '<circle cx="60" cy="34" r="4" fill="#fff" opacity=".75"/>'
+    + '</svg>';
+  var MASCOT_TIPS = [
+    '点卡片上的 ☆ 就能追番啦',
+    '番剧表按放送日排的，默认是今天',
+    '海外 IP 会优先给预告，国内直接 B 站',
+    '拖一下上面的大图可以换',
+    '详情页里有制作公司和关联作品'
+  ];
+  function mountMascot() {
+    if ($('#mascot')) return;
+    var el = document.createElement('div');
+    el.id = 'mascot';
+    el.innerHTML = '<div class="bubble" id="mbubble"></div><div class="fish">' + MASCOT_SVG + '</div>';
+    document.body.appendChild(el);
+    var bubble = el.querySelector('#mbubble');
+    var timer = null;
+    function tip() {
+      bubble.textContent = MASCOT_TIPS[Math.floor(Math.random() * MASCOT_TIPS.length)];
+      bubble.classList.add('on');
+      clearTimeout(timer);
+      timer = setTimeout(function () { bubble.classList.remove('on'); }, 4200);
+    }
+    el.querySelector('.fish').onclick = tip;
+    setTimeout(tip, 2500);
+  }
+
   /* ---------- 首页 ---------- */
   function renderHome() {
     var fa = (DATA.fresh && DATA.fresh.anime) || [];
     var fm = (DATA.fresh && DATA.fresh.movies) || [];
-    var hero = fa.find(function (x) { return x.banner; }) || fa[0] || null;
+    /* 大图轮换：取有 banner 的前 6 部，自动 6s 切换 + 鼠标拖拽 / 触摸滑动 */
+    var slides = fa.filter(function (x) { return x.banner; }).slice(0, 6);
     var out = '';
-    if (hero) {
-      out += '<section class="hero"><div class="hero-bg" style="background-image:url(\'' + esc(hero.banner || hero.poster || '') + '\')"></div>'
-        + '<div class="hero-info"><div class="hero-tag">本季新番 · ' + esc((DATA.fresh.season || '').split(' ')[0] || '') + '</div>'
-        + '<h1>' + esc(hero.name) + '</h1><div class="hero-meta">';
-      if (hero.rating) out += '<span><b>★ ' + hero.rating.toFixed(1) + '</b></span>';
-      if (hero.episodes) out += '<span>' + hero.episodes + ' 集</span>';
-      if (hero.air) out += '<span>' + esc(hero.air) + '</span>';
-      if (hero.next_ep) out += '<span>下一话 第 ' + hero.next_ep + ' 集</span>';
-      out += '</div><p>' + esc((hero.overview || '').slice(0, 200)) + '</p><div class="hero-btns">';
-      if (hero.trailer) out += '<span class="hbtn primary" onclick="playTrailer(\'' + esc(hero.trailer) + '\')">▶ 播放预告</span>';
-      out += '<span class="hbtn ghost" onclick="document.getElementById(\'sched\').scrollIntoView({behavior:\'smooth\'})">番剧表</span>';
-      out += '</div></div></section>';
+    if (slides.length) {
+      out += '<section class="hero" id="hero">';
+      slides.forEach(function (it, i) {
+        out += '<div class="slide' + (i === 0 ? ' on' : '') + '" data-i="' + i + '">'
+          + '<div class="hero-bg" style="background-image:url(\'' + esc(it.banner || it.poster || '') + '\')"></div>'
+          + '<div class="hero-info"><div class="hero-tag">本季新番 · ' + esc((DATA.fresh.season || '').split(' ')[0] || '') + '</div>'
+          + '<h1>' + esc(it.name) + '</h1><div class="hero-meta">';
+        if (it.rating) out += '<span><b>★ ' + it.rating.toFixed(1) + '</b></span>';
+        if (it.episodes) out += '<span>' + it.episodes + ' 集</span>';
+        if (it.fm) out += '<span>' + esc(FMT[it.fm] || it.fm) + '</span>';
+        if (it.st === 'RELEASING' && it.next_at) out += '<span>' + countdown(it.next_at) + '</span>';
+        out += '</div><p>' + esc((it.overview || '').slice(0, 180)) + '</p><div class="hero-btns">';
+        if (it.trailer) out += '<span class="hbtn primary" onclick="playTrailer(\'' + esc(it.trailer) + '\')">▶ 播放预告</span>';
+        out += '<span class="hbtn ghost" data-open="' + esc(fkey(it)) + '">详情</span>';
+        out += '</div></div></div>';
+      });
+      out += '<div class="dots">' + slides.map(function (_, i) {
+        return '<i class="' + (i === 0 ? ' on' : '') + '" data-dot="' + i + '"></i>';
+      }).join('') + '</div></section>';
+    }
+
+    var fl = follows();
+    if (fl.length) {
+      out += '<section class="block" id="myfollow"><div class="bhead"><h2>我的追番</h2><span>' + fl.length + ' 部</span>'
+        + '<span class="syncbar"><a data-act="push">同步 Gist</a><a data-act="pull">恢复</a>'
+        + '<a data-act="export">导出</a><a data-act="import">导入</a></span></div>'
+        + '<div class="row" id="r-follow"></div></section>';
     }
 
     out += '<section class="block" id="sched"><div class="bhead"><h2>番剧表</h2><span>按放送日筛选</span></div>'
@@ -182,6 +390,26 @@
     ALL = [];
     fill($('#r-anime'), fa.slice(0, ROW_CAP), ROW_CAP);
     fill($('#r-movie'), fm.slice(0, ROW_CAP), ROW_CAP);
+    initHero();
+    if (follows().length) {
+      var pool = fa.concat(fm);
+      fill($('#r-follow'), pool.filter(function (x) { return isFollowed(fkey(x)); }), 24);
+    }
+    document.querySelectorAll('[data-open]').forEach(function (el) {
+      el.onclick = function () {
+        var it = ALL.find(function (x) { return fkey(x) === el.dataset.open; });
+        if (it) openModal(it);
+      };
+    });
+    document.querySelectorAll('.syncbar a').forEach(function (a) {
+      a.onclick = function () {
+        var act = a.dataset.act;
+        if (act === 'push') pushGist();
+        else if (act === 'pull') pullGist();
+        else if (act === 'export') exportFollows();
+        else importFollows();
+      };
+    });
 
     var days = ['全部'].concat(DAYS.slice(1), DAYS.slice(0, 1));
     var bar = $('#wdbar');
@@ -293,5 +521,6 @@
     }, { passive: true });
     bindSearch();
     if (PAGE === 'home') renderHome(); else renderLibrary();
+    mountMascot();
   });
 })();

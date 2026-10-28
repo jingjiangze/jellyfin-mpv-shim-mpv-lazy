@@ -51,6 +51,15 @@ jobs:
           BILI_MAX: "150"
         run: python -u fetch_bili.py
 
+      - name: Fetch bilibili links for fresh items
+        timeout-minutes: 12
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          NO_LOCAL_PROXY: "1"
+          FRESH_BILI_MAX: "80"
+        run: python -u fetch_bili_fresh.py
+
       - name: Fill missing posters
         timeout-minutes: 20
         working-directory: site-src

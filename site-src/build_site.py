@@ -61,7 +61,8 @@ FM = [{"kind": "fresh", "type": "M", "key": x["k"], "name": x["n"],
       for x in fresh.get("movies") or []]
 
 keep_ids = {a[0] for a in lib_raw}
-DATA_HOME = {"fresh": {"anime": FA, "movies": FM, "season": fresh.get("season")}}
+DATA_HOME = {"fresh": {"anime": FA, "movies": FM, "season": fresh.get("season")},
+             "bili_fresh": bili.get("__fresh__") or {}}
 DATA_LIB = {"lib": LIB, "bili": {k: v for k, v in bili.items() if k in keep_ids and v}}
 
 for name in ("style.css", "app.js"):
