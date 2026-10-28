@@ -1,0 +1,86 @@
+{
+  "_note": "站点点位黑名单：这些条目名字是片源规格而不是片名，不进站点。build_lib.py 会从 data.json 里剔除并且不再追加；build_site.py 渲染时再兜一层。",
+  "_audit": "_tmp/quark-source-upgrade-2026-10-27 审计（2026-10-28）：14 条正则命中里，1 条是误伤（异国日记=違国日記 真实剧集），1 条有真实片名（Space: 1999 4K Double Bill）保留，其余 12 条列入本表。",
+  "entries": [
+    {
+      "id": "40adfe305dcf59070a9467238d9d4ac1",
+      "name": "4K国粤双语",
+      "why": "spec-only；磁盘无对应目录"
+    },
+    {
+      "id": "7431c91d7ba7df370d049926779578ee",
+      "name": "1080P",
+      "why": "spec-only；磁盘无对应目录"
+    },
+    {
+      "id": "b280d1304920e592824eff0dd8d352f5",
+      "name": "1080P(1)",
+      "why": "spec-only；磁盘无对应目录"
+    },
+    {
+      "id": "e0e795819a17c66510068576e389fdb5",
+      "name": "国语 内嵌简中字幕",
+      "why": "spec-only；磁盘无对应目录"
+    },
+    {
+      "id": "e4f0d32b6e8bcd6d46533aa215f8b9c3",
+      "name": "日语 内嵌简中字幕",
+      "why": "spec-only；磁盘无对应目录"
+    },
+    {
+      "id": "e36fc72fb8dd1cf2b9e40a79ca1c09a8",
+      "name": "1080P 国粤日三语 外挂简中字幕",
+      "why": "spec-only（实为龙猫 1080P，24.6GB；文件保留，仅不上站）"
+    },
+    {
+      "id": "03ed13eb5b9f6c8026ff3f962afd3b43",
+      "name": "1080P 内嵌简英双语字幕",
+      "why": "spec-only（2.25GB；文件保留，仅不上站）"
+    },
+    {
+      "id": "36694ab852965901bd076f6b6c5c19c8",
+      "name": "Dovi Xebec",
+      "why": "spec-only（12.2GB；文件保留，仅不上站）"
+    },
+    {
+      "id": "1d52dda41c0dce1ebe558d6bac8d5ce5",
+      "name": "2026.2160p.WEB-DL.HQ.10bit.60fps.HDR10.H.265.DTS.5.1.5Audios",
+      "why": "spec-only（19.0GB；文件保留，仅不上站）"
+    },
+    {
+      "id": "02409551a904e2a031561c8414521243",
+      "name": "DVS UltraHD HDR-10 4K Video Calibration Disc v2.0",
+      "why": "画面校准测试碟，非电影（8.4GB；文件保留，仅不上站）"
+    },
+    {
+      "id": "dee73ef35b99ac8d10a2771fad761af3",
+      "name": "Pianist Dovi",
+      "why": "与「钢琴家」重复"
+    },
+    {
+      "id": "700f52931ab7ddba321969178c89b307",
+      "name": "The.Godfather.1972.UHD.BluRay.2160p.2Audio.TrueHD.5.1.x265.1",
+      "why": "与「Godfather Iii」重复"
+    },
+    {
+      "id": "c2f8e71c959296e1413469f8dd39da31",
+      "name": "双国配音轨杜比视界",
+      "why": "spec-only（无片名）"
+    },
+    {
+      "id": "1b675dd5ade68005f30b93fdb06c4507",
+      "name": "Itunes Batweb",
+      "why": "spec-only（无片名）"
+    },
+    {
+      "id": "bf896c75169ae445ba0586085af03b29",
+      "name": "Mandarin Eng",
+      "why": "spec-only（无片名）"
+    },
+    {
+      "id": "2528642765da467ee5741fd522bf3870",
+      "name": "S2",
+      "why": "spec-only（无片名）"
+    }
+  ]
+}
