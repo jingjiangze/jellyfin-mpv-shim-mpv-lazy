@@ -20,7 +20,7 @@ YEARS_DIR = HERE / "site" / "years"
 STATE = HERE / "site" / "years_state.json"
 REPO = "jingjiangze/jellyfin-mpv-shim-mpv-lazy"
 BR = "main"
-YEARS_PER_RUN = int(os.environ.get("YEARS_PER_RUN", "6"))
+YEARS_PER_RUN = int(os.environ.get("YEARS_PER_RUN", "9"))
 PER = int(os.environ.get("PER_YEAR", "50"))
 
 

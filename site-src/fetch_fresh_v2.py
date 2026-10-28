@@ -9,6 +9,7 @@
 import datetime
 import hashlib
 import json
+import os
 import pathlib
 import re
 import time
@@ -43,8 +44,19 @@ def anilist_fetch(per=50):
          'trailer{id site} nextAiringEpisode{airingAt episode} '
          'relations{nodes{id type format siteUrl title{romaji native} coverImage{large}}}}}}' % per)
     out = []
-    for page in range(1, 5):  # 4 页 = 200 部（当季尽量抓全）
+    max_pages = int(os.environ.get("ANIME_PAGES", "0") or 0) or 10 ** 9
+    state = {}
+    try:
+        state = json.loads((HERE / "site" / "anime_pages.json").read_text(encoding="utf-8"))
+    except Exception:
+        state = {}
+    start_page = int(state.get("last_page", 0)) + 1
+    page = start_page
+    fetched = []
+    reason = "max"
+    while page <= start_page + max_pages - 1:
         body = json.dumps({"query": q, "variables": {"p": page}}).encode()
+        ms = []
         for i in range(3):
             try:
                 req = urllib.request.Request("https://graphql.anilist.co", data=body,
@@ -52,11 +64,27 @@ def anilist_fetch(per=50):
                 with DIRECT.open(req, timeout=25) as x:
                     d = json.loads(x.read().decode("utf-8", "replace"))
                 ms = (((d.get("data") or {}).get("Page") or {}).get("media")) or []
-                out += ms
                 break
             except Exception:
                 time.sleep(1.5 * (i + 1))
+        if not ms:
+            reason = "empty"
+            break
+        out += ms
+        fetched.append(page)
+        print(f"    page {page}: +{len(ms)}（累计 {len(out)}）", flush=True)
+        if len(ms) < PER:
+            reason = "end"
+            break
+        page += 1
         time.sleep(0.8)
+    # 空页 = 扫描完毕，复位从第 1 页重扫；未到末页 = 记住最后成功页，下次接着
+    state["last_page"] = 0 if reason in ("empty", "end") else (fetched[-1] if fetched else 0)
+    if reason == "end":
+        print("    已抓到目录末页，下轮从头重扫", flush=True)
+    else:
+        print(f"    断点: last_page={state['last_page']}（{reason}）", flush=True)
+    (HERE / "site" / "anime_pages.json").write_text(json.dumps(state), encoding="utf-8")
     return out
 
 
@@ -161,6 +189,11 @@ def main():
     extra = [m for m in air_raw if m.get("id") not in seen]
     an_raw += extra
     print(f"AniList 连载中追加: {len(extra)} 部（合计 {len(an_raw)}）", flush=True)
+    air_raw = anilist_airing(50)
+    seen = {m.get("id") for m in an_raw}
+    extra = [m for m in air_raw if m.get("id") not in seen]
+    an_raw += extra
+    print(f"AniList 连载中追加: {len(extra)} 部（合计 {len(an_raw)}）", flush=True)
     for m in an_raw:
         t = m.get("title") or {}
         name = t.get("native") or t.get("romaji") or t.get("english")
@@ -217,7 +250,23 @@ def main():
             trailer_id = tmdb_videos(vid)
         rd = (m.get("release_date") or "")[:4]
         key = "m" + hashlib.md5(str(vid).encode()).hexdigest()[:10]
-        out["movies"].append({
+        # 只增不减：与既有目录按 k 合并，避免某轮超时抓不全时目录缩水
+    try:
+        _prev = json.loads((HERE / "site" / "fresh.json").read_text(encoding="utf-8")).get("anime") or []
+    except Exception:
+        _prev = []
+    out["anime"] += _prev
+    _seen_k = set()
+    _dedup = []
+    for x in out["anime"]:
+        if x["k"] in _seen_k:
+            continue
+        _seen_k.add(x["k"])
+        _dedup.append(x)
+    out["anime"] = _dedup
+    print(f"目录合并后: {len(out['anime'])} 部", flush=True)
+
+    out["movies"].append({
             "k": key, "n": title,
             "y": int(rd) if rd else None,
             "r": round(m["vote_average"], 1) if m.get("vote_average") else None,
@@ -236,7 +285,23 @@ def main():
         t = (s.get("title") or "").strip()
         if t and t.lower() not in tm_titles:
             key = "d" + hashlib.md5(str(s.get("id")).encode()).hexdigest()[:10]
-            out["movies"].append({
+            # 只增不减：与既有目录按 k 合并，避免某轮超时抓不全时目录缩水
+    try:
+        _prev = json.loads((HERE / "site" / "fresh.json").read_text(encoding="utf-8")).get("anime") or []
+    except Exception:
+        _prev = []
+    out["anime"] += _prev
+    _seen_k = set()
+    _dedup = []
+    for x in out["anime"]:
+        if x["k"] in _seen_k:
+            continue
+        _seen_k.add(x["k"])
+        _dedup.append(x)
+    out["anime"] = _dedup
+    print(f"目录合并后: {len(out['anime'])} 部", flush=True)
+
+    out["movies"].append({
                 "k": key, "n": t,
                 "r": float(s["rate"]) if s.get("rate") else None,
                 "img": s.get("cover") or "",
