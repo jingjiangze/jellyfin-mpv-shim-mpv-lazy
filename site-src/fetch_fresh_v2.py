@@ -34,8 +34,8 @@ def season_now():
 
 def anilist_fetch(per=50):
     s, y = season_now()
-    q = ('query($s:MediaSeason,$y:Int,$p:Int){Page(page:$p,perPage:%d){media('
-         'type:ANIME,season:$s,seasonYear:$y,sort:POPULARITY_DESC){'
+    q = ('query($p:Int){Page(page:$p,perPage:%d){media('
+         'type:ANIME,sort:POPULARITY_DESC){'
          'id title{romaji native english} startDate{year month day} '
          'coverImage{large} bannerImage averageScore episodes '
          'description(asHtml:false) genres siteUrl popularity status format duration '
@@ -43,8 +43,8 @@ def anilist_fetch(per=50):
          'trailer{id site} nextAiringEpisode{airingAt episode} '
          'relations{nodes{id type format siteUrl title{romaji native} coverImage{large}}}}}}' % per)
     out = []
-    for page in range(1, 3):  # 2 页 = 100 部
-        body = json.dumps({"query": q, "variables": {"s": s, "y": y, "p": page}}).encode()
+    for page in range(1, 5):  # 4 页 = 200 部（当季尽量抓全）
+        body = json.dumps({"query": q, "variables": {"p": page}}).encode()
         for i in range(3):
             try:
                 req = urllib.request.Request("https://graphql.anilist.co", data=body,
@@ -118,6 +118,33 @@ def douban_fetch(tags=("热门", "最新"), limit=60):
     return out
 
 
+def anilist_airing(per=50):
+    """正在连载的动画（不限季节），补上跨季番。"""
+    q = ('query($p:Int){Page(page:$p,perPage:%d){media(type:ANIME,status:RELEASING,'
+         'sort:POPULARITY_DESC){'
+         'id title{romaji native english} startDate{year month day} '
+         'coverImage{large} bannerImage averageScore episodes '
+         'description(asHtml:false) genres siteUrl popularity status format duration '
+         'studios(isMain:true){nodes{name}} '
+         'trailer{id site} nextAiringEpisode{airingAt episode} '
+         'relations{nodes{id type format siteUrl title{romaji native} coverImage{large}}}}}}' % per)
+    out = []
+    for page in range(1, 3):
+        body = json.dumps({"query": q, "variables": {"p": page}}).encode()
+        for i in range(3):
+            try:
+                req = urllib.request.Request("https://graphql.anilist.co", data=body,
+                                             headers={"Content-Type": "application/json", "User-Agent": UA})
+                with DIRECT.open(req, timeout=25) as x:
+                    d = json.loads(x.read().decode("utf-8", "replace"))
+                out += (((d.get("data") or {}).get("Page") or {}).get("media")) or []
+                break
+            except Exception:
+                time.sleep(1.5 * (i + 1))
+        time.sleep(0.6)
+    return out
+
+
 def clean_desc(s, n=200):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", s or "")).strip()[:n]
 
@@ -128,7 +155,12 @@ def main():
 
     # ---- AniList 当季新番（含 trailer + weekday + banner）----
     an_raw = anilist_fetch(50)
-    print(f"AniList: {len(an_raw)} 部", flush=True)
+    print(f"AniList 当季: {len(an_raw)} 部", flush=True)
+    air_raw = anilist_airing(50)
+    seen = {m.get("id") for m in an_raw}
+    extra = [m for m in air_raw if m.get("id") not in seen]
+    an_raw += extra
+    print(f"AniList 连载中追加: {len(extra)} 部（合计 {len(an_raw)}）", flush=True)
     for m in an_raw:
         t = m.get("title") or {}
         name = t.get("native") or t.get("romaji") or t.get("english")

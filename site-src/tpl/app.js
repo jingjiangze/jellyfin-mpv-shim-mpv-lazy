@@ -275,7 +275,12 @@
     $('#mask').classList.add('on');
     document.body.style.overflow = 'hidden';
     if (useCN() && bv) playBili(bv, true);
-    else if (it.trailer) playTrailer(it.trailer);
+    else if (it.trailer && !useCN()) playTrailer(it.trailer);
+    else if (useCN() && !bv) {
+      $('#trailer').innerHTML = '<div class="tph">国内网络无法直接播放 YouTube 预告<br>'
+        + '<a class="btn pri" style="display:inline-block;margin-top:12px" target="_blank" rel="noopener" '
+        + 'href="https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name || '') + '">在 B 站搜索</a></div>';
+    }
   }
 
   function playerHost() {
@@ -375,7 +380,6 @@
   /* ---------- 首页 ---------- */
   function renderHome() {
     var fa = (DATA.fresh && DATA.fresh.anime) || [];
-    var fm = (DATA.fresh && DATA.fresh.movies) || [];
     /* 大图轮换：取有 banner 的前 6 部，自动 6s 切换 + 鼠标拖拽 / 触摸滑动 */
     var slides = fa.filter(function (x) { return x.banner; }).slice(0, 6);
     var out = '';
@@ -386,7 +390,7 @@
           + (i === 0
               ? '<div class="hero-bg" style="background-image:url(' + "'" + esc(it.banner || it.poster || '') + "'" + ')"></div>'
               : '<div class="hero-bg" data-bg="' + esc(it.banner || it.poster || '') + '"></div>')
-          + '<div class="hero-info"><div class="hero-tag">本季新番 · ' + esc((DATA.fresh.season || '').split(' ')[0] || '') + '</div>'
+          + '<div class="hero-info"><div class="hero-tag">动漫库 · ' + fa.length + ' 部</div>'
           + '<h1>' + esc(it.name) + '</h1><div class="hero-meta">';
         if (it.rating) out += '<span><b>★ ' + it.rating.toFixed(1) + '</b></span>';
         if (it.episodes) out += '<span>' + it.episodes + ' 集</span>';
@@ -414,7 +418,7 @@
     out += '<section class="block" id="sched"><div class="bhead"><h2>番剧表</h2><span>按放送日筛选</span></div>'
       + '<div class="wdbar" id="wdbar"></div><div class="grid" id="g-sched"></div></section>';
     out += '<section class="block"><div class="bhead"><h2>本季新番</h2><span>' + fa.length + ' 部</span></div><div class="row" id="r-anime"></div></section>';
-    out += '<section class="block"><div class="bhead"><h2>新片</h2><span>' + fm.length + ' 部</span></div><div class="row" id="r-movie"></div></section>';
+    out += '<section class="block" id="allanime"><div class="bhead"><h2>全部动漫</h2><span>' + fa.length + ' 部</span></div><div class="grid" id="g-all"></div></section>';
 
     $('#main').innerHTML = out;
     ALL = [];
@@ -424,7 +428,7 @@
     var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 60); };
     later(function () {
       fill($('#r-anime'), bySort(fa).slice(0, ROW_CAP), ROW_CAP);
-      fill($('#r-movie'), bySort(fm).slice(0, ROW_CAP), ROW_CAP);
+      fill($('#g-all'), bySort(byStatus(fa)), 80);
     });
     if (follows().length) {
       var pool = fa.concat(fm);
@@ -457,7 +461,7 @@
       bar.appendChild(el);
     });
     renderSched(fa);
-    setCnt(fa.length + fm.length);
+    setCnt(fa.length);
   }
 
   function renderFilterBar() {
@@ -545,11 +549,11 @@
       var kw = q.value.trim().toLowerCase();
       if (!kw) { PAGE === 'home' ? renderHome() : renderLibrary(); return; }
       var pool = PAGE === 'home'
-        ? [].concat((DATA.fresh && DATA.fresh.anime) || [], (DATA.fresh && DATA.fresh.movies) || [])
+        ? ((DATA.fresh && DATA.fresh.anime) || [])
         : (DATA.lib || []);
       var hits = pool.filter(function (x) { return (x.name || '').toLowerCase().indexOf(kw) >= 0; });
       ALL = [];
-      var host = PAGE === 'home' ? $('#g-sched') : $('#g');
+      var host = PAGE === 'home' ? ($('#g-all') || $('#g-sched')) : $('#g');
       if (!host) return;
       host.innerHTML = '';
       fill(host, hits, 60);
@@ -560,7 +564,6 @@
 
   function allItems() {
     return [].concat((DATA.fresh && DATA.fresh.anime) || [],
-                     (DATA.fresh && DATA.fresh.movies) || [],
                      DATA.lib || []);
   }
   function openFromQuery() {
