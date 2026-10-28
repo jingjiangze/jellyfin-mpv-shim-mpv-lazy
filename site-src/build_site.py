@@ -65,6 +65,15 @@ DATA_HOME = {"fresh": {"anime": FA, "movies": FM, "season": fresh.get("season")}
              "bili_fresh": bili.get("__fresh__") or {}}
 DATA_LIB = {"lib": LIB, "bili": {k: v for k, v in bili.items() if k in keep_ids and v}}
 
+# 看板娘等静态素材
+ASSETS_SRC = BASE / "assets"
+if ASSETS_SRC.is_dir():
+    import shutil as _sh
+    _sh.copytree(ASSETS_SRC, SITE / "assets", dirs_exist_ok=True)
+
+CSS = (TPL / "style.css").read_text(encoding="utf-8")
+JS = (TPL / "app.js").read_text(encoding="utf-8")
+# 同时留一份独立文件（老链接/缓存不会 404）
 for name in ("style.css", "app.js"):
     (SITE / name).write_bytes((TPL / name).read_bytes())
 
@@ -78,7 +87,8 @@ PAGES = [
     ("library.html", "library.html", DATA_LIB),
 ]
 for out, tpl_name, data in PAGES:
-    html = (TPL / tpl_name).read_text(encoding="utf-8").replace("__DATA__", dump(data))
+    html = ((TPL / tpl_name).read_text(encoding="utf-8")
+            .replace("__CSS__", CSS).replace("__JS__", JS).replace("__DATA__", dump(data)))
     (SITE / out).write_text(html, encoding="utf-8")
     print(f"{out}: {len(html.encode('utf-8'))/1024:.0f} KB")
 

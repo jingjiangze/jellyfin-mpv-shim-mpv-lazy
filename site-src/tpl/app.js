@@ -305,33 +305,20 @@
   }
 
   /* ---------- 看板娘（自绘 SVG 胖鱼拟人，无第三方素材/无授权负担） ---------- */
-  var MASCOT_SVG = ''
-    + '<svg viewBox="0 0 120 140" width="100%" height="100%" aria-hidden="true">'
-    + '<ellipse cx="60" cy="66" rx="42" ry="38" fill="#f09199"/>'
-    + '<path d="M18 56c-14-6-16 10-6 16 4 2 8 1 10-2z" fill="#e07f88"/>'
-    + '<path d="M102 56c14-6 16 10 6 16-4 2-8 1-10-2z" fill="#e07f88"/>'
-    + '<path d="M60 28c10 0 18 6 22 14-6 4-14 6-22 6s-16-2-22-6c4-8 12-14 22-14z" fill="#f7b0b6"/>'
-    + '<ellipse cx="45" cy="72" rx="9" ry="10" fill="#fff"/><ellipse cx="75" cy="72" rx="9" ry="10" fill="#fff"/>'
-    + '<circle cx="46" cy="73" r="4.6" fill="#2b2b33"/><circle cx="76" cy="73" r="4.6" fill="#2b2b33"/>'
-    + '<circle cx="47.6" cy="71.4" r="1.5" fill="#fff"/><circle cx="77.6" cy="71.4" r="1.5" fill="#fff"/>'
-    + '<path d="M52 92q8 6 16 0" stroke="#8a4a50" stroke-width="3" fill="none" stroke-linecap="round"/>'
-    + '<ellipse cx="34" cy="88" rx="6" ry="3.4" fill="#e8808a" opacity=".55"/>'
-    + '<ellipse cx="86" cy="88" rx="6" ry="3.4" fill="#e8808a" opacity=".55"/>'
-    + '<path d="M88 116q10-8 6-18" stroke="#c06a72" stroke-width="4" fill="none" stroke-linecap="round"/>'
-    + '<circle cx="60" cy="34" r="4" fill="#fff" opacity=".75"/>'
-    + '</svg>';
   var MASCOT_TIPS = [
     '点卡片上的 ☆ 就能追番啦',
     '番剧表按放送日排的，默认是今天',
     '海外 IP 会优先给预告，国内直接 B 站',
     '拖一下上面的大图可以换',
-    '详情页里有制作公司和关联作品'
+    '详情页里有制作公司和关联作品',
+    '看板娘是社区素材：Mermaid · OpenGameArt · CC-BY 3.0'
   ];
   function mountMascot() {
     if ($('#mascot')) return;
     var el = document.createElement('div');
     el.id = 'mascot';
-    el.innerHTML = '<div class="bubble" id="mbubble"></div><div class="fish">' + MASCOT_SVG + '</div>';
+    el.innerHTML = '<div class="bubble" id="mbubble"></div>'
+      + '<div class="fish"><img src="assets/mascot.png" alt="看板娘"></div>';
     document.body.appendChild(el);
     var bubble = el.querySelector('#mbubble');
     var timer = null;
@@ -388,9 +375,13 @@
 
     $('#main').innerHTML = out;
     ALL = [];
-    fill($('#r-anime'), fa.slice(0, ROW_CAP), ROW_CAP);
-    fill($('#r-movie'), fm.slice(0, ROW_CAP), ROW_CAP);
     initHero();
+    /* 先画 hero + 番剧表；两条轨道用空闲时间补，避免首屏被 48 张远程海报堵住 */
+    var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 60); };
+    later(function () {
+      fill($('#r-anime'), fa.slice(0, ROW_CAP), ROW_CAP);
+      fill($('#r-movie'), fm.slice(0, ROW_CAP), ROW_CAP);
+    });
     if (follows().length) {
       var pool = fa.concat(fm);
       fill($('#r-follow'), pool.filter(function (x) { return isFollowed(fkey(x)); }), 24);

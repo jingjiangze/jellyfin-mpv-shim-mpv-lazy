@@ -110,5 +110,6 @@ jobs:
           cp site-src/site/index.html site-src/site/library.html \
              site-src/site/style.css site-src/site/app.js dist/
           cp site-src/tpl/_headers dist/_headers
+          cp -r site-src/site/assets dist/assets 2>/dev/null || true
           ls -la dist
           npx -y wrangler@4 pages deploy dist --project-name=media-library --commit-dirty=true
