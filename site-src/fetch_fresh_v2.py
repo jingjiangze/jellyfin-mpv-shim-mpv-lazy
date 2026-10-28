@@ -73,7 +73,7 @@ def anilist_fetch(per=50):
         out += ms
         fetched.append(page)
         print(f"    page {page}: +{len(ms)}（累计 {len(out)}）", flush=True)
-        if len(ms) < PER:
+        if len(ms) < per:
             reason = "end"
             break
         page += 1
