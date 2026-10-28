@@ -5,7 +5,7 @@ name: site-sync
 
 on:
   schedule:
-    - cron: "10 2 * * *"   # 10:10 Asia/Shanghai
+    - cron: "10 */4 * * *"   # 每 4 小时一轮（北京时间 02:10/06:10/10:10/14:10/18:10/22:10）
   workflow_dispatch:
 
 permissions:
