@@ -1,0 +1,31 @@
+name: probe-sources
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reachability from a GitHub runner
+        run: |
+          set -u
+          probe() {
+            name="$1"; url="$2"; shift 2
+            out=$(curl -s -o /dev/null -w "%{http_code} %{time_total}" --max-time 25 "$@" "$url" 2>/dev/null || echo "ERR")
+            echo "$name -> $out"
+          }
+          UA='-H User-Agent:Mozilla/5.0'
+          probe anilist_gql     "https://graphql.anilist.co"
+          probe tmdb_api        "https://api.tmdb.org/3/configuration"
+          probe douban_json     "https://movie.douban.com/j/search_subjects?type=movie&tag=%E7%83%AD%E9%97%A8&page_limit=1&page_start=0" $UA
+          probe bili_search     "https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword=%E9%BE%99%E7%8C%AB" $UA -H Referer:https://search.bilibili.com/
+          probe anilist_img     "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx195539-4LdfmKIHzuxr.png"
+          probe tmdb_img        "https://image.tmdb.org/t/p/w185/nsihyCiAHotJ3G4NTSJcBuWLbzg.jpg"
+          probe jsdelivr_gcore  "https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/README.md"
+          probe ghproxy_raw     "https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/README.md"
+          probe pages_site      "https://anime.jiangjiangze.icu/"
+          echo "--- toolchain ---"
+          python3 -V
+          node -v
+          command -v wrangler || echo "wrangler: not installed"
