@@ -360,7 +360,7 @@
     '海外 IP 会优先给预告，国内直接 B 站',
     '拖一下上面的大图可以换',
     '详情页里有制作公司和关联作品',
-    '看板娘是社区素材：Mermaid · OpenGameArt · CC-BY 3.0'
+    '看板娘：DeepSeek 鲸鱼娘（社区二创 · B站 BV1pGnn67EC2）'
   ];
   function mountMascot() {
     if ($('#mascot')) return;
