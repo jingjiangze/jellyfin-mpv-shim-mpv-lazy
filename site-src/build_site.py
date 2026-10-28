@@ -9,6 +9,7 @@
 """
 import json
 import os
+import re
 import pathlib
 
 BASE = pathlib.Path(__file__).resolve().parent
@@ -42,11 +43,11 @@ LIB = [{"id": a[0], "kind": "lib", "type": "S" if a[2] else "M", "name": a[1],
         "poster": f"{ASSET_BASE}/posters/{a[0]}.jpg" if a[5] and have_poster(a[0]) else "",
         "pf": (f"{ASSET_PROXY}/posters/{a[0]}.jpg|/posters/{a[0]}.jpg"
                if a[5] and have_poster(a[0]) else ""),
-        "episodes": a[6] or 0, "overview": (a[7] if len(a) > 7 else "") or ""} for a in lib_raw]
+        "episodes": a[6] or 0, "overview": ((a[7] if len(a) > 7 else "") or "")[:110]} for a in lib_raw]
 FA = [{"kind": "fresh", "type": "S", "key": x["k"], "name": x["n"],
        "rating": x.get("r"), "poster": x.get("img") or "",
        "air": x.get("air") or "", "episodes": x.get("e") or 0,
-       "overview": x.get("v") or "", "url": x.get("u") or "",
+       "overview": (x.get("v") or "")[:110], "url": x.get("u") or "",
        "trailer": x.get("trailer"), "banner": x.get("banner"),
        "next_ep": x.get("next_ep"), "next_at": x.get("next_at"),
        "wd": x.get("wd"), "genres": x.get("g") or [], "pop": x.get("pop"),
@@ -56,7 +57,7 @@ FA = [{"kind": "fresh", "type": "S", "key": x["k"], "name": x["n"],
 FM = [{"kind": "fresh", "type": "M", "key": x["k"], "name": x["n"],
        "rating": x.get("r"), "poster": x.get("img") or "",
        "banner": x.get("banner") or "", "trailer": x.get("trailer"),
-       "overview": x.get("v") or "", "url": x.get("u") or "",
+       "overview": (x.get("v") or "")[:110], "url": x.get("u") or "",
        "year": x.get("y"), "genres": x.get("g") or []}
       for x in fresh.get("movies") or []]
 
@@ -71,8 +72,20 @@ if ASSETS_SRC.is_dir():
     import shutil as _sh
     _sh.copytree(ASSETS_SRC, SITE / "assets", dirs_exist_ok=True)
 
-CSS = (TPL / "style.css").read_text(encoding="utf-8")
-JS = (TPL / "app.js").read_text(encoding="utf-8")
+def _min_css(text):
+    while "/*" in text:
+        a = text.index("/*")
+        b = text.index("*/", a) + 2
+        text = text[:a] + text[b:]
+    return " ".join(text.split())
+
+
+def _min_js(text):
+    return chr(10).join(l.strip() for l in text.splitlines() if l.strip())
+
+
+CSS = _min_css((TPL / "style.css").read_text(encoding="utf-8"))
+JS = _min_js((TPL / "app.js").read_text(encoding="utf-8"))
 # 同时留一份独立文件（老链接/缓存不会 404）
 for name in ("style.css", "app.js"):
     (SITE / name).write_bytes((TPL / name).read_bytes())
