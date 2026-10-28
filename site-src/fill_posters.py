@@ -16,9 +16,9 @@ import urllib.request
 
 HERE = pathlib.Path(__file__).parent
 SITE = HERE / "site"
-PX = os.environ.get("LOCAL_PROXY", "http://127.0.0.1:7897")
+PX = "http://127.0.0.1:7897"
 DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-PROXY = DIRECT if os.environ.get("NO_LOCAL_PROXY") == "1" else urllib.request.build_opener(urllib.request.ProxyHandler({"http": PX, "https": PX}))
+PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({"http": PX, "https": PX}))
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0 Safari/537.36"
 TMDB_KEY = "99bf884d2a3e8403ae8accded44ec73c"
 CACHE = HERE / "poster_cache.json"
@@ -128,6 +128,8 @@ def main():
             if kw:
                 anime_names.append((("fresh_a", x[0]), kw, x))
     print(f"AniList 目标: {len(anime_names)}")
+    cap = int(os.environ.get("POSTER_MAX", "0") or 0)
+    tried = 0
 
     for (src, key), kw, it in anime_names:
         if key in cache:
@@ -141,6 +143,10 @@ def main():
                     x2 = it; x2[3] = path
                 fixed += 1
                 continue
+        if cap and tried >= cap:
+            print(f"达到 POSTER_MAX={cap}，本轮停止（下次继续）")
+            break
+        tried += 1
         res = anilist_search(kw)
         if not res:
             base = re.sub(r"(第\s*[0-9一二三四五六七八九十]+\s*[季期]|S\d{1,2}|Season\s*\d+|\s+\d{1,2}$)", "", kw).strip()
