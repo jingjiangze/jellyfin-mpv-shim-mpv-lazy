@@ -12,7 +12,7 @@
 
   /* 区域：/cdn-cgi/trace 在 Pages 上不给 loc，只能用客户端信号。
      时区优先（VPN 下比语言准），语言兜底。 */
-  var REGION_CN = (function () {
+  var REGION_AUTO = (function () {
     try {
       var tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || '');
       if (/^Asia\/(Shanghai|Chongqing|Urumqi|Harbin)$/.test(tz)) return true;
@@ -20,6 +20,30 @@
       return /^zh(-|$)/i.test(navigator.language || '');
     } catch (e) { return false; }
   })();
+  var RMODE = (function () { try { return localStorage.getItem('bgm_region') || 'auto'; } catch (e) { return 'auto'; } })();
+  function useCN() { return RMODE === 'cn' ? true : RMODE === 'intl' ? false : REGION_AUTO; }
+  function setRegion(mode) {
+    RMODE = mode;
+    try { localStorage.setItem('bgm_region', mode); } catch (e) {}
+    renderRegionSwitch();
+    if (PAGE === 'home') renderHome(); else renderLibrary();
+  }
+  function renderRegionSwitch() {
+    var box = $('#regionsw');
+    if (!box) return;
+    box.innerHTML = '<span style="opacity:.7">线路</span>';
+    [['auto', '自动'], ['cn', '国内'], ['intl', '海外']].forEach(function (p) {
+      var el = document.createElement('span');
+      el.className = 'r' + (RMODE === p[0] ? ' on' : '');
+      el.textContent = p[1];
+      el.onclick = function (e) { e.stopPropagation(); setRegion(p[0]); };
+      box.appendChild(el);
+    });
+    var hint = document.createElement('span');
+    hint.style.cssText = 'opacity:.55;font-size:11px';
+    hint.textContent = '（' + (useCN() ? 'B 站' : '预告') + '）';
+    box.appendChild(hint);
+  }
 
   /* ---------- 追番（本地 + GitHub Gist 可选同步） ---------- */
   var FOLLOW_KEY = 'bgm_follow_v1', GIST_KEY = 'bgm_gist_cfg';
@@ -223,7 +247,7 @@
       h += '</div>';
     }
     h += '<div class="acts">';
-    var cn = REGION_CN;
+    var cn = useCN();
     if (bv) {
       h += '<span class="btn' + (cn ? ' pri' : '') + '" onclick="playBili(&#39;' + esc(bv) + '&#39;,' + (cn ? 'true' : 'false') + ')">▶ B站播放</span>';
     }
@@ -238,17 +262,42 @@
     $('#modal').innerHTML = h;
     $('#mask').classList.add('on');
     document.body.style.overflow = 'hidden';
-    if (REGION_CN && bv) playBili(bv, true);
+    if (useCN() && bv) playBili(bv, true);
     else if (it.trailer) playTrailer(it.trailer);
   }
 
+  function playerHost() {
+    var t = $('#trailer');
+    if (t) return t;
+    var lb = $('#lightbox');
+    if (!lb) {
+      lb = document.createElement('div');
+      lb.id = 'lightbox';
+      lb.innerHTML = '<div class="lb-inner"><span class="lb-x" onclick="closeLB()">×</span>'
+        + '<div id="trailer"></div></div>';
+      lb.onclick = function (e) { if (e.target.id === 'lightbox') closeLB(); };
+      document.body.appendChild(lb);
+      /* #trailer 在灯箱里要撑满 */
+      $('#trailer').style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+    }
+    lb.classList.add('on');
+    document.body.style.overflow = 'hidden';
+    return $('#trailer');
+  }
+  function closeLB() {
+    var lb = $('#lightbox');
+    if (lb) { lb.classList.remove('on'); var t = $('#trailer'); if (t) t.innerHTML = ''; }
+    document.body.style.overflow = '';
+  }
+  window.closeLB = closeLB;
+
   function playTrailer(vid) {
-    $('#trailer').innerHTML = '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(vid)
+    playerHost().innerHTML = '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(vid)
       + '?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
   }
 
   function playBili(bvid, auto) {
-    $('#trailer').innerHTML = '<iframe src="//player.bilibili.com/player.html?bvid=' + encodeURIComponent(bvid)
+    playerHost().innerHTML = '<iframe src="//player.bilibili.com/player.html?bvid=' + encodeURIComponent(bvid)
       + '&page=1&high_quality=1&danmaku=0&autoplay=' + (auto ? '1' : '0')
       + '" allowfullscreen scrolling="no" allow="autoplay; fullscreen"></iframe>';
   }
@@ -318,7 +367,7 @@
     var el = document.createElement('div');
     el.id = 'mascot';
     el.innerHTML = '<div class="bubble" id="mbubble"></div>'
-      + '<div class="fish"><img src="assets/mascot.png" alt="看板娘"></div>';
+      + '<div class="fish"><img src="' + (DATA.mascot || 'assets/mascot.png') + '" alt="看板娘"></div>';
     document.body.appendChild(el);
     var bubble = el.querySelector('#mbubble');
     var timer = null;
@@ -510,6 +559,10 @@
     window.addEventListener('scroll', function () {
       top.classList.toggle('solid', window.scrollY > 12);
     }, { passive: true });
+    var sw = document.createElement('div');
+    sw.className = 'regionsw'; sw.id = 'regionsw';
+    document.querySelector('.tw').appendChild(sw);
+    renderRegionSwitch();
     bindSearch();
     if (PAGE === 'home') renderHome(); else renderLibrary();
     mountMascot();
