@@ -116,11 +116,13 @@ for out, tpl_name, data in PAGES:
     jname, jsize = _emit_json(out.replace(".html", ""), data)
     data_url = "https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/" + jname
     data_fb = "https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/" + jname
+    data_local = jname
     html = ((TPL / tpl_name).read_text(encoding="utf-8")
             .replace("__CSS__", CSS).replace("__JS__", JS)
             .replace("__BUILD__", BUILD_TAG)
             .replace("__DATA_URL__", data_url)
             .replace("__DATA_FB__", data_fb)
+            .replace("__DATA_LOCAL__", data_local)
             .replace("__DATA__", "null"))
     print(f"  data {jname} {jsize/1024:.0f} KB")
     (SITE / out).write_text(html, encoding="utf-8")

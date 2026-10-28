@@ -115,5 +115,7 @@ jobs:
              site-src/site/style.css site-src/site/app.js dist/
           cp site-src/tpl/_headers dist/_headers
           cp -r site-src/site/assets dist/assets 2>/dev/null || true
+          # 同源第三档兜底：数据 JSON 也放一份到自己域名下
+          cp site-src/site/index-*.json site-src/site/library-*.json dist/ 2>/dev/null || true
           ls -la dist
           npx -y wrangler@4 pages deploy dist --project-name=media-library --commit-dirty=true

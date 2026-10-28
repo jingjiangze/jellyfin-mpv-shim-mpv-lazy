@@ -586,7 +586,8 @@
 
   function loadData(cb) {
     if (window.DATA) { cb(); return; }
-    var urls = [window.DATA_URL, window.DATA_FB].filter(Boolean);
+    var urls = [window.DATA_URL, window.DATA_FB,
+                window.DATA_LOCAL ? './' + window.DATA_LOCAL : null].filter(Boolean);
     var i = 0;
     function next() {
       if (i >= urls.length) { cb(); return; }
