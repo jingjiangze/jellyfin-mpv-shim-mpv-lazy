@@ -20,6 +20,8 @@ TPL = BASE / "tpl"
 REPO_PATH = "jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media"
 ASSET_BASE = os.environ.get("ASSET_BASE",
                             f"https://gcore.jsdelivr.net/gh/{REPO_PATH}")
+POSTER_DIR = pathlib.Path(os.environ.get("POSTER_DIR", str(SITE / "posters")))
+
 ASSET_PROXY = os.environ.get("ASSET_PROXY",
                              "https://gh-proxy.com/https://raw.githubusercontent.com/"
                              "jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media")
@@ -34,7 +36,7 @@ before = len(lib_raw)
 lib_raw = [a for a in lib_raw if a[0] not in blocked]
 dropped = before - len(lib_raw)
 
-have_poster = lambda pid: (SITE / "posters" / f"{pid}.jpg").is_file()
+have_poster = lambda pid: (POSTER_DIR / f"{pid}.jpg").is_file()
 LIB = [{"id": a[0], "kind": "lib", "type": "S" if a[2] else "M", "name": a[1],
         "year": a[3] or None, "rating": a[4] or None,
         "poster": f"{ASSET_BASE}/posters/{a[0]}.jpg" if a[5] and have_poster(a[0]) else "",

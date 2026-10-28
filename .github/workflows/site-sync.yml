@@ -70,6 +70,9 @@ jobs:
       - name: Build pages
         timeout-minutes: 6
         working-directory: site-src
+        env:
+          # 海报以仓库 media/posters 为准（CI 工作区里没有 site/posters）
+          POSTER_DIR: ../media/posters
         run: python -u build_site.py
 
       - name: Persist state back to the repo
