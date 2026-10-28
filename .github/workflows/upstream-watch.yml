@@ -17,14 +17,17 @@ jobs:
 
       - name: Read upstream state
         id: up
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          shim=$(gh api repos/jellyfin/jellyfin-mpv-shim/releases/latest --jq .tag_name)
-          play=$(gh api hooke007/mpv_PlayKit/releases/latest --jq .tag_name)
-          guard=$(gh api "repos/jellyfin/jellyfin-mpv-shim/contents/jellyfin_mpv_shim/mpv_options.py?ref=master" \
-                  --jq .content | base64 -d | grep -c "mpv_ext_no_ovr" || true)
+          # GITHUB_TOKEN is scoped to this repository only, so cross-repo reads
+          # go through the anonymous public API (3 requests/day, well under the
+          # 60/hour unauthenticated limit).
+          api="https://api.github.com"
+          accept="Accept: application/vnd.github+json"
+          shim=$(curl -fsSL -H "$accept" "$api/repos/jellyfin/jellyfin-mpv-shim/releases/latest" | jq -r .tag_name)
+          play=$(curl -fsSL -H "$accept" "$api/repos/hooke007/mpv_PlayKit/releases/latest" | jq -r .tag_name)
+          guard=$(curl -fsSL -H "$accept" "$api/repos/jellyfin/jellyfin-mpv-shim/contents/jellyfin_mpv_shim/mpv_options.py?ref=master" \
+                  | jq -r .content | base64 -d | grep -c "mpv_ext_no_ovr" || true)
           echo "shim=${shim}" >> "$GITHUB_OUTPUT"
           echo "play=${play}" >> "$GITHUB_OUTPUT"
           echo "guard=${guard}" >> "$GITHUB_OUTPUT"
