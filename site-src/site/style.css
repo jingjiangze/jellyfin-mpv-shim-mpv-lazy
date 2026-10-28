@@ -210,3 +210,15 @@ main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 
   .mtop { flex-direction: column; padding: 18px; }
   .mp { width: 110px; flex-basis: 110px; }
 }
+
+/* ---------- 关联作品 ---------- */
+.relbox { margin: 0 0 16px; }
+.relhead { font-size: 12px; color: var(--dim); letter-spacing: 1px; margin-bottom: 8px; }
+.relchip {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 8px 0;
+  padding: 6px 12px; border-radius: 999px; font-size: 12.5px;
+  background: var(--card2); color: var(--fg); border: 1px solid var(--line);
+  transition: border-color .18s, color .18s;
+}
+.relchip:hover { border-color: var(--accent-dim); color: var(--accent); }
+.relchip em { font-style: normal; font-size: 11px; color: var(--dim); }

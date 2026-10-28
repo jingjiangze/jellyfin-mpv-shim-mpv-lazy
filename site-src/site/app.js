@@ -10,6 +10,20 @@
   var ALL = [];
   var ROW_CAP = 24;   // 轨道只渲前 24 张：一次挂 300+ 张远程海报会被 CDN 限流
 
+
+  var FMT = { TV: 'TV', TV_SHORT: '短片', ONA: '网络放送', OVA: 'OVA', MOVIE: '剧场版',
+              SPECIAL: '特别篇', MUSIC: '音乐' };
+  var ST = { RELEASING: '连载中', FINISHED: '已完结', NOT_YET_RELEASED: '未播出', CANCELLED: '已取消' };
+
+  function countdown(ts) {
+    var d = ts * 1000 - Date.now();
+    if (d <= 0) return '待更新';
+    var h = Math.floor(d / 3600000);
+    if (h >= 24) return Math.floor(h / 24) + ' 天后更新';
+    if (h >= 1) return h + ' 小时后更新';
+    return Math.max(1, Math.floor(d / 60000)) + ' 分钟后更新';
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -44,10 +58,12 @@
       + (it.episodes ? '<span class="ep">' + it.episodes + ' 集</span>' : '')
       + (bv ? '<span class="bili">B站</span>' : '')
       + (it.trailer ? '<span class="trailer-mark">预告</span>' : '')
+      + (it.st === 'RELEASING' ? '<span class="ep" style="left:8px;right:auto;bottom:auto;top:8px;background:rgba(240,145,153,.92);color:#181820">连载</span>' : '')
       + '</div>';
     html += '<div class="t">' + esc(it.name) + '</div>';
     var sub = [];
-    if (it.type === 'S' && it.wd && it.wd !== '-') sub.push(it.wd);
+    if (it.st === 'RELEASING' && it.next_at) sub.push(countdown(it.next_at));
+    else if (it.type === 'S' && it.wd && it.wd !== '-') sub.push(it.wd);
     if (it.year) sub.push(it.year);
     if (it.air) sub.push(it.air.slice(5));
     html += '<div class="sub2">' + sub.filter(Boolean).map(esc).join(' · ') + '</div>';
@@ -91,9 +107,23 @@
     if (it.episodes) h += '<span class="pill">' + it.episodes + ' 集</span>';
     if (it.wd && it.wd !== '-') h += '<span class="pill">' + esc(it.wd) + '</span>';
     if (it.air) h += '<span class="pill">' + esc(it.air) + '</span>';
+    if (it.st) h += '<span class="pill" style="color:var(--accent)">' + esc(ST[it.st] || it.st) + '</span>';
+    if (it.fm) h += '<span class="pill">' + esc(FMT[it.fm] || it.fm) + '</span>';
+    if (it.du) h += '<span class="pill">' + it.du + ' 分钟</span>';
+    if (it.studio) h += '<span class="pill">' + esc(it.studio) + '</span>';
+    if (it.st === 'RELEASING' && it.next_at) h += '<span class="pill" style="color:var(--star)">' + countdown(it.next_at) + '</span>';
     (it.genres || []).slice(0, 4).forEach(function (g) { h += '<span class="pill">' + esc(g) + '</span>'; });
     h += '</div>';
     if (it.overview) h += '<p class="plot">' + esc(it.overview) + '</p>';
+    if ((it.rel || []).length) {
+      h += '<div class="relbox"><div class="relhead">关联作品</div>';
+      (it.rel || []).forEach(function (r) {
+        if (!r || !r.n) return;
+        h += '<a class="relchip" target="_blank" rel="noopener" href="' + esc(r.u || '#') + '">'
+          + esc(r.n) + (r.f ? '<em>' + esc(FMT[r.f] || r.f) + '</em>' : '') + '</a>';
+      });
+      h += '</div>';
+    }
     h += '<div class="acts">';
     if (bv) h += '<span class="btn pri" onclick="playBili(\'' + esc(bv) + '\')">▶ B站播放</span>';
     if (it.trailer) h += '<span class="btn' + (bv ? '' : ' pri') + '" onclick="playTrailer(\'' + esc(it.trailer) + '\')">▶ 预告</span>';
