@@ -61,11 +61,9 @@ FM = [{"kind": "fresh", "type": "M", "key": x["k"], "name": x["n"],
       for x in fresh.get("movies") or []]
 
 keep_ids = {a[0] for a in lib_raw}
-MASCOT = f"{ASSET_BASE}/mascot-2.png"
-MASCOT_FB = f"{ASSET_PROXY}/mascot-2.png"
 DATA_HOME = {"fresh": {"anime": FA, "movies": FM, "season": fresh.get("season")},
-             "bili_fresh": bili.get("__fresh__") or {}, "mascot": MASCOT}
-DATA_LIB = {"lib": LIB, "bili": {k: v for k, v in bili.items() if k in keep_ids and v}, "mascot": MASCOT}
+             "bili_fresh": bili.get("__fresh__") or {}}
+DATA_LIB = {"lib": LIB, "bili": {k: v for k, v in bili.items() if k in keep_ids and v}}
 
 # 看板娘等静态素材
 ASSETS_SRC = BASE / "assets"

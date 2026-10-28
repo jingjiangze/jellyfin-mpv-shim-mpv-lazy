@@ -353,34 +353,6 @@
     if (heroN > 1) heroTimer = setInterval(function () { showSlide(heroIdx + 1); }, 6000);
   }
 
-  /* ---------- 看板娘（自绘 SVG 胖鱼拟人，无第三方素材/无授权负担） ---------- */
-  var MASCOT_TIPS = [
-    '点卡片上的 ☆ 就能追番啦',
-    '番剧表按放送日排的，默认是今天',
-    '海外 IP 会优先给预告，国内直接 B 站',
-    '拖一下上面的大图可以换',
-    '详情页里有制作公司和关联作品',
-    '看板娘：DeepSeek 鲸鱼娘（社区二创 · B站 BV1pGnn67EC2）'
-  ];
-  function mountMascot() {
-    if ($('#mascot')) return;
-    var el = document.createElement('div');
-    el.id = 'mascot';
-    el.innerHTML = '<div class="bubble" id="mbubble"></div>'
-      + '<div class="fish"><img src="' + (DATA.mascot || 'assets/mascot.png') + '" alt="看板娘"></div>';
-    document.body.appendChild(el);
-    var bubble = el.querySelector('#mbubble');
-    var timer = null;
-    function tip() {
-      bubble.textContent = MASCOT_TIPS[Math.floor(Math.random() * MASCOT_TIPS.length)];
-      bubble.classList.add('on');
-      clearTimeout(timer);
-      timer = setTimeout(function () { bubble.classList.remove('on'); }, 4200);
-    }
-    el.querySelector('.fish').onclick = tip;
-    setTimeout(tip, 2500);
-  }
-
   /* ---------- 首页 ---------- */
   function renderHome() {
     var fa = (DATA.fresh && DATA.fresh.anime) || [];
@@ -565,6 +537,5 @@
     renderRegionSwitch();
     bindSearch();
     if (PAGE === 'home') renderHome(); else renderLibrary();
-    mountMascot();
   });
 })();
