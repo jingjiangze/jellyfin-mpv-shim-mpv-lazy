@@ -1,0 +1,59 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的 tag（不存在时按当前提交创建），例如 v1.0.1"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Syntax check
+        run: python3 -m py_compile player_mode.py
+
+      - name: Assemble package
+        run: |
+          set -euo pipefail
+          pkg=jellyfin-mpv-shim-mpv-lazy
+          rm -rf "dist/$pkg" "$pkg.zip"
+          mkdir -p "dist/$pkg"
+          cp player_mode.py player-mode-a.cmd player-mode-b.cmd README.md LICENSE "dist/$pkg/"
+          cp -r docs "dist/$pkg/"
+          # .gitattributes keeps *.cmd at CRLF on checkout; assert it so a broken
+          # package never ships silently
+          file "dist/$pkg"/*.cmd
+          python3 scripts/check_crlf.py "dist/$pkg"
+          (cd dist && zip -r "../$pkg.zip" "$pkg" -x '*.DS_Store')
+          unzip -l "$pkg.zip"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            tag="${{ github.ref_name }}"
+          else
+            tag="${{ inputs.tag }}"
+          fi
+          echo "publishing $tag"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" jellyfin-mpv-shim-mpv-lazy.zip --clobber
+          else
+            gh release create "$tag" jellyfin-mpv-shim-mpv-lazy.zip \
+              --title "$tag" --generate-notes --target "${{ github.sha }}"
+          fi
+          gh release view "$tag" --json tagName,assets \
+            --jq '.tagName + " assets=" + ([.assets[].name] | join(","))'

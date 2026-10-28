@@ -113,6 +113,12 @@ libmpv 路径下 shim **同样**把 `config_dir` 钉在 `%APPDATA%\jellyfin-mpv-
 1. `python player_mode.py a` 切回外部 mpv，或把备份的 `conf.json` 覆盖回去；
 2. 可选：删除 `%APPDATA%\jellyfin-mpv-shim\` 下被复制进来的 `.conf` 与四个联接目录。
 
+## 发布与上游同步
+
+- **发布**：推 `v*` tag 触发 [`.github/workflows/release.yml`](.github/workflows/release.yml)，在 GitHub Actions 上做语法检查、打包 zip（脚本 + `.cmd` + README + LICENSE + docs）并创建 Release 并挂产物。
+- **上游巡检**：[`.github/workflows/upstream-watch.yml`](.github/workflows/upstream-watch.yml) 每天 05:17 读 `jellyfin/jellyfin-mpv-shim` 与 `hooke007/mpv_PlayKit` 的 latest release，并抓 `mpv_options.py` 检查 `mpv_ext_no_ovr` 是否还在；有变化就更新 `state/upstream.json` 并开 issue。
+- **镜像 fork**（保持 pristine，不加任何提交）：[jingjiangze/jellyfin-mpv-shim](https://github.com/jingjiangze/jellyfin-mpv-shim)、[jingjiangze/mpv_PlayKit](https://github.com/jingjiangze/mpv_PlayKit)。同步与复核清单见 [docs/upstream-sync.md](docs/upstream-sync.md)。
+
 ## License
 
 MIT

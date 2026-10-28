@@ -1,0 +1,17 @@
+{
+  "jellyfin-mpv-shim": {
+    "tag": "v3.3.0",
+    "repo": "jellyfin/jellyfin-mpv-shim",
+    "fork": "jingjiangze/jellyfin-mpv-shim"
+  },
+  "mpv_PlayKit": {
+    "tag": "20260510",
+    "repo": "hooke007/mpv_PlayKit",
+    "fork": "jingjiangze/mpv_PlayKit"
+  },
+  "guard": {
+    "note": "mode A 依赖 shim 源码里的 mpv_ext_no_ovr 分支；该符号消失即代表上游行为可能变了",
+    "file": "jellyfin_mpv_shim/mpv_options.py",
+    "symbol": "mpv_ext_no_ovr"
+  }
+}

@@ -1,0 +1,95 @@
+name: upstream-watch
+
+on:
+  schedule:
+    - cron: "17 21 * * *"   # 05:17 Asia/Shanghai
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read upstream state
+        id: up
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shim=$(gh api repos/jellyfin/jellyfin-mpv-shim/releases/latest --jq .tag_name)
+          play=$(gh api hooke007/mpv_PlayKit/releases/latest --jq .tag_name)
+          guard=$(gh api "repos/jellyfin/jellyfin-mpv-shim/contents/jellyfin_mpv_shim/mpv_options.py?ref=master" \
+                  --jq .content | base64 -d | grep -c "mpv_ext_no_ovr" || true)
+          echo "shim=${shim}" >> "$GITHUB_OUTPUT"
+          echo "play=${play}" >> "$GITHUB_OUTPUT"
+          echo "guard=${guard}" >> "$GITHUB_OUTPUT"
+          echo "shim=${shim} play=${play} guard_hits=${guard}"
+
+      - name: Diff against tracked state
+        id: diff
+        run: |
+          set -euo pipefail
+          shim_old=$(jq -r '."jellyfin-mpv-shim".tag' state/upstream.json)
+          play_old=$(jq -r '."mpv_PlayKit".tag' state/upstream.json)
+          shim_new="${{ steps.up.outputs.shim }}"
+          play_new="${{ steps.up.outputs.play }}"
+          guard="${{ steps.up.outputs.guard }}"
+          changed=false
+          body=""
+          if [ "$shim_old" != "$shim_new" ]; then
+            changed=true
+            body="${body}- jellyfin-mpv-shim: \`${shim_old}\` → \`${shim_new}\`"$'\n'
+          fi
+          if [ "$play_old" != "$play_new" ]; then
+            changed=true
+            body="${body}- mpv_PlayKit: \`${play_old}\` → \`${play_new}\`"$'\n'
+          fi
+          if [ "$guard" = "0" ]; then
+            changed=true
+            body="${body}- **\`mpv_ext_no_ovr\` 已从 mpv_options.py 消失**：模式 A 的前提可能变了"$'\n'
+          fi
+          echo "changed=${changed}" >> "$GITHUB_OUTPUT"
+          {
+            printf '%s\n' "$body"
+            printf '\n### 需要复核的点\n'
+            printf '1. `mpv_options.py` 里 `--config-dir` 的注入条件是否仍是 `not (mpv_ext and mpv_ext_no_ovr)`\n'
+            printf '2. `player.py` 首启是否仍创建空 `mpv.conf` / `input.conf`\n'
+            printf '3. libmpv 模式是否新增了自定义 dll 路径开关（有则模式 B 可以简化）\n'
+            printf '4. 跑一遍 `player_mode.py b` 并播放一集，确认日志有 `Using libmpv playback backend.` 与 `VO: [gpu-next]`\n'
+            printf '5. 同步两个 fork（见 docs/upstream-sync.md）\n'
+          } > issue-body.md
+          cat issue-body.md
+
+      - name: Update tracked state
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          jq --arg s "${{ steps.up.outputs.shim }}" --arg p "${{ steps.up.outputs.play }}" \
+             '."jellyfin-mpv-shim".tag = $s | ."mpv_PlayKit".tag = $p' \
+             state/upstream.json > state/upstream.json.new
+          mv state/upstream.json.new state/upstream.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/upstream.json
+          git commit -m "chore: track upstream (shim ${{ steps.up.outputs.shim }}, play ${{ steps.up.outputs.play }})"
+          git push
+
+      - name: Open tracking issue
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh label create upstream --color FBCA04 --description "上游仓库有更新" --force >/dev/null 2>&1 || true
+          if [ "$(gh issue list --state open --search '上游更新 in:title' --json number --jq 'length')" != "0" ]; then
+            echo "an upstream-tracking issue is already open; not opening another"
+            exit 0
+          fi
+          gh issue create \
+            --title "上游更新：jellyfin-mpv-shim ${{ steps.up.outputs.shim }} / mpv_PlayKit ${{ steps.up.outputs.play }}" \
+            --body-file issue-body.md --label upstream
