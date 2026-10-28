@@ -62,7 +62,10 @@ FM = [{"kind": "fresh", "type": "M", "key": x["k"], "name": x["n"],
       for x in fresh.get("movies") or []]
 
 keep_ids = {a[0] for a in lib_raw}
+import datetime as _dt2
+YEARS = list(range(2000, _dt2.date.today().year + 1))
 DATA_HOME = {"fresh": {"anime": FA, "season": fresh.get("season")},
+             "years": YEARS,
              "bili_fresh": bili.get("__fresh__") or {}}
 DATA_LIB = {"lib": LIB, "bili": {k: v for k, v in bili.items() if k in keep_ids and v}}
 

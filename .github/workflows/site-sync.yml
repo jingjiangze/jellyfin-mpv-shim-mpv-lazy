@@ -60,6 +60,15 @@ jobs:
           FRESH_BILI_MAX: "200"
         run: python -u fetch_bili_fresh.py
 
+      - name: Fill year catalogs (2000-now)
+        timeout-minutes: 25
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          NO_LOCAL_PROXY: "1"
+          YEARS_PER_RUN: "6"
+        run: python -u fetch_years.py
+
       - name: Fill missing posters
         timeout-minutes: 20
         working-directory: site-src

@@ -417,12 +417,22 @@
     out += '<div class="filterbar" id="fbar"></div>';
     out += '<section class="block" id="sched"><div class="bhead"><h2>番剧表</h2><span>按放送日筛选</span></div>'
       + '<div class="wdbar" id="wdbar"></div><div class="grid" id="g-sched"></div></section>';
-    out += '<section class="block"><div class="bhead"><h2>本季新番</h2><span>' + fa.length + ' 部</span></div><div class="row" id="r-anime"></div></section>';
+    var ysel = (DATA.years || []).slice().reverse();
+    out += '<section class="block" id="yearsel"><div class="bhead"><h2>按年份</h2><span>每年人气 Top 50</span>'
+      + '<select class="yselect" id="ysel">' + ysel.map(function (y) { return '<option>' + y + '</option>'; }).join('') + '</select></div>'
+      + '<div class="grid" id="g-year"></div></section>';
+    out += '<section class="block"><div class="bhead"><h2>热门动漫</h2><span>Top ' + Math.min(ROW_CAP, fa.length) + '</span></div><div class="row" id="r-anime"></div></section>';
     out += '<section class="block" id="allanime"><div class="bhead"><h2>全部动漫</h2><span>' + fa.length + ' 部</span></div><div class="grid" id="g-all"></div></section>';
 
     $('#main').innerHTML = out;
     ALL = [];
     initHero();
+    var yd = $('#ysel');
+    if (yd) {
+      var years = (DATA.years || []).slice().reverse();
+      yd.onchange = function () { loadYear(+yd.value); };
+      setTimeout(function () { if (years.length) loadYear(years[years.length - 1]); }, 400);
+    }
     renderFilterBar();
     /* 先画 hero + 番剧表；两条轨道用空闲时间补，避免首屏被 48 张远程海报堵住 */
     var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 60); };
@@ -462,6 +472,20 @@
     });
     renderSched(fa);
     setCnt(fa.length);
+  }
+
+  var YEARS_BASE = [window.DATA_URL ? window.DATA_URL.split('/media/')[0] + '/media/years/' : '',
+                    window.DATA_FB ? window.DATA_FB.split('/media/')[0] + '/media/years/' : '',
+                    './years/'].filter(Boolean);
+  function loadYear(y) {
+    var hosts = YEARS_BASE.map(function (b) { return b + y + '.json'; });
+    var i = 0;
+    $('#g-year').innerHTML = '<div class="loading">' + y + ' 年加载中…</div>';
+    (function next() {
+      if (i >= hosts.length) { $('#g-year').innerHTML = '<div class="empty">' + y + ' 年没有数据</div>'; return; }
+      fetch(hosts[i++]).then(function (r) { if (!r.ok) throw 0; return r.json(); })
+        .then(function (list) { ALL = ALL.concat(list); fill($('#g-year'), bySort(list), 60); }).catch(next);
+    })();
   }
 
   function renderFilterBar() {
