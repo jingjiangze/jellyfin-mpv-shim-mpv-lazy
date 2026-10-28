@@ -8,6 +8,18 @@
   var TODAY = DAYS[new Date().getDay()];
   var WDFILTER = PAGE === 'home' ? TODAY : '';
   var ALL = [];
+  var SORT = (function(){ try { return localStorage.getItem('bgm_sort') || 'rating'; } catch(e){ return 'rating'; } })();
+  var STATUS_F = '';   // '' | RELEASING | FINISHED
+  function bySort(list) {
+    var a = list.slice();
+    if (SORT === 'rating') a.sort(function (x, y) { return (y.rating || 0) - (x.rating || 0); });
+    else if (SORT === 'new') a.sort(function (x, y) { return String(y.air || '').localeCompare(String(x.air || '')); });
+    else if (SORT === 'name') a.sort(function (x, y) { return String(x.name).localeCompare(String(y.name), 'zh'); });
+    return a;
+  }
+  function byStatus(list) {
+    return STATUS_F ? list.filter(function (x) { return x.st === STATUS_F; }) : list;
+  }
   var ROW_CAP = 24;   // 轨道只渲前 24 张：一次挂 300+ 张远程海报会被 CDN 限流
 
   /* 区域：/cdn-cgi/trace 在 Pages 上不给 loc，只能用客户端信号。
@@ -389,6 +401,7 @@
         + '<div class="row" id="r-follow"></div></section>';
     }
 
+    out += '<div class="filterbar" id="fbar"></div>';
     out += '<section class="block" id="sched"><div class="bhead"><h2>番剧表</h2><span>按放送日筛选</span></div>'
       + '<div class="wdbar" id="wdbar"></div><div class="grid" id="g-sched"></div></section>';
     out += '<section class="block"><div class="bhead"><h2>本季新番</h2><span>' + fa.length + ' 部</span></div><div class="row" id="r-anime"></div></section>';
@@ -397,11 +410,12 @@
     $('#main').innerHTML = out;
     ALL = [];
     initHero();
+    renderFilterBar();
     /* 先画 hero + 番剧表；两条轨道用空闲时间补，避免首屏被 48 张远程海报堵住 */
     var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 60); };
     later(function () {
-      fill($('#r-anime'), fa.slice(0, ROW_CAP), ROW_CAP);
-      fill($('#r-movie'), fm.slice(0, ROW_CAP), ROW_CAP);
+      fill($('#r-anime'), bySort(fa).slice(0, ROW_CAP), ROW_CAP);
+      fill($('#r-movie'), bySort(fm).slice(0, ROW_CAP), ROW_CAP);
     });
     if (follows().length) {
       var pool = fa.concat(fm);
@@ -437,6 +451,27 @@
     setCnt(fa.length + fm.length);
   }
 
+  function renderFilterBar() {
+    var bar = $('#fbar'); if (!bar) return;
+    bar.innerHTML = '';
+    var mk = function (label, on, fn) {
+      var el = document.createElement('span');
+      el.className = 'chip' + (on ? ' on' : '');
+      el.textContent = label;
+      el.onclick = fn;
+      bar.appendChild(el);
+    };
+    mk('评分', SORT === 'rating', function () { setSort('rating'); });
+    mk('最新', SORT === 'new', function () { setSort('new'); });
+    mk('名称', SORT === 'name', function () { setSort('name'); });
+    var sep = document.createElement('i'); sep.className = 'sep'; bar.appendChild(sep);
+    mk('全部状态', !STATUS_F, function () { setStatus(''); });
+    mk('连载中', STATUS_F === 'RELEASING', function () { setStatus('RELEASING'); });
+    mk('已完结', STATUS_F === 'FINISHED', function () { setStatus('FINISHED'); });
+  }
+  function setSort(v) { SORT = v; try { localStorage.setItem('bgm_sort', v); } catch (e) {} renderHome(); }
+  function setStatus(v) { STATUS_F = v; renderHome(); }
+
   function syncWd() {
     document.querySelectorAll('#wdbar .wd-tab').forEach(function (el) {
       var label = el.textContent.split(' ')[0];
@@ -445,7 +480,8 @@
   }
 
   function renderSched(fa) {
-    var list = WDFILTER ? fa.filter(function (x) { return x.wd === WDFILTER; }) : fa;
+    var pool = byStatus(fa);
+    var list = bySort(WDFILTER ? pool.filter(function (x) { return x.wd === WDFILTER; }) : pool);
     var g = $('#g-sched');
     g.innerHTML = '';
     ALL = ALL.filter(function (x) { return x.kind !== 'fresh' || x.type !== 'S' || !x._sched; });
@@ -468,6 +504,7 @@
   }
 
   function renderType(kind, lib) {
+    var _old = false;
     lib = lib || (DATA.lib || []);
     var list = kind === 'S' ? lib.filter(function (x) { return x.type === 'S'; })
       : kind === 'M' ? lib.filter(function (x) { return x.type !== 'S'; }) : lib;
@@ -487,7 +524,7 @@
         bar.appendChild(el);
       });
     }
-    fill($('#g'), list, 60);
+    fill($('#g'), bySort(list), 60);
     if (!list.length) $('#g').innerHTML = '<div class="empty">没有内容</div>';
   }
 
@@ -512,6 +549,21 @@
     };
   }
 
+  function allItems() {
+    return [].concat((DATA.fresh && DATA.fresh.anime) || [],
+                     (DATA.fresh && DATA.fresh.movies) || [],
+                     DATA.lib || []);
+  }
+  function openFromQuery() {
+    var id = new URLSearchParams(location.search).get('id');
+    if (!id) return;
+    var tryOpen = function () {
+      var it = allItems().find(function (x) { return fkey(x) === id || String(x.id) === id; });
+      if (it) { ALL = allItems(); openModal(it); return true; }
+      return false;
+    };
+    if (!tryOpen()) setTimeout(tryOpen, 1200);
+  }
   function setCnt(n) {
     var el = $('#cnt');
     if (el) el.textContent = n + ' 部';
@@ -537,5 +589,6 @@
     renderRegionSwitch();
     bindSearch();
     if (PAGE === 'home') renderHome(); else renderLibrary();
+    openFromQuery();
   });
 })();
