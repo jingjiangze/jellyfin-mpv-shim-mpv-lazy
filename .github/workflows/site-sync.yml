@@ -1,0 +1,77 @@
+name: site-sync
+
+# 刮削 + 构建 + 部署全在 GitHub 上跑（本机只需保留 build_lib 用的 Jellyfin）。
+# 数据源已实测可达：AniList 404(连通) / TMDB 401(连通) / 豆瓣 200 / B站 200。
+
+on:
+  schedule:
+    - cron: "10 2 * * *"   # 10:10 Asia/Shanghai
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: site-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore state
+        run: |
+          set -euo pipefail
+          mkdir -p site-src/site
+          cp site-src/data/*.json site-src/site/ 2>/dev/null || true
+          # 海报缓存放在脚本同级（fill_posters.py 的约定）
+          cp site-src/data/poster_cache.json site-src/ 2>/dev/null || true
+          cp site-src/data/data.json site-src/data/bili.json site-src/site/ 2>/dev/null || true
+          ls -la site-src/site | head
+
+      - name: Scrape and build
+        working-directory: site-src
+        env:
+          NO_LOCAL_PROXY: "1"          # CI 上没有本机 Clash，全部直连
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
+        run: |
+          set -euo pipefail
+          python -u fetch_fresh_v2.py
+          python -u fetch_bili.py || echo "bili failed (non-fatal)"
+          python -u fill_posters.py
+          python -u push_assets.py || echo "asset push failed (non-fatal)"
+          python -u build_site.py
+
+      - name: Persist state back to the repo
+        run: |
+          set -euo pipefail
+          cp -f site-src/site/data.json site-src/site/bili.json site-src/data/ || true
+          cp -f site-src/poster_cache.json site-src/data/ || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A site-src/data site-src/site site-src/poster_cache.json || true
+          if git diff --cached --quiet; then
+            echo "no state change"
+          else
+            git commit -m "chore: sync site state [skip ci]"
+            git push
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp site-src/site/index.html site-src/site/library.html \
+             site-src/site/style.css site-src/site/app.js dist/
+          cp site-src/tpl/_headers dist/_headers
+          ls -la dist
+          npx -y wrangler@4 pages deploy dist --project-name=media-library --commit-dirty=true

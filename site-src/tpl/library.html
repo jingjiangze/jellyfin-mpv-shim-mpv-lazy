@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b0b0f">
+<title>媒体库 · 番组计划</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="library">
+<header class="top" id="topbar"><div class="tw">
+  <div class="logo"><i></i>番组<b>计划</b></div>
+  <nav class="nav">
+    <a href="/">首页</a>
+    <a class="on" href="library">媒体库</a>
+  </nav>
+  <div class="searchbox"><input id="q" placeholder="搜索我的媒体库…" autocomplete="off"></div>
+  <div class="cnt" id="cnt"></div>
+</div></header>
+
+<main id="main"><div class="loading">加载中…</div></main>
+
+<div class="mask" id="mask"><div class="modal" id="modal"></div></div>
+
+<script>window.DATA = __DATA__;</script>
+<script src="app.js"></script>
+</body>
+</html>

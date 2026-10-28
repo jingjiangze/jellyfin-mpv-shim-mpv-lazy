@@ -1,0 +1,1203 @@
+{
+ "3084bb506265e912459c54675b9d393a": "BV1KLpE6sEv9",
+ "00edd8be1ed477cbefce5f7559fe16f4": "BV1xj41117NS",
+ "04e5ee90e252cfdaf6f1632c34264435": "BV167411z7aN",
+ "058febad978ee0c141247e8f74acac34": "BV1m7411z7Rw",
+ "c482d711097079b21041da29cd3d7caa": "BV1X4Gd6LEYK",
+ "6faa4b64cc05b52d0521890689c14d11": "BV1Jnno6mEb6",
+ "782c6eb47dbd934a189c8056d9b47a26": "BV1ypnS6AEck",
+ "63a38590cdf6c43ad80c6f67ee32bf25": "BV1kgxM6ZET8",
+ "40adfe305dcf59070a9467238d9d4ac1": "BV1nx411C7kq",
+ "d46cfb092dfabbbdce87e21ca120b489": "BV19aJt6XE8Q",
+ "c2f8e71c959296e1413469f8dd39da31": "BV1At4y1i7fb",
+ "b6ab2249c9c09f3e44eea97d74b0419d": "BV1kX4y197P4",
+ "b798a1110392776232ea460b1f16c680": "BV1wZrxYsEkU",
+ "124a8eff422b26f6a6a254424b21ce1f": "BV1hYA5etE7H",
+ "7431c91d7ba7df370d049926779578ee": "BV1eY3h63EVw",
+ "e36fc72fb8dd1cf2b9e40a79ca1c09a8": "BV1xnteevEg3",
+ "03ed13eb5b9f6c8026ff3f962afd3b43": "BV17yHN6PEFX",
+ "1b675dd5ade68005f30b93fdb06c4507": "BV1dSHX6NEZQ",
+ "8ad79e1257c4f58148cf48b07dfb5f62": "BV1SEZtY2Exy",
+ "bf896c75169ae445ba0586085af03b29": "BV1m8Ha6tEEw",
+ "b280d1304920e592824eff0dd8d352f5": "BV13J411V7oX",
+ "36694ab852965901bd076f6b6c5c19c8": "BV1D1HY6TEXU",
+ "02409551a904e2a031561c8414521243": "BV19rHg66EcY",
+ "1d52dda41c0dce1ebe558d6bac8d5ce5": "BV1oJn86YEr3",
+ "d1108690b958c2d7d0daade1ee9e002a": "BV1BJ411a7JQ",
+ "cd8b66beffd3e0d1011a5382abc53213": "BV1WV41157PF",
+ "1239b093d29f442a06646d182fe4b57a": "BV1pS4y1m7LM",
+ "1a7ad18e7eb422b37d8b28a09e6a0783": "BV1n441127TU",
+ "9ac3d61e0590ee1ce0261f52b0c24a37": "BV19P4y1u7C9",
+ "e62b7bdb6ec784d2567cec93de1679b5": "BV1vW41167Di",
+ "33a53907518b871c7ba7a5a230bdac64": "BV1D2Ja6fEoF",
+ "4b58d050ff99ba86702edc086626bc5b": "BV1x5Lt6hEVo",
+ "feaa52a6f70310fdce500d78285956ab": "BV1PfHk6JEhE",
+ "b9a22c8366f5f8e5096cf7685c78c391": "BV1BzPTzCExi",
+ "f9b16d9e0e89988f36302d9026def218": "BV1jNLR6pEK1",
+ "70cdcd273a199acb0beab3223fe96737": "BV1oFHq6WEP9",
+ "e460a0ba89283c4ab90a35023bb88811": "BV1SZ4y1K79X",
+ "d7333f46777f1a5464be2efe36b983cb": "BV1ix41117Y2",
+ "3fe02336abe0b2b82cea4cc0d1c3a515": "BV1GN411L7oY",
+ "dfe445e3fbb401eca722a1a4feed778b": "BV1H9D2B8Enm",
+ "bb6bee667e2863b13c892b31be73ee5f": "BV1LwY1zsEZa",
+ "b61d3a4da396b2d05d81d2fb5f0c209a": "BV1Ma5wzgEmN",
+ "6dd7ce03664d73f152d4f8d407b04deb": "BV17oh56JEs2",
+ "32444ced8ed752cb1d3bfcd425d34fc4": "BV1a2ejeLEgR",
+ "9d3720062050b2c54031aebbeea15e08": "BV1Yx8g6cEju",
+ "280651b601a79d38446e3da4ce1be5f8": "BV1HDxM6hEYp",
+ "e3ff117960231c28ec2e2bef07b3e5d6": "BV1NE411G7TX",
+ "7c3f14a461b212caffcfdea4fd9dd89a": "BV1LMoRBRE8c",
+ "115b0cefdef8a93daecbe019eb1ce1a3": "BV1pb4y1U7A6",
+ "ec974850dc93d7384b4704b02cf3fa91": "BV1pb4y1U7A6",
+ "58dcd5169ec1b76d9da5b3b8ea0a500d": "BV1dJQbYVEsZ",
+ "24285285bb30aac16d269d9fbbdb25cb": "BV126bBz6EWX",
+ "b846b9fed76e295c332a7c4b3a96c9a6": "BV1Po4y1N7fe",
+ "b415481f6d57c52b074cf9231190aff9": "BV1QAkvBxEht",
+ "94e8f2f9f2b2e494361b16ec491115ee": "BV1SbJ2zmECC",
+ "1b4b3fa1c1acaff2f919dca9a6618741": "BV1BEhz6HEYy",
+ "d8445e72d76c626bd46173b164ccb889": "BV1LPjMz6EXW",
+ "e0e795819a17c66510068576e389fdb5": "BV1SixK6AE59",
+ "5e3f97a76d0e3bfddaed2e5973f09bb9": "BV17QeH62EN1",
+ "a75a004fcaf3924d3a16f5a0f1c89d5f": "BV1m7411z7Rw",
+ "b9dfadd864c39b782e0955a0fdf7bf7c": "BV1FwyeY2EvC",
+ "8355fe876a367d9e48718548f955b725": "BV1PN411178P",
+ "1af2c700980079837c8ec1286f2958c9": "BV1B7421o7Qw",
+ "8e61620292d3f70d19204a50f9ab5a0b": "BV1WveJ6SEZr",
+ "7524b6d43a74e16ce41b6efabe784fe9": "BV1SC8t6rEmN",
+ "e79deed3732166eba92e655ca5210c5c": "BV1PAgX6EEfn",
+ "5817aa6d4c86fc6abcdea30de4f6d40e": "BV16noFYUEdM",
+ "6597c4823325a63d6917def57f1dba9d": "BV137ny6wERo",
+ "3fffc9a6812a5f75700af87192841a3a": "BV1Kp4y1q789",
+ "f0f9c1848c385394446a3cf5a9d247ac": "BV1dQADzhEBc",
+ "696e769a0964f32c0f1bda181f725d0a": "BV13TtQ6qEdy",
+ "78dc7b31690fed8848c9aeec130636f9": "BV1Xe7Pz4EAp",
+ "41650559d88d62b01e3d35474d11a99b": "BV12C411W7CM",
+ "03c4c922e60142404ee4fc4fc56052b7": "BV1FPLbzME58",
+ "6f0c1f48f0301d297b3e13fb118e02ab": "BV1TQby67E4W",
+ "d4c8edb499792dd41b7be165e27ecf9a": "BV1YN411G7Si",
+ "3a0e93b26fde44ecbe674981da8c0ef9": "BV16t41157Cf",
+ "3031136387e08fd8e408ddd3a7f8b42d": "BV1MsJB6uEkP",
+ "0ca4f18ae30d2d18cd70704e596a2209": "BV1uAASzLEov",
+ "baa8b19aed24740e1f3961ab84e12bfb": "BV1dJHi6DE6c",
+ "ffdab33139e954af77e0e8c8cd3a6916": "BV1yC5mzbE2a",
+ "e6e0fcb5ec8ed179fc4a28b07510b960": "BV1Mg4y167iZ",
+ "433c80c06e64a9e49e361ad5fd32ec35": "BV1dh4y1N7CB",
+ "be7827f64be6797fd07ef3d8685e5085": "BV1HcEszeEsM",
+ "3da5450b6e9773d85bfc6c51f8d6b149": "BV1KE411778B",
+ "79f279b7c318115f98d3ec732c898674": "BV1Sd4y1m7SZ",
+ "dee73ef35b99ac8d10a2771fad761af3": "BV1izefz8Ebs",
+ "4e9880dc45594df7646c39452b4c510e": "BV1Ls4y1n76K",
+ "6921ee05b2d34dc1ef8238c6530578ee": "BV1W4411j7uh",
+ "caad581db9528f15f8594456a0bca9b9": "BV1eqUBBHEm4",
+ "71d33011baaca88593573849abd24f5a": "BV1KPnn69EDr",
+ "e4f0d32b6e8bcd6d46533aa215f8b9c3": "BV1694y1V7Cf",
+ "86de16e864d4eb9e4bd6c3bfa10a115f": "BV158NDzYED3",
+ "4acb7e19d9e4a72a6f6955165eb60d96": "BV1wfno6QEC9",
+ "2528642765da467ee5741fd522bf3870": "BV13nps6LEPn",
+ "f4c5569941322153ba686b26421bdbde": "BV18SxTzpEc4",
+ "f944506c08fecb7010254e46b668b87f": "BV1Xf4y1p7wx",
+ "eb3caa981cb5faf48f0feadea1a2a4cf": "BV1yX4y1V7v4",
+ "ea0e3a800902a147c864d11587254a43": {
+  "bvid": "BV1FZ4y1N7H5",
+  "title": "【奥斯卡最佳配乐】《少年派的奇幻漂流》电影原声碟 -《Life of Pi》OST 2012",
+  "play": 4642,
+  "duration": "65:41",
+  "score": 165.0
+ },
+ "71a2931a9f9a3d2f65fc9fc2c745abc3": {
+  "bvid": "BV1ZQXrBVEKF",
+  "title": "【此生必看】法庭经典【十二怒汉】1957【自制中字】12 Angry Men 美国老电影 吕美特 / 亨利·方达",
+  "play": 101198,
+  "duration": "97:7",
+  "score": 165.1
+ },
+ "d0625edb39ba6d83094feeb7fcec92b1": {
+  "bvid": "BV1CDEJ6yEw4",
+  "title": "🦁🦁《狮子王》| 全站最好看的英语学习视频 | 中英双语滚动字幕版 | 看动漫学英语 | 看完词汇量爆增。全集，边看边学。",
+  "play": 23439,
+  "duration": "81:32",
+  "score": 145.0
+ },
+ "85ef5fb0d3c04a8cb4fad4e2c9801da2": {
+  "bvid": "BV1zMn56dET9",
+  "title": "《摔跤吧！爸爸 》超清中字 Reaction",
+  "play": 16719,
+  "duration": "180:56",
+  "score": 175.0
+ },
+ "c0d8eba5d6f7697383977c103f43d967": {
+  "bvid": "BV1hSL3zkEDx",
+  "title": "【死亡诗社】/【Dead Poets Society】（1989）4K超清无删减～",
+  "play": 557936,
+  "duration": "163:46",
+  "score": 190.6
+ },
+ "1cb4f482766a16b926fb89f61dcc674d": "BV1TgKBzXEHS",
+ "e7754021cef25e18001328bd53641030": {
+  "bvid": "BV1vW41167Di",
+  "title": "The Piano Guys-Batman Evolution(超清)",
+  "play": 1453,
+  "duration": "6:25",
+  "score": 145.0
+ },
+ "f4f212845b917211bb916058e32a7ffe": {
+  "bvid": "BV1o8YbeDEhL",
+  "title": "2D版《蝙蝠侠：黑暗骑士崛起(BatMan:The Dark Knight Rises)》2012年的塞班移植安卓手游，Gameloft蝙蝠侠Java手机游戏",
+  "play": 1356,
+  "duration": "60:16",
+  "score": 165.0
+ },
+ "700f52931ab7ddba321969178c89b307": {
+  "bvid": "BV1fCYNe9EHF",
+  "title": "【美国】1972《教父》The Godfather",
+  "play": 1489,
+  "duration": "5:20",
+  "score": 135.0
+ },
+ "114923e26a897668aa62d4817adbb221": {
+  "bvid": "BV1FGpczCE52",
+  "title": "《教父Ⅲ：最后的教父 / The godfather III：The Last Don》（三）",
+  "play": 1112,
+  "duration": "139:26",
+  "score": 150.0
+ },
+ "c16dfadbfdff93fd24aac56f89137a6b": {
+  "bvid": "BV1Xx411J7UF",
+  "title": "【MV】All Of Me - John Legend（中英字幕）",
+  "play": 410062,
+  "duration": "5:7",
+  "score": 120.4
+ },
+ "b246c30b1456f7f38d87707cfe12f15d": {
+  "bvid": "BV1j4411c7qh",
+  "title": "音乐剧狮子王 CMC Ludhiana musical 2016- The Lion King",
+  "play": 120731,
+  "duration": "123:54",
+  "score": 120.1
+ },
+ "08d714de59ab7227287cb5ed8cedfa47": {
+  "bvid": "BV11g411K7C7",
+  "title": "The Lion King —— Hans Zimmer",
+  "play": 21335,
+  "duration": "78:7",
+  "score": 120.0
+ },
+ "f99e66b11c91d2d876c9d4e2eac7435d": "BV1zfAUeBEyA",
+ "337e9f3e4424840ab22098938f64c584": {
+  "bvid": "BV1P34y1B7CH",
+  "title": "Navras - The Matrix Revolutions",
+  "play": 2122,
+  "duration": "9:10",
+  "score": 150.0
+ },
+ "c1d4a72b3e4250a00f9f6d8f95104a11": {
+  "bvid": "BV1q3aFzoEeL",
+  "title": "9.2分/英语中字【天堂电影院】高清无删减",
+  "play": 21712,
+  "duration": "325:5",
+  "score": 175.0
+ },
+ "0a66fe8d43edf36391bb8e914c6500c8": {
+  "bvid": "BV1q3aFzoEeL",
+  "title": "9.2分/英语中字【天堂电影院】高清无删减",
+  "play": 21712,
+  "duration": "325:5",
+  "score": 175.0
+ },
+ "24fec7a4354982feb327c69317b1adef": {
+  "bvid": "BV1rH4y1m7bC",
+  "title": "就算步子乱了又如何，接着跳下去就好了，高分经典《闻香识女人》",
+  "play": 6390314,
+  "duration": "31:11",
+  "score": 156.4
+ },
+ "80f8227d9b3a4cff42cb401c9fb91bf9": {
+  "bvid": "BV1eR3C6yEGa",
+  "title": "【完整版】哭惨了！外国人第一次看电影《我不是药神》！",
+  "play": 443853,
+  "duration": "139:17",
+  "score": 175.4
+ },
+ "6c93db7d962fe3602493aff3ca25b3b7": {
+  "bvid": "BV12Q4y167C2",
+  "title": "[4K·杜比视界]经典电影《肖申克的救赎》全新4K修复版画质欣赏",
+  "play": 54232,
+  "duration": "3:56",
+  "score": 175.1
+ },
+ "2dbb76a050682d69b004a13bd1d5bf6e": {
+  "bvid": "BV1PA4y1R7gy",
+  "title": "《小鞋子》完整版",
+  "play": 13363,
+  "duration": "5:53",
+  "score": 175.0
+ },
+ "c5d3c1d45123dae12d3847abacf2edcb": {
+  "bvid": "BV1nW41187RL",
+  "title": "【古典】辛德勒的名单-帕尔曼",
+  "play": 378988,
+  "duration": "14:55",
+  "score": 150.4
+ },
+ "2b0d6ce2a46647fda4c82aef0594f58e": {
+  "bvid": "BV1cuLHzDETs",
+  "title": "《星际穿越2》 ：出埃及记 | 4K超清",
+  "play": 506564,
+  "duration": "138:16",
+  "score": 175.5
+ },
+ "de58abdc1f573a19c9a0b1cd90bc0488": {
+  "bvid": "BV1r9aw6dE2i",
+  "title": "2026最新炸裂港片《一个部门的诞生》，评分高达7.9，今年最敢拍的港片！",
+  "play": 94593,
+  "duration": "25:26",
+  "score": 165.1
+ },
+ "3caf79d270838e10370211b70672ed8b": {
+  "bvid": "BV1pp4y1X7XQ",
+  "title": "【The Sound Of Music Live!/音乐之声】完整版1080P",
+  "play": 520508,
+  "duration": "135:48",
+  "score": 175.5
+ },
+ "5b3ba6c7af51b8359c1ef3ba1e16079c": {
+  "bvid": "BV1P8411q7A6",
+  "title": "饮食男女电影原声带 Eat Drink Man Woman OST",
+  "play": 4738,
+  "duration": "42:51",
+  "score": 120.0
+ },
+ "02f674391436712f69df106f4c376bc3": {
+  "bvid": "BV12Xpj6nEav",
+  "title": "经典片《这个杀手不太冷》（1994）",
+  "play": 5141,
+  "duration": "247:8",
+  "score": 165.0
+ },
+ "e0cb902b8c61ea8e1f364899c49e0be2": {
+  "bvid": "BV1Xf4y1p7wx",
+  "title": "《拯救大兵瑞恩》经典战争电影原声碟 -《Saving Private Ryan》OST 1998",
+  "play": 15486,
+  "duration": "64:20",
+  "score": 165.0
+ },
+ "42c07afc15cfbe36fca543ac5c82509b": {
+  "bvid": "BV1zdTizKEvs",
+  "title": "《指环王1：护戒使者》The Lord of the Rings: The Fellowship of the Ring 电影原声带 3CD",
+  "play": 58897,
+  "duration": "182:11",
+  "score": 150.1
+ },
+ "6540c585411c51f3614a96de4ed979fb": {
+  "bvid": "BV1uznR6oEue",
+  "title": "到底是有多大的深仇大恨，才会取这样一个游戏名",
+  "play": 473845,
+  "duration": "7:2",
+  "score": 90.5
+ },
+ "a6c6eae3a81b02d472a3515cf847f127": {
+  "bvid": "BV1uznR6oEue",
+  "title": "到底是有多大的深仇大恨，才会取这样一个游戏名",
+  "play": 473845,
+  "duration": "7:2",
+  "score": 90.5
+ },
+ "c0fb4e47398f4894097b1865aa36b76d": {
+  "bvid": "BV1i7411b7gp",
+  "title": "（英语）魔戒（指环王）第二卷有声书 The lord of the rings-the Two Towers",
+  "play": 12569,
+  "duration": "1008:25",
+  "score": 120.0
+ },
+ "c14c30714e6cf4afc5ab114a1e97dc54": {
+  "bvid": "BV1uznR6oEue",
+  "title": "到底是有多大的深仇大恨，才会取这样一个游戏名",
+  "play": 473845,
+  "duration": "7:2",
+  "score": 90.5
+ },
+ "eb49411651b7db7681fd7354e60de569": {
+  "bvid": "BV1DTGRzJE4x",
+  "title": "深度解读《指环王3：王者无敌》，最后的刚铎大战，系列封神之作！",
+  "play": 568378,
+  "duration": "23:16",
+  "score": 150.6
+ },
+ "e80e22b42ff9c3bf55bda9d2bb56458d": {
+  "bvid": "BV1xujozhE2z",
+  "title": "《忠犬八公的故事》9.4分  欧美经典催泪神作 4K完整版",
+  "play": 58955,
+  "duration": "136:41",
+  "score": 175.1
+ },
+ "113b12f602bff0d8536d6c4f594b5dcb": {
+  "bvid": "BV1vK7W6MEsb",
+  "title": "井本彩花 - 週プレ2022年3月14日号No.11 特別付録DVD_井本彩花『アオハル。』",
+  "play": 16489,
+  "duration": "63:12",
+  "score": 150.0
+ },
+ "6273d9f49dc2f97f8bad27d0be75cd85": {
+  "bvid": "BV1LYJE6wEJF",
+  "title": "【日文有声书】安里アサト-86‐エイティシックス‐",
+  "play": 146,
+  "duration": "8:3",
+  "score": 150.0
+ },
+ "2c3f55afedafd005e22af4f9c6092cb0": {
+  "bvid": "BV13M411g7P2",
+  "title": "【IDOLiSH7】【中日字幕】IDOLiSH7 Third BEAT! #21",
+  "play": 18556,
+  "duration": "24:6",
+  "score": 120.0
+ },
+ "2636caa11fd14de526893d0f8b58c13e": {
+  "bvid": "BV1LLhNziEK7",
+  "title": "宝石生命降临MC！《宝石の国》mod分享~",
+  "play": 26849,
+  "duration": "13:23",
+  "score": 150.0
+ },
+ "366e06ff7421de50f522121589a3adb3": {
+  "bvid": "BV19ubT6nEft",
+  "title": "【ピアノ演奏】9Lana「螺旋 -RASEN-」Acoustic Ver. を弾いてみた｜BLEACH 千年血戦篇-禍進譚- ED｜SLSMusic",
+  "play": 4139,
+  "duration": "4:27",
+  "score": 150.0
+ },
+ "0eb0f74495b8158e5f69110d2d6ec2c7": {
+  "bvid": "BV1LAN36BEM5",
+  "title": "【1080P/超清】蓝色巨星【日语/中字】Blue Giant",
+  "play": 3463,
+  "duration": "139:41",
+  "score": 175.0
+ },
+ "5169e8d63936c85ce8fab04beaaf6b7a": {
+  "bvid": "BV18vn1zUEyE",
+  "title": "🔴【劇場版「チェンソーマン レゼ篇」コスプレASMR】私が全部　教えてあげる【Chainsaw Man - The Movie Reze ArcJapanes",
+  "play": 914,
+  "duration": "104:44",
+  "score": 150.0
+ },
+ "39ead48aee785fbda3bdb28876e3d348": {
+  "bvid": "BV1tx411w78w",
+  "title": "[320k音质]花牌情缘ED完整版",
+  "play": 36618,
+  "duration": "4:20",
+  "score": 175.0
+ },
+ "c7e5c9537dd81c611edc12d9830ce295": {
+  "bvid": "BV1mW411L7AX",
+  "title": "日常OP2 MAD- ヒャダインのじょーじょーゆーじょー        日文字幕",
+  "play": 36342,
+  "duration": "4:5",
+  "score": 90.0
+ },
+ "010a4bc7cef323cc25824222c2f58334": {
+  "bvid": "BV1WXvjeNEPK",
+  "title": "【斗破苍穹】三年之约片头曲《如始之末》",
+  "play": 43512,
+  "duration": "3:6",
+  "score": 150.0
+ },
+ "42e0b734ecd076cf18d984532e0dc9eb": {
+  "bvid": "BV1Zx421k7AZ",
+  "title": "【(G)I-DLE】&#x27;Fate&#x27; LIVE CLIP",
+  "play": 10074753,
+  "duration": "2:55",
+  "score": 157.6
+ },
+ "9cfbf0a9f562be682cd10ac06819ba01": {
+  "bvid": "BV1G44y1Z7Qw",
+  "title": "Forフルーツバスケット/水果篮子/OP主题曲/完整版本/高清无损音质",
+  "play": 483312,
+  "duration": "4:27",
+  "score": 115.5
+ },
+ "0d0bc814707ed072e7022ca220c77507": {
+  "bvid": "BV1grni6CE1f",
+  "title": "『AGAIN』｜鋼の錬金術師 FULLMETAL ALCHEMIST（OP）｜Female AI Cover",
+  "play": 143,
+  "duration": "4:13",
+  "score": 150.0
+ },
+ "e6ed7bb3df59a301f65c5405ea9335e4": {
+  "bvid": "BV1ox4y1e71S",
+  "title": "【中日歌词/OP完整版】哭泣少女乐队(闺泣)Girls Band Cry OP「熙熙攘攘、我们的城市」TOGENASHI TOGEARI【无损】",
+  "play": 14192322,
+  "duration": "3:5",
+  "score": 127
+ },
+ "0b78cc3a0ed165557f59e312e166e2e1": {
+  "bvid": "BV1RYHM6MEGy",
+  "title": "【4K超清】黑色五叶草 第二季 第4话",
+  "play": 76086,
+  "duration": "30:58",
+  "score": 175.1
+ },
+ "74ee09450f5f3e5f40349529d25956a6": {
+  "bvid": "BV1F64y1t7DE",
+  "title": "【4K 超清】全职猎人 HUNTER×HUNTER OP&amp;ED",
+  "play": 7140,
+  "duration": "47:53",
+  "score": 175.0
+ },
+ "1f329081ca46c4324c49fc41199eee47": {
+  "bvid": "BV1SShBzHEm8",
+  "title": "【中字MV】らしさ - Official髭男dism",
+  "play": 53382,
+  "duration": "5:13",
+  "score": 90.1
+ },
+ "adbb671caa573e559413cd406804272b": {
+  "bvid": "BV1N4411V7xk",
+  "title": "進撃の巨人Season 3 Part 2 OP 「憧憬と屍の道」完整版 by Linked Horizon",
+  "play": 96940,
+  "duration": "5:9",
+  "score": 145.1
+ },
+ "5998bfc1e9ec6ea90270ed46d24ba220": {
+  "bvid": "BV1NTHK6EExa",
+  "title": "《JOJO的奇妙冒险.飙马野郎》第六集",
+  "play": 679,
+  "duration": "2:59",
+  "score": 149.5
+ },
+ "be873077691183d57c336b05823488fa": {
+  "bvid": "BV1E7411e7NV",
+  "title": "かぐや様は告らせたい〜天才たちの恋愛頭脳戦 - 專輯 - センチメンタルクライシス",
+  "play": 287,
+  "duration": "12:59",
+  "score": 150.0
+ },
+ "48b0b56629df864868a1171bc0da6e91": {
+  "bvid": "BV1wVo9BYESZ",
+  "title": "《来自深渊》72，诅咒船团的身份之谜被揭晓？娜娜奇恢复中，恕三斤来迟了！！！",
+  "play": 168924,
+  "duration": "18:36",
+  "score": 150.2
+ },
+ "d2fc588eebdd95d0e9b8130a9a9e7a59": {
+  "bvid": "BV19PSUBmEkR",
+  "title": "4K超清【得主金牌 第二季】 1-9话全集",
+  "play": 282150,
+  "duration": "278:33",
+  "score": 115.3
+ },
+ "dc934dd5ebaabe93ad90b26d4ce87da9": {
+  "bvid": "BV1gD4y1X796",
+  "title": "【花谱】#68 《メルの黄昏/Meru的黄昏》原创歌曲",
+  "play": 154874,
+  "duration": "4:1",
+  "score": 90.2
+ },
+ "71dc91ee47e85120d9a86910196dc817": {
+  "bvid": "BV1224y1r7YD",
+  "title": "MILGRAM -ミルグラム- / 第二審 4th EP 完整版",
+  "play": 4601,
+  "duration": "29:13",
+  "score": 175.0
+ },
+ "b8b12c97b073e360da3e5eacbb0396fb": {
+  "bvid": "BV1kJ4CzkEBd",
+  "title": "【魔法少女网站】全12话 4K中字 （未删减版）",
+  "play": 132292,
+  "duration": "295:18",
+  "score": 150.1
+ },
+ "706c607f77978fe2c3110a69cccd6876": {
+  "bvid": "BV1BsNheREvH",
+  "title": "《哪吒之魔童闹海》主题曲《就是哪吒》太燃了，唢呐一响瞬间热血",
+  "play": 5956681,
+  "duration": "3:51",
+  "score": 156.0
+ },
+ "1ea55d8ef850f4a1c352aca9200a74f5": {
+  "bvid": "BV1PcY6zDEwv",
+  "title": "海贼王粉丝来信原声大碟完整版-ONE Piece FAN Letter Original Sound Track",
+  "play": 5768,
+  "duration": "40:3",
+  "score": 175.0
+ },
+ "996577ddaa574069c249d9caf50269d8": {
+  "bvid": "BV1Ls411E7KG",
+  "title": "【OST】齐木楠雄的灾难（超高音质专辑）BGM 原声带 - 斉木楠雄のΨ難 オリジナル・サウンドトラック",
+  "play": 20925,
+  "duration": "77:33",
+  "score": 150.0
+ },
+ "fdc3fa547aa9fcf54b90ca5ce4ff01a3": {
+  "bvid": "BV1YjHT6cELJ",
+  "title": "【青之箱 第二季】全12集 超清中字（未删减版）周更",
+  "play": 6851,
+  "duration": "163:39",
+  "score": 175.0
+ },
+ "47b9c91fe34e642fecf9235bda5d7eed": {
+  "bvid": "BV1jix56KEqE",
+  "title": "日常CS2—20270616",
+  "play": 0,
+  "duration": "38:28",
+  "score": 150.0
+ },
+ "66070bdcc4da0f0dc1a9a32d304a75e7": {
+  "bvid": "BV1x4411u7qZ",
+  "title": "利兹与青鸟 剧场版 [リズと青い鳥（第三乐章）]演奏部分",
+  "play": 526015,
+  "duration": "3:48",
+  "score": 150.5
+ },
+ "b28c0e2f41ca66c0a4b896aa2eaecfda": {
+  "bvid": "BV1MVcTzDEy3",
+  "title": "【赛博朋克：边缘行者】全10话 超清中字（修复未删减）",
+  "play": 4162462,
+  "duration": "445:44",
+  "score": 179.2
+ },
+ "faeabf73ed18a39af214d3b3ccfa8a2a": {
+  "bvid": "BV1D6Gj6AEVn",
+  "title": "【少女革命】全39集 超清中字（未删减版）",
+  "play": 638372,
+  "duration": "1257:29",
+  "score": 175.6
+ },
+ "da82f9ac46234803f78d0a95a96aac38": {
+  "bvid": "BV1c8YX6uE2Y",
+  "title": "【4K 超清】すべてシュタインズゲートの选択だ《命运石之门重制版/STEINS;GATE RE:BOOT》全剧情全结局通关流程",
+  "play": 1278,
+  "duration": "432:16",
+  "score": 115.0
+ },
+ "02c95fbb19f5900945851b2aae9edb38": {
+  "bvid": "BV16G411K7r4",
+  "title": "【湘北 - 山王】灌篮高手 THE FIRST SLAM DUNK",
+  "play": 614255,
+  "duration": "60:45",
+  "score": 150.6
+ },
+ "e3782ff561cad15cbd92a27db1308f1f": {
+  "bvid": "BV1Ysgr6YEUU",
+  "title": "完结有声《天官赐福》全集/去头尾/443集+后记完整版（未删减全）",
+  "play": 482383,
+  "duration": "4348:29",
+  "score": 175.5
+ },
+ "8dfde73569ac6fc4d11ea6f1aa5fcd16": {
+  "bvid": "BV1vv4y1Z757",
+  "title": "【伍六七之玄武国篇】动漫op《暗影刺客》完整版",
+  "play": 95133,
+  "duration": "4:45",
+  "score": 175.1
+ },
+ "94009cbe01f7aed6ace71910596d1778": {
+  "bvid": "BV1eX4y1A7G2",
+  "title": "【架子鼓】無職転生_OP 旅人の唄 /Mushokutensei OP Tabibito no uta Full size Drum cover",
+  "play": 402,
+  "duration": "4:26",
+  "score": 120.0
+ },
+ "5d7d322ef464526c1be40da1d913aeb4": {
+  "bvid": "BV1uWBNBdEkt",
+  "title": "《一人之下6》片头曲1《大不韪》完整版MV来袭！逆风一拜大不韪，福祸同当，异路同归！",
+  "play": 850538,
+  "duration": "3:26",
+  "score": 115.9
+ },
+ "895c83a0226a696d657db4995c8f612f": {
+  "bvid": "BV1qcnM6TEpW",
+  "title": "【学生会也有洞！】第3话 超清简中（未删减）",
+  "play": 27224,
+  "duration": "42:12",
+  "score": 145.0
+ },
+ "ceafaf2ec0777da0127275de3ec39f21": "BV1tLKP6gEY2",
+ "017c08ad825a44e3c2f00f98277376f4": {
+  "bvid": "BV1J54y147At",
+  "title": "【SPYAIR╳DOES】《银魂 THE FINAL》 「轍～Wadachi～」◆「道楽心情」完整版MV公开！",
+  "play": 48329,
+  "duration": "7:40",
+  "score": 115.0
+ },
+ "dd5028fdc6979c91635f7722f0336bb6": "BV1ws411Q7xa",
+ "08992699209b4a2d8ed2e96426fa5f25": {
+  "bvid": "BV1Ws41197nS",
+  "title": "【因为种种隐情】160112 艺人和金钱特辑【人力字幕组】",
+  "play": 371859,
+  "duration": "43:24",
+  "score": 90.4
+ },
+ "c7a74b935e90628b6db6c39c780c4ebe": {
+  "bvid": "BV1eJ4m1T735",
+  "title": "我承认阁下破军很强！但我拿出宇宙兄弟！阁下又该如何应对？",
+  "play": 414894,
+  "duration": "18:5",
+  "score": 150.4
+ },
+ "e14bc4849777d65aa208c9e3c05ba5f5": {
+  "bvid": "BV18qraBkE2Z",
+  "title": "【音乐集】葬送的芙莉莲 歌曲全收录【Hi-Res/完整版/中日歌词】",
+  "play": 249422,
+  "duration": "28:47",
+  "score": 175.2
+ },
+ "c6d87985a30d87f011d4ac39c80cc7a9": {
+  "bvid": "BV1ax41157DS",
+  "title": "【終物語 下/雙語字幕/NC版】黑儀約會 OP「dreamy date drive」初公開",
+  "play": 14451,
+  "duration": "4:34",
+  "score": 150.0
+ },
+ "bdc9903c3a2ed7ac11d32ff03291bfbe": {
+  "bvid": "BV1pV4y1V7n6",
+  "title": "咒回0原声集OST「呪術廻戦 0」劇場版 オリジナル・サウンドトラック",
+  "play": 10821,
+  "duration": "78:59",
+  "score": 150.0
+ },
+ "29cbf8751de307132a029fc41fb57667": {
+  "bvid": "BV1YX4y1k7HS",
+  "title": "『転生したらスライムだった件 魔王と竜の建国譚』主題歌  中日双语字幕",
+  "play": 1084,
+  "duration": "3:49",
+  "score": 120.0
+ },
+ "4675b41f6deaa4192645634bbc4e7f78": {
+  "bvid": "BV1VQHN6bEYc",
+  "title": "最后孤屋｜密室囚禁末日惊悚 4K中字无删减，一家四口被困老屋一千多天",
+  "play": 1695,
+  "duration": "172:41",
+  "score": 115.0
+ },
+ "9aac246e69e23b598e638515293a623e": {
+  "bvid": "BV122gszWEPM",
+  "title": "【中日字幕/ED2完整版】坂本日常 ED2「ダンデライオン」go!go!vanillas",
+  "play": 40468,
+  "duration": "3:59",
+  "score": 115.0
+ },
+ "5ffb16080533e4224d8676894ba59d7c": {
+  "bvid": "BV1DrXTYkEwg",
+  "title": "【ニコカラ】抚物语 OP 『caramel ribbon cursetard』「撫物語」ノンクレジットOP映像｜『〈物語〉シリーズ オフ&amp;モンスターシー",
+  "play": 3300,
+  "duration": "3:10",
+  "score": 150.0
+ },
+ "ba8405d392d24b1d56557166de0bf775": {
+  "bvid": "BV1wki4BKEjh",
+  "title": "世界奇妙物語 全系列",
+  "play": 193676,
+  "duration": "11955:29",
+  "score": 150.2
+ },
+ "beaa3ca75bb8de8a383c60b18fd30b94": {
+  "bvid": "BV1gs411f73s",
+  "title": "Air 鸟之诗 6分08秒完整版",
+  "play": 3260305,
+  "duration": "6:9",
+  "score": 178.3
+ },
+ "96c90a129b6d8c9195c6a119e8bc9877": {
+  "bvid": "BV1Ps411x7WB",
+  "title": "[DVDRip]_H2/好逑双物语【自压自翻_全41话更新完毕】",
+  "play": 207673,
+  "duration": "993:30",
+  "score": 90.2
+ },
+ "1ab793a239e76fb19fad0bbc97b51971": {
+  "bvid": "BV1bAH76DEug",
+  "title": "2026动作科幻片《白龙传说》双语字幕 超清无删减【杰森·弗兰克】",
+  "play": 3624,
+  "duration": "158:12",
+  "score": 190.0
+ },
+ "64cd39a2449d31dd477772d8588c01c4": {
+  "bvid": "BV1c2WxznEH5",
+  "title": "【冰海战记 全两季】全48集 4K超清 （未删减版）",
+  "play": 132354,
+  "duration": "307:8",
+  "score": 175.1
+ },
+ "e5e7dd4ac6426ce11bccc152fede5610": {
+  "bvid": "BV1vNNwzxE5W",
+  "title": "（HI-Res）金发女郎 Blondie - iTunes Festival 2014",
+  "play": 338,
+  "duration": "94:3",
+  "score": 165.0
+ },
+ "a773eda7cd340db8e3a10e91e88baf89": {
+  "bvid": "BV1bKK4zRE63",
+  "title": "《虫师 续章》全24话 超清中字",
+  "play": 357376,
+  "duration": "852:13",
+  "score": 175.4
+ },
+ "46ea267b55c2c1ec57401e9fff83778f": {
+  "bvid": "BV1fqp3zKE4L",
+  "title": "评论区无意间发现的动漫，却是治愈8.5万人的神作？高分动漫《Clannad》",
+  "play": 1845389,
+  "duration": "38:59",
+  "score": 151.8
+ },
+ "29de592c4498f7c687209cabb4e640a2": {
+  "bvid": "BV17d4y1s7vz",
+  "title": "大话西游之月光宝盒",
+  "play": 450270,
+  "duration": "87:26",
+  "score": 150.5
+ },
+ "ed35061b79d87f4df480520c034b2fc4": {
+  "bvid": "BV1jeArekEcT",
+  "title": "【中日字幕/OP完整版】サカナクション「怪獣」【地。 -关于地球的运动- OP】【Hi-Res高音质】",
+  "play": 1386615,
+  "duration": "4:12",
+  "score": 176.4
+ },
+ "1700b31a7a1f4c195c35e0cc4817190d": {
+  "bvid": "BV1Gx411p7sm",
+  "title": "【480P】第一神拳 第二季 New Challenger(2009)",
+  "play": 1101796,
+  "duration": "597:47",
+  "score": 151.1
+ },
+ "bf7c8bd47f8c592a8fb5bafd63e0e0d0": {
+  "bvid": "BV1qv411a7PJ",
+  "title": "【滤客】买前必看，Dunk SB穿着半年会变成什么样，花几千块买它真的物有所值么",
+  "play": 250256,
+  "duration": "5:53",
+  "score": 150.3
+ },
+ "c0242ae58b51cd7cb40f043b2efb2de8": {
+  "bvid": "BV1WW98BoE1K",
+  "title": "【反叛的鲁路修  1+2季】全50集 超清中字（未删减版）",
+  "play": 3843507,
+  "duration": "2209:10",
+  "score": 178.8
+ },
+ "7d1ab4c3b05f3257e0167cf2cde0993c": {
+  "bvid": "BV11Gtf6jEpL",
+  "title": "手搓120帧高帧率造梦西游3原版第三天",
+  "play": 56437,
+  "duration": "2:35",
+  "score": 107.6
+ },
+ "438eeeb0dc6f4b8bd8ef727fdaa0a145": {
+  "bvid": "BV1bFHb6HE93",
+  "title": "【1080P/超清】鬼太郎诞生 咯咯咯之谜【日语/中字】The Birth of Kitaro Mystery of GeGeGe",
+  "play": 15322,
+  "duration": "126:36",
+  "score": 145.0
+ },
+ "6796c2bd3dfffb8c71fbe3539833117b": {
+  "bvid": "BV1zoF5ecE4v",
+  "title": "【音乐集】孤独摇滚 歌曲全收录【Hi-Res/中日歌词/少女乐队/结束乐队/纽带乐队】",
+  "play": 2822563,
+  "duration": "104:57",
+  "score": 152.8
+ },
+ "2fd54a4bcdd82f6c12d94edfaa9b1bf8": {
+  "bvid": "BV13mAkzwESG",
+  "title": "【怪物/Monster】全74集 4K超清修复无删减",
+  "play": 2033450,
+  "duration": "2230:42",
+  "score": 177.0
+ },
+ "dea671becede596ca7da1b8e86aa2549": {
+  "bvid": "BV1d77r6XE7s",
+  "title": "有声书《诡秘之主》无删减，共3214集，多人小说剧",
+  "play": 399877,
+  "duration": "17218:56",
+  "score": 175.4
+ },
+ "bd301bcde27b5acb10cd891743aa9991": {
+  "bvid": "BV1E7hX68EDJ",
+  "title": "【鬼灭之刃】“只能脱掉衣服的药”，忍、香奈乎、蜜璃、香奈惠陷入大恐慌！？",
+  "play": 191880,
+  "duration": "8:5",
+  "score": 150.2
+ },
+ "60b7737cba6fac14c415f224b7335129": {
+  "bvid": "BV1Kf42117CB",
+  "title": "【4K Hi-Res】剧场版 排球少年!!垃圾场决战 主题曲：SPYAIR「オレンジ」动画MV【中日歌词 完整版】",
+  "play": 201806,
+  "duration": "3:1",
+  "score": 115.2
+ },
+ "edb8d51bb336904c4f3669d251afb039": {
+  "bvid": "BV1AJ411X7ta",
+  "title": "黑色四叶草op合集 片头曲",
+  "play": 40247,
+  "duration": "21:13",
+  "score": 150.0
+ },
+ "18e1ea2840b657ab34f24db2921e4eae": {
+  "bvid": "BV1hki5BmELq",
+  "title": "𝟒𝐊臻享版【辉夜大小姐想让我告白 通往大人的阶梯】全2集 超清中字（未删减版）",
+  "play": 189565,
+  "duration": "126:21",
+  "score": 175.2
+ },
+ "a757bf6b3b7c31f68c2e4e110e250297": {
+  "bvid": "BV1be4y1w7sT",
+  "title": "【4K60帧/4K超高清】《辉夜大小姐》全季 NCOP＆NCED(已更新到初吻不会停止NCOP &amp;NCED )",
+  "play": 73009,
+  "duration": "22:44",
+  "score": 120.1
+ },
+ "e2b6f7e7d994a289bc698dadd5b62e8f": {
+  "bvid": "BV1ZKtU66ECp",
+  "title": "【记忆管理局re|全集】草蛇灰线，伏脉千里。一饮一啄，莫非前定。推荐二刷！",
+  "play": 42437,
+  "duration": "214:13",
+  "score": 175.0
+ },
+ "24a52c30c029d96684dd57792964c948": {
+  "bvid": "BV1Qo4y1V7GC",
+  "title": "在百万豪装录音棚大声听 进击的巨人ost 《Call your name 》-澤野弘之&amp; R!N/&amp;Gemie【Hi-res】",
+  "play": 4936782,
+  "duration": "4:24",
+  "score": 154.9
+ },
+ "eacfafcf1a2cee62689bd59b58be0edb": {
+  "bvid": "BV1sz4y1P7QA",
+  "title": "进击的巨人最终季完结篇~后篇",
+  "play": 167915,
+  "duration": "86:6",
+  "score": 150.2
+ },
+ "11ab5eec4d59ee7c6fc9d84b814c69f1": {
+  "bvid": "BV1a94y1a7dE",
+  "title": "【中英字幕/官方MV】进击的巨人最终季完结篇前篇主题歌「UNDER THE TREE」完整版动画特别MV",
+  "play": 145674,
+  "duration": "4:32",
+  "score": 175.1
+ },
+ "7601766da4d3042c66a139c541fd9f63": {
+  "bvid": "BV1N4411V7xk",
+  "title": "進撃の巨人Season 3 Part 2 OP 「憧憬と屍の道」完整版 by Linked Horizon",
+  "play": 96940,
+  "duration": "5:9",
+  "score": 175.1
+ },
+ "ff0cad2b8359902b0fd1438c86c65fa5": {
+  "bvid": "BV1BPgtzSE6S",
+  "title": "【ピアノ採譜】太陽が昇らない世界 - Aimer / 劇場版「鬼滅の刃」無限城編 第一章 猗窩座再来 主題歌",
+  "play": 221,
+  "duration": "2:48",
+  "score": 144.0
+ },
+ "3870b962fa5455103e936649e370e23e": {
+  "bvid": "BV1js411f7FF",
+  "title": "「銀魂劇場版 永远的万事屋」主题歌「现状毁灭」完整专辑 (320K)",
+  "play": 30577,
+  "duration": "8:10",
+  "score": 120.0
+ },
+ "93823d3606a36827524e443096a9b073": {
+  "bvid": "BV1Kg411P7zM",
+  "title": "TVアニメ「キングダム」第3シリーズ #17～19【アニメアワー】 (2021-12-10 04:00放送)",
+  "play": 2751,
+  "duration": "74:48",
+  "score": 150.0
+ },
+ "f29df86488de0734b40fae8f0fec8283": {
+  "bvid": "BV1BSt8zBEEE",
+  "title": "(动画原声）涼宮ハルヒの消失 Original Soundtrack——神前晓【2010 FULL ALBUM】",
+  "play": 2275,
+  "duration": "82:53",
+  "score": 150.0
+ },
+ "fc1fdc082aca1cc0c28bafddba9c4771": {
+  "bvid": "BV191RLBuEXk",
+  "title": "《罗小黑战记 2》正片 🍁全～片 1080P 超清 无水印",
+  "play": 18871,
+  "duration": "649:50",
+  "score": 175.0
+ },
+ "309d902c5ad4f2345a0a1bce4cc73a65": {
+  "bvid": "BV1AL4112755",
+  "title": "【OP完整版/来自深渊S1】Deep In Abyss",
+  "play": 37331,
+  "duration": "3:39",
+  "score": 115.0
+ },
+ "112413f7e5d103dec9bb506270d212e9": {
+  "bvid": "BV1KJ411w7BG",
+  "title": "【王者荣耀】回城搭配第一期（梦想舞台）",
+  "play": 4995,
+  "duration": "3:8",
+  "score": 150.0
+ },
+ "6f65fe06c2e6f87c38f205dea9044f1e": {
+  "bvid": "BV1RK411d7kv",
+  "title": "「路人超能100 II」原声集/OST",
+  "play": 2663,
+  "duration": "149:6",
+  "score": 150.0
+ },
+ "f20a1016fd155a4ee12bcbd0b572a8a1": {
+  "bvid": "BV154411H7hc",
+  "title": "【海贼王OP/完整版/听歌向】至2026年OnePiece主题曲OP完整版合集（29首/含最新艾尔巴夫篇OP29《ルミナス-Luminous（闪光）》》）",
+  "play": 1215112,
+  "duration": "122:9",
+  "score": 176.2
+ },
+ "181ab57c7b0fa2e208923d05b893c96a": {
+  "bvid": "BV1KKn16bEim",
+  "title": "【排球少年 第四季】全25集 4K超清修复未删减版",
+  "play": 49168,
+  "duration": "937:43",
+  "score": 175.0
+ },
+ "7c8b1b14591b8ff873f6545eef5cf7b0": {
+  "bvid": "BV1JaHc6dELu",
+  "title": "【2026.10.26乒乓与生活直播】聊冠军赛赛程等",
+  "play": 2002,
+  "duration": "86:39",
+  "score": 150.0
+ },
+ "27b1739d2ce1676bc10ede76307d942a": {
+  "bvid": "BV1Wf4y1u7pc",
+  "title": "【启动了OST】Start-Up 韩剧主题曲mv合集 OST part1-17 裴秀智 南柱赫主演",
+  "play": 13098,
+  "duration": "128:37",
+  "score": 150.0
+ },
+ "e6e9f7357824da7f0919f31264382082": {
+  "bvid": "BV14vp76QEgz",
+  "title": "2026温子仁恐怖《潜-伏6》超清中字 未删减版",
+  "play": 7659,
+  "duration": "100:30",
+  "score": 190.0
+ },
+ "9f58f19872f35b06dc40a86f623d7e45": {
+  "bvid": "BV1Et411b7v7",
+  "title": "【NHK晨间剧】1991年4月期《请问芳名》（铃木京香）片头、片段 晨间剧第46作",
+  "play": 4512,
+  "duration": "4:53",
+  "score": 165.0
+ },
+ "816f9ac59a06a3ce8e130b1324a800c7": {
+  "bvid": "BV1JRj56SEGH",
+  "title": "[美剧]权欲 第一章 全六季",
+  "play": 60275,
+  "duration": "4959:0",
+  "score": 120.1
+ },
+ "b318ced4b33276f8aa721ff17b255d80": {
+  "bvid": "BV1Dm421V7Et",
+  "title": "[FLAC无损]《蓦然回首》电影原声带+主题曲",
+  "play": 122469,
+  "duration": "25:42",
+  "score": 90.1
+ },
+ "d26d9d855c93174eeb9b17e92dfefd9b": {
+  "bvid": "BV1Gs411C7CJ",
+  "title": "「作画担当」傷物語 - 鉄血篇 -",
+  "play": 9324,
+  "duration": "11:50",
+  "score": 120.0
+ },
+ "4aacddef2e482d567b50c9804dcc2694": {
+  "bvid": "BV1Ks411c7uP",
+  "title": "「少女☆歌剧 Revue StarLight」StarLight九九组「Star Divine」LIVE Ver.（FULL SIZE）",
+  "play": 131848,
+  "duration": "4:25",
+  "score": 150.1
+ },
+ "6bdf22f019c03c58f0709485d850e64c": {
+  "bvid": "BV1vA41197xQ",
+  "title": "【神渣☆偶像】车祸幽灵前Idol想要附身",
+  "play": 9151,
+  "duration": "23:49",
+  "score": 150.0
+ },
+ "1521386cac14c7983f8dffd5e8d6a948": {
+  "bvid": "BV1rotwzFEmd",
+  "title": "聲の形The Shape of Voice国语",
+  "play": 13130,
+  "duration": "64:58",
+  "score": 150.0
+ },
+ "ab8f9c9e86169ae903397abe45c20b05": {
+  "bvid": "BV1doVU6vE74",
+  "title": "《时光代理人》歌曲合集",
+  "play": 226566,
+  "duration": "150:14",
+  "score": 150.2
+ },
+ "8e3a46a7eda18bb2c43b02eef48c02cb": {
+  "bvid": "BV1N7411U7iW",
+  "title": "Disney迪士尼经典动画电影《The Lion King II 狮子王2·辛巴的荣耀》（1998）第二部 粤语版 音乐原声CUT",
+  "play": 9020,
+  "duration": "23:13",
+  "score": 165.0
+ },
+ "897d1f9bd01964576cdc10cf5bd9fc86": {
+  "bvid": "BV1kE42157Rb",
+  "title": "【狮子王3】彭彭丁满历险记 英配双语字幕（2004）彭彭：丁满，咱们是主角儿~",
+  "play": 75056,
+  "duration": "76:40",
+  "score": 165.1
+ },
+ "de0e2558ba746dc93cdce5ce1e5bc8cc": {
+  "bvid": "BV1JeePzLExL",
+  "title": "《水星领航员第一季+第二季+第三季》超清晰中字  全52集 无删减",
+  "play": 57781,
+  "duration": "2245:36",
+  "score": 175.1
+ },
+ "24070b57b71cd64a9d9da29119cb49e9": {
+  "bvid": "BV1zm7N64Eat",
+  "title": "【加急|《泰坦尼克号》白星加长版Reaction 】深海埋葬海洋之心，泰坦尼克不只是爱情，更是时代悲歌",
+  "play": 29625,
+  "duration": "239:26",
+  "score": 150.0
+ },
+ "b8d5a8b74b5c1d31e9ae02ba6f337f99": {
+  "bvid": "BV18unb6HE7R",
+  "title": "2026【逃出布迪秀】超清无删减完整版",
+  "play": 7820,
+  "duration": "156:52",
+  "score": 190.0
+ },
+ "6fba9190f1a858365ca1e9ff7df551e5": {
+  "bvid": "BV127411p7Nq",
+  "title": "《我的英雄学院》辱华，没得洗，已出坑",
+  "play": 772839,
+  "duration": "4:53",
+  "score": 150.8
+ },
+ "bfe164536e87bb3d1d3d02d71bf95971": {
+  "bvid": "BV1Ws4y1A7fS",
+  "title": "【中文字幕】我推的孩子「アイドル」官方MV（4K 60帧/Hi-Res）",
+  "play": 27195911,
+  "duration": "3:46",
+  "score": 162
+ },
+ "92807216c06e14768aa867cd2f446b4d": {
+  "bvid": "BV1CQGzzPE7s",
+  "title": "我心里危险的东西 1-2季 全25话 超清中字 未删减",
+  "play": 1589728,
+  "duration": "916:48",
+  "score": 176.6
+ },
+ "3f483189e8d69ff1832842ca6739c077": {
+  "bvid": "BV1mi4y1K7n1",
+  "title": "【桥本环奈】【上白石萌音】舞台剧「千与千寻」",
+  "play": 150496,
+  "duration": "124:8",
+  "score": 120.2
+ },
+ "fe08b42939e9da5ba5f8035e05b31936": {
+  "bvid": "BV1GW421R7JH",
+  "title": "你想和我一起去异世界吗~【兄弟们来学习】【我爱学🎹】《无职转生～到了异世界就拿出真本事～》主题曲",
+  "play": 464871,
+  "duration": "4:14",
+  "score": 150.5
+ },
+ "45de126e628b925601473d87a408a35b": {
+  "bvid": "BV1a3nh6ZEXe",
+  "title": "大卫武汉小师赛面试  20261023  弹幕版  紧张刺激的1v1",
+  "play": 1730,
+  "duration": "634:10",
+  "score": 105.0
+ },
+ "fb3b412b8e25d88bf64ef4a2d5f0d4d2": {
+  "bvid": "BV1AM4m1C7Xj",
+  "title": "【こう_kou】ReCoda/TRUE 完整版翻唱 響け！ユーフォニアム３op",
+  "play": 377,
+  "duration": "4:12",
+  "score": 175.0
+ },
+ "d5b1b9c2c88070b060d64a83516a3816": {
+  "bvid": "BV1NVWVzsESy",
+  "title": "【銀魂】『新劇場版 銀魂 -吉原大炎上-』始まる前から便乗したいやつらのアモアス【声真似】【Among Us】",
+  "play": 3622,
+  "duration": "114:0",
+  "score": 150.0
+ },
+ "9cbd05f313ada0fe92a09371ee35c111": {
+  "bvid": "BV1nXev6WEbd",
+  "title": "4K超高清『星际牛仔1998』超清简中|共26集（未删减）",
+  "play": 18193,
+  "duration": "848:11",
+  "score": 190.0
+ },
+ "697010c57a87ce3adaa0b9fd9cf101df": {
+  "bvid": "BV1vxDWBnEcW",
+  "title": "【异国日记】全13集 超清中字（未删减版）",
+  "play": 754217,
+  "duration": "422:4",
+  "score": 175.8
+ },
+ "dca8701fe39889534f05deb709552d2f": {
+  "bvid": "BV1R99wBaEmE",
+  "title": "【4K超清】银河英雄传说 国语版全集 1988版",
+  "play": 50478,
+  "duration": "3874:22",
+  "score": 190.1
+ },
+ "ba65d644ad471e199dd8c05cbf9adb97": {
+  "bvid": "BV1ut411v7J6",
+  "title": "【银魂】系列/精选篇 · 完整版 · 全OP/ED合集！",
+  "play": 526512,
+  "duration": "211:46",
+  "score": 175.5
+ },
+ "c1da0e8838931ae2fe21a8546b5aea73": {
+  "bvid": "BV19W411H7PP",
+  "title": "【银魂 - 银之魂篇 OP完整版】Gintama Silver Soul Arc「Katte ni My Soul」Drum Cover「架子鼓翻奏」",
+  "play": 26513,
+  "duration": "4:41",
+  "score": 115.0
+ },
+ "30dde3e3c528069795f0480501db1bd0": {
+  "bvid": "BV19W411H7PP",
+  "title": "【银魂 - 银之魂篇 OP完整版】Gintama Silver Soul Arc「Katte ni My Soul」Drum Cover「架子鼓翻奏」",
+  "play": 26513,
+  "duration": "4:41",
+  "score": 115.0
+ },
+ "f99d02dca2230b4ee3a6613e16557b39": {
+  "bvid": "BV1ZmYjeDEG3",
+  "title": "【銀魂’ 延長戦】サクラミツツキ【楽譜】Gintama&#x27;_ Enchousen _Sakura Mitsutsuki_ SPYAIR",
+  "play": 79,
+  "duration": "3:38",
+  "score": 150.0
+ },
+ "500a39dd193784ff114b9b4c53abbfaf": {
+  "bvid": "BV1BmbFzHESi",
+  "title": "[𝑯𝒊-𝑹𝒆𝒔无损]《章鱼哔的原罪》动漫原声带+OP/ED",
+  "play": 34098,
+  "duration": "98:56",
+  "score": 150.0
+ },
+ "665df7ec490f01862974237e9965b05c": {
+  "bvid": "BV14ft9zSEiW",
+  "title": "【BD1080P】昭和元禄落语心中 两季全集（豆瓣9.4分）",
+  "play": 279973,
+  "duration": "858:11",
+  "score": 175.3
+ },
+ "4f2705626a7c902961d43c9e53d05b15": {
+  "bvid": "BV1JJ856DEMx",
+  "title": "老外看奇幻电影《指环王2双塔奇兵》Reaction",
+  "play": 23887,
+  "duration": "216:9",
+  "score": 150.0
+ },
+ "8552a0085fbdb6e7b24325f66a3d6383": {
+  "bvid": "BV1BzkNBJE5r",
+  "title": "【4K超清】咒术回战 第三季 1-12话全集",
+  "play": 13808933,
+  "duration": "370:34",
+  "score": 187
+ },
+ "0ecd20f5df16ae7a25847aa868eb0182": {
+  "bvid": "BV1BS411A72j",
+  "title": "日番「紫罗兰永恒花园」特别篇(2018)",
+  "play": 34875,
+  "duration": "63:34",
+  "score": 165.0
+ }
+}
