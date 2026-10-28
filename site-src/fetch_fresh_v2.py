@@ -9,7 +9,6 @@
 import datetime
 import hashlib
 import json
-import os
 import pathlib
 import re
 import time
@@ -18,9 +17,9 @@ import urllib.request
 
 HERE = pathlib.Path(__file__).parent
 SITE = HERE / "site"
-PX = os.environ.get("LOCAL_PROXY", "http://127.0.0.1:7897")
+PX = "http://127.0.0.1:7897"
 DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-PROXY = DIRECT if os.environ.get("NO_LOCAL_PROXY") == "1" else urllib.request.build_opener(urllib.request.ProxyHandler({"http": PX, "https": PX}))
+PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({"http": PX, "https": PX}))
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 TMDB_KEY = "99bf884d2a3e8403ae8accded44ec73c"
@@ -39,8 +38,10 @@ def anilist_fetch(per=50):
          'type:ANIME,season:$s,seasonYear:$y,sort:POPULARITY_DESC){'
          'id title{romaji native english} startDate{year month day} '
          'coverImage{large} bannerImage averageScore episodes '
-         'description(asHtml:false) genres siteUrl '
-         'trailer{id site} nextAiringEpisode{airingAt episode}}}}' % per)
+         'description(asHtml:false) genres siteUrl popularity status format duration '
+         'studios(isMain:true){nodes{name}} '
+         'trailer{id site} nextAiringEpisode{airingAt episode} '
+         'relations{nodes{id type format siteUrl title{romaji native} coverImage{large}}}}}}' % per)
     out = []
     for page in range(1, 3):  # 2 页 = 100 部
         body = json.dumps({"query": q, "variables": {"s": s, "y": y, "p": page}}).encode()
@@ -159,6 +160,15 @@ def main():
             "trailer": trailer_id,
             "next_ep": next_ep, "next_at": next_at, "wd": weekday,
             "air": ymd,
+            "st": m.get("status"),
+            "fm": m.get("format"),
+            "du": m.get("duration"),
+            "sd": (((m.get("studios") or {}).get("nodes")) or [{}])[0].get("name"),
+            "rel": [{"n": (((r.get("title") or {}).get("native")) or ((r.get("title") or {}).get("romaji"))),
+                     "f": r.get("format"), "u": r.get("siteUrl"),
+                     "i": ((r.get("coverImage") or {}).get("large"))}
+                    for r in (((m.get("relations") or {}).get("nodes")) or [])
+                    if r.get("type") == "ANIME" and r.get("format") != "MUSIC"][:8],
         })
 
     # ---- TMDB 热门新片（含 trailer）----

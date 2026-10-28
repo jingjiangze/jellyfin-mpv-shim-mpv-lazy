@@ -49,7 +49,9 @@ FA = [{"kind": "fresh", "type": "S", "key": x["k"], "name": x["n"],
        "overview": x.get("v") or "", "url": x.get("u") or "",
        "trailer": x.get("trailer"), "banner": x.get("banner"),
        "next_ep": x.get("next_ep"), "next_at": x.get("next_at"),
-       "wd": x.get("wd"), "genres": x.get("g") or [], "pop": x.get("pop")}
+       "wd": x.get("wd"), "genres": x.get("g") or [], "pop": x.get("pop"),
+       "st": x.get("st"), "fm": x.get("fm"), "du": x.get("du"),
+       "studio": x.get("sd"), "rel": x.get("rel") or []}
       for x in fresh.get("anime") or []]
 FM = [{"kind": "fresh", "type": "M", "key": x["k"], "name": x["n"],
        "rating": x.get("r"), "poster": x.get("img") or "",
