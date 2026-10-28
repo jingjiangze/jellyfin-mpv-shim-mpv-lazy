@@ -117,7 +117,7 @@ libmpv 路径下 shim **同样**把 `config_dir` 钉在 `%APPDATA%\jellyfin-mpv-
 
 - **发布**：推 `v*` tag 触发 [`.github/workflows/release.yml`](.github/workflows/release.yml)，在 GitHub Actions 上做语法检查、打包 zip（脚本 + `.cmd` + README + LICENSE + docs）并创建 Release 并挂产物。
 - **上游巡检**：[`.github/workflows/upstream-watch.yml`](.github/workflows/upstream-watch.yml) 每天 05:17 读 `jellyfin/jellyfin-mpv-shim` 与 `hooke007/mpv_PlayKit` 的 latest release，并抓 `mpv_options.py` 检查 `mpv_ext_no_ovr` 是否还在；有变化就更新 `state/upstream.json` 并开 issue。
-- **镜像 fork**（保持 pristine，不加任何提交）：[jingjiangze/jellyfin-mpv-shim](https://github.com/jingjiangze/jellyfin-mpv-shim)、[jingjiangze/mpv_PlayKit](https://github.com/jingjiangze/mpv_PlayKit)。同步与复核清单见 [docs/upstream-sync.md](docs/upstream-sync.md)。
+- **自动镜像 fork**：[jingjiangze/jellyfin-mpv-shim](https://github.com/jingjiangze/jellyfin-mpv-shim)、[jingjiangze/mpv_PlayKit](https://github.com/jingjiangze/mpv_PlayKit)。每个 fork 只多一个 `.github/workflows/sync-upstream.yml`，每天 04:23 用 fork 自己的 `GITHUB_TOKEN` 做 `fetch 上游 → rebase → force-with-lease`，跑完仍是「上游 + 1 个文件」。细节与复核清单见 [docs/upstream-sync.md](docs/upstream-sync.md)。
 
 ## License
 

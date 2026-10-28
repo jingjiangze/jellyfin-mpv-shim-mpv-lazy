@@ -7,24 +7,35 @@
 | [jellyfin/jellyfin-mpv-shim](https://github.com/jellyfin/jellyfin-mpv-shim) | 播放器前端 | `mpv_options.py` 里 `--config-dir` 的注入条件、`player.py` 首启建空配置、libmpv 加载方式 |
 | [hooke007/mpv_PlayKit](https://github.com/hooke007/mpv_PlayKit) | mpv-lazy 配置集 | `portable_config/mpv.conf` 的 `~~/` 引用、`scripts/` 与 `shaders/` 结构 |
 
-## 1. 只读镜像 fork
+## 1. 镜像 fork（自动同步）
 
-两个上游都已 fork 到本账号，**保持 pristine（不提交任何东西）**，这样随时能一键快进：
+两个上游都已 fork 到本账号。每个 fork 里**只多一个文件** `.github/workflows/sync-upstream.yml`，其余内容与上游逐字节一致：
 
-- https://github.com/jingjiangze/jellyfin-mpv-shim
-- https://github.com/jingjiangze/mpv_PlayKit
+- https://github.com/jingjiangze/jellyfin-mpv-shim （每天同步 `master`）
+- https://github.com/jingjiangze/mpv_PlayKit （每天同步 `main`）
 
-同步命令：
+同步逻辑（`sync-upstream.yml`，每天 04:23 Asia/Shanghai 跑一次）：
+
+1. `git fetch upstream`；
+2. 若上游已是当前 HEAD 的祖先 → 打印 `already up to date with upstream` 直接退出（**幂等，不产生任何提交**）；
+3. 否则 `git rebase upstream/<branch>`，把我们那一个 commit 重新叠到上游最新之上，再 `git push --force-with-lease`；
+4. 最后打印 `git diff --stat upstream/<branch> HEAD`——正常情况下只会看到 `sync-upstream.yml` 一个文件。
+
+**为什么用 rebase 而不是官方 `merge-upstream` API**：rebase 让 fork 的历史恒为「上游 + 我们的 1 个 commit」，不会攒出一长串 merge commit；`--force-with-lease` 保证只在预期基线上强推。API 的 `merge-upstream` 也能用（`merge_type` 有 `merge/fast-forward/none`），但长期会分叉成 merge 链。
+
+**为什么不需要任何令牌**：workflow 跑在 fork 自己里面，用 `secrets.GITHUB_TOKEN`（配 `permissions: contents: write`）就能 fetch 公开上游、push 回自己。**没有 PAT、没有 deploy key、没有任何凭据被存进任何仓库。**
+
+**镜像仓的上游 CI 已关**：`jingjiangze/jellyfin-mpv-shim` 里上游自带的 `build` workflow 被手动禁用（状态 `disabled_manually`）。否则每次同步推送都会跑一遍上游的矩阵 CI——镜像仓没有那些 secrets，纯属烧 runner。要恢复：`gh workflow enable build --repo jingjiangze/jellyfin-mpv-shim`。
+
+手动触发 / 自查：
 
 ```bash
-gh repo sync jingjiangze/jellyfin-mpv-shim --branch master
-gh repo sync jingjiangze/mpv_PlayKit --branch main
+gh workflow run sync-upstream.yml --repo jingjiangze/jellyfin-mpv-shim --ref master
+gh workflow run sync-upstream.yml --repo jingjiangze/mpv_PlayKit --ref main
+gh run list --repo jingjiangze/jellyfin-mpv-shim --limit 3
 ```
 
-或在网页上点 fork 页面的 **Sync fork → Update branch**。
-
-> 不要往 fork 里提交改动。一旦提交就会和上游分叉，`--branch` 快进会失败，只能改为合并。
-> 本项目自己的改动一律放在 `jingjiangze/jellyfin-mpv-shim-mpv-lazy`，不碰 fork。
+> 别往 fork 里再塞别的东西——多一个文件都会让「与上游的差异 = 1 个 workflow」这个前提失效。本项目自己的改动一律放 `jingjiangze/jellyfin-mpv-shim-mpv-lazy`。
 
 ## 2. 自动巡检（`.github/workflows/upstream-watch.yml`）
 
