@@ -69,11 +69,12 @@ jobs:
         run: python -u fill_posters.py
 
       - name: Push new posters to asset repo
-        timeout-minutes: 12
+        timeout-minutes: 18
         continue-on-error: true
         working-directory: site-src
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_MAX: "60"
         run: python -u push_assets.py
 
       - name: Build pages
@@ -86,6 +87,7 @@ jobs:
 
       - name: Persist state back to the repo
         timeout-minutes: 8
+        continue-on-error: true
         run: |
           set -euo pipefail
           cp -f site-src/site/data.json site-src/site/bili.json site-src/data/ || true
@@ -97,7 +99,9 @@ jobs:
             echo "no state change"
           else
             git commit -m "chore: sync site state [skip ci]"
-            git push
+            # 并发/排队时远端可能已前进，先 rebase 再推
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            git push || echo "state push failed (non-fatal)"
           fi
 
       - name: Deploy to Cloudflare Pages

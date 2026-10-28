@@ -8,6 +8,7 @@
 """
 import base64
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -15,7 +16,7 @@ import sys
 REPO = "jingjiangze/jellyfin-mpv-shim-mpv-lazy"
 BRANCH = "main"
 DIR = "media/posters"
-LIMIT = 150
+LIMIT = int(os.environ.get("ASSET_MAX", "150") or 150)
 
 HERE = pathlib.Path(__file__).resolve().parent
 POSTERS = HERE / "site" / "posters"
