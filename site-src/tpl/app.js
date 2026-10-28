@@ -326,7 +326,14 @@
     if (!heroN) return;
     heroIdx = (n + heroN) % heroN;
     document.querySelectorAll('#hero .slide').forEach(function (el, i) {
-      el.classList.toggle('on', i === heroIdx);
+      var on = i === heroIdx;
+      el.classList.toggle('on', on);
+      if (on) {
+        var bg = el.querySelector('.hero-bg');
+        if (bg && !bg.style.backgroundImage && bg.dataset.bg) {
+          bg.style.backgroundImage = 'url(' + bg.dataset.bg + ')';
+        }
+      }
     });
     document.querySelectorAll('#hero .dots i').forEach(function (el, i) {
       el.classList.toggle('on', i === heroIdx);
@@ -376,7 +383,9 @@
       out += '<section class="hero" id="hero">';
       slides.forEach(function (it, i) {
         out += '<div class="slide' + (i === 0 ? ' on' : '') + '" data-i="' + i + '">'
-          + '<div class="hero-bg" style="background-image:url(\'' + esc(it.banner || it.poster || '') + '\')"></div>'
+          + (i === 0
+              ? '<div class="hero-bg" style="background-image:url(' + "'" + esc(it.banner || it.poster || '') + "'" + ')"></div>'
+              : '<div class="hero-bg" data-bg="' + esc(it.banner || it.poster || '') + '"></div>')
           + '<div class="hero-info"><div class="hero-tag">本季新番 · ' + esc((DATA.fresh.season || '').split(' ')[0] || '') + '</div>'
           + '<h1>' + esc(it.name) + '</h1><div class="hero-meta">';
         if (it.rating) out += '<span><b>★ ' + it.rating.toFixed(1) + '</b></span>';
@@ -575,6 +584,20 @@
   window.playTrailer = playTrailer;
   window.playBili = playBili;
 
+  function loadData(cb) {
+    if (window.DATA) { cb(); return; }
+    var urls = [window.DATA_URL, window.DATA_FB].filter(Boolean);
+    var i = 0;
+    function next() {
+      if (i >= urls.length) { cb(); return; }
+      fetch(urls[i++], { cache: 'force-cache' })
+        .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+        .then(function (d) { window.DATA = d || {}; DATA = window.DATA; cb(); })
+        .catch(next);
+    }
+    next();
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     window.JF = window.JF || 'http://127.0.0.1:8100';
     $('#mask').onclick = function (e) { if (e.target.id === 'mask') closeM(); };
@@ -588,7 +611,10 @@
     document.querySelector('.tw').appendChild(sw);
     renderRegionSwitch();
     bindSearch();
-    if (PAGE === 'home') renderHome(); else renderLibrary();
-    openFromQuery();
+    loadData(function () {
+      if (!window.DATA) { $('#main').innerHTML = '<div class="empty">数据加载失败，请刷新重试</div>'; return; }
+      if (PAGE === 'home') renderHome(); else renderLibrary();
+      openFromQuery();
+    });
   });
 })();

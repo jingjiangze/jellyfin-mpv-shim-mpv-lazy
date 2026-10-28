@@ -57,15 +57,28 @@ def main():
         print("没有 site/posters 目录")
         return 0
     have = remote_names()
+    # 站点数据 JSON（build_site 生成的 index-*.json / library-*.json）也要进 CDN，
+    # 否则 HTML 里的外链会 404
+    data_files = sorted((HERE / "site").glob("index-*.json")) + sorted((HERE / "site").glob("library-*.json"))
+    data_entries = []
+    for f in data_files:
+        try:
+            blob = gh([f"repos/{REPO}/git/blobs"],
+                      {"content": base64.b64encode(f.read_bytes()).decode(), "encoding": "base64"})
+            data_entries.append({"path": f"media/{f.name}", "mode": "100644", "type": "blob", "sha": blob["sha"]})
+            print(f"[data] {f.name}")
+        except Exception as exc:
+            print(f"[data] {f.name} failed: {exc}")
+
     local = sorted(p for p in POSTERS.glob("*.jpg"))
     todo = [p for p in local if p.name not in have][:LIMIT]
     print(f"本地 {len(local)} 张 / 远端 {len(have)} 张 / 本次上传 {len(todo)} 张")
-    if not todo or dry:
+    if (not todo and not data_entries) or dry:
         return 0
 
     parent = gh([f"repos/{REPO}/git/ref/heads/{BRANCH}"])["object"]["sha"]
     base_tree = gh([f"repos/{REPO}/git/commits/{parent}"])["tree"]["sha"]
-    entries = []
+    entries = list(data_entries)
     for path in todo:
         # 内容必须走 stdin 的 JSON body：单张海报 base64 后 >25KB，用 -f 会触发
         # Windows "文件名或扩展名太长"(WinError 206)

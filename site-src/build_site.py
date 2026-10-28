@@ -95,13 +95,34 @@ def dump(obj):
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
 
 
+import datetime as _dt
+BUILD_TAG = _dt.datetime.now().strftime("%m-%d %H:%M")
+
+import hashlib as _hl
+
+def _emit_json(name, obj):
+    raw = dump(obj).encode("utf-8")
+    tag = _hl.sha256(raw).hexdigest()[:10]
+    fn = f"{name}-{tag}.json"
+    (SITE / fn).write_bytes(raw)
+    return fn, len(raw)
+
+
 PAGES = [
     ("index.html", "home.html", DATA_HOME),
     ("library.html", "library.html", DATA_LIB),
 ]
 for out, tpl_name, data in PAGES:
+    jname, jsize = _emit_json(out.replace(".html", ""), data)
+    data_url = "https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/" + jname
+    data_fb = "https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/" + jname
     html = ((TPL / tpl_name).read_text(encoding="utf-8")
-            .replace("__CSS__", CSS).replace("__JS__", JS).replace("__DATA__", dump(data)))
+            .replace("__CSS__", CSS).replace("__JS__", JS)
+            .replace("__BUILD__", BUILD_TAG)
+            .replace("__DATA_URL__", data_url)
+            .replace("__DATA_FB__", data_fb)
+            .replace("__DATA__", "null"))
+    print(f"  data {jname} {jsize/1024:.0f} KB")
     (SITE / out).write_text(html, encoding="utf-8")
     print(f"{out}: {len(html.encode('utf-8'))/1024:.0f} KB")
 

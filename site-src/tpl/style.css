@@ -306,3 +306,7 @@ main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 
 .filterbar .chip:hover { color: var(--fg); border-color: var(--accent-dim); }
 .filterbar .chip.on { background: rgba(240,145,153,.16); color: var(--accent); border-color: var(--accent-dim); font-weight: 600; }
 .filterbar .sep { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
+
+/* 构建时间戳（便于确认看到的是哪一版） */
+.build { font-size: 10.5px; color: var(--dim); opacity: .55; margin-left: 10px; white-space: nowrap; }
+@media (max-width: 760px) { .build { display: none; } }
