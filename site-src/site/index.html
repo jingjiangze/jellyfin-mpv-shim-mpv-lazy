@@ -4,305 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0b0b0f">
+<link rel="preconnect" href="https://gcore.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://gh-proxy.com" crossorigin>
+<link rel="dns-prefetch" href="https://s4.anilist.co">
+<link rel="dns-prefetch" href="https://image.tmdb.org">
+<link rel="preload" as="fetch" href="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/index-6200faec48.json" crossorigin>
 <title>番组计划 · 新番与新片</title>
-<style>/* 站点共用样式：首页（新番/新片/番剧表）与媒体库页共用一套 token 与组件 */
-:root {
-  --bg: #0b0b0f;
-  --bg2: #14141b;
-  --card: #181820;
-  --card2: #22222c;
-  --line: #2a2a36;
-  --fg: #ececf1;
-  --dim: #8a8a96;
-  --accent: #f09199;
-  --accent-dim: #b8656c;
-  --star: #f5c451;
-  --r: 12px;
-  --r-sm: 8px;
-  --shadow: 0 18px 48px rgba(0, 0, 0, .55);
-  --header-h: 58px;
-}
-
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
-body {
-  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-a { color: inherit; text-decoration: none; }
-img { display: block; }
-
-/* ---------- 顶栏 ---------- */
-.top {
-  position: fixed; inset: 0 0 auto 0; height: var(--header-h); z-index: 50;
-  background: linear-gradient(180deg, rgba(11, 11, 15, .96), rgba(11, 11, 15, .72) 70%, transparent);
-  transition: background .25s, backdrop-filter .25s;
-}
-.top.solid { background: rgba(11, 11, 15, .97); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
-.tw {
-  max-width: 1520px; height: 100%; margin: 0 auto; padding: 0 34px;
-  display: flex; align-items: center; gap: 26px;
-}
-.logo { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 700; letter-spacing: .5px; white-space: nowrap; }
-.logo i { width: 10px; height: 18px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 12px rgba(240, 145, 153, .5); }
-.logo b { color: var(--accent); }
-.nav { display: flex; gap: 4px; }
-.nav a {
-  padding: 7px 15px; border-radius: 999px; font-size: 14.5px; color: var(--dim);
-  cursor: pointer; transition: color .18s, background .18s; white-space: nowrap;
-}
-.nav a:hover { color: var(--fg); }
-.nav a.on { color: var(--bg); background: var(--accent); font-weight: 600; }
-.searchbox { margin-left: auto; position: relative; }
-.searchbox input {
-  width: 210px; padding: 8px 13px; border-radius: 999px; font-size: 13.5px;
-  color: var(--fg); background: var(--card2); border: 1px solid transparent; outline: none;
-  transition: border-color .2s, width .2s;
-}
-.searchbox input:focus { border-color: var(--accent-dim); width: 250px; }
-.cnt { font-size: 12.5px; color: var(--dim); white-space: nowrap; }
-
-/* ---------- 布局 ---------- */
-main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 34px 70px; }
-.block { margin: 34px 0 0; }
-.bhead { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; }
-.bhead h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: .3px; }
-.bhead span { font-size: 12.5px; color: var(--dim); }
-
-/* ---------- 首页 hero ---------- */
-.hero {
-  position: relative; border-radius: 18px; overflow: hidden; margin-top: 6px;
-  height: 420px; background: var(--bg2);
-}
-.hero-bg {
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  background-size: cover; background-position: center 30%;
-}
-.hero::after {
-  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
-  background: linear-gradient(90deg, rgba(11, 11, 15, .96) 8%, rgba(11, 11, 15, .72) 42%, rgba(11, 11, 15, .2) 72%, rgba(11, 11, 15, .6)),
-              linear-gradient(0deg, var(--bg) 2%, transparent 46%);
-}
-.hero-info { position: absolute; left: 0; bottom: 0; padding: 40px 44px; max-width: 680px; z-index: 3; }
-.hero-tag { font-size: 12px; letter-spacing: 2px; color: var(--accent); font-weight: 600; margin-bottom: 12px; }
-.hero h1 { margin: 0 0 12px; font-size: 40px; line-height: 1.16; font-weight: 720; letter-spacing: -.5px; }
-.hero-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13.5px; color: var(--dim); margin-bottom: 14px; }
-.hero-meta b { color: var(--star); font-weight: 600; }
-.hero p { margin: 0 0 22px; font-size: 14.5px; line-height: 1.75; color: #c8c8d2; }
-.hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
-.hbtn {
-  display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 999px;
-  font-size: 14.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent;
-  transition: transform .16s, background .18s, border-color .18s;
-}
-.hbtn:hover { transform: translateY(-1px); }
-.hbtn.primary { background: var(--accent); color: #17171d; }
-.hbtn.ghost { background: rgba(255, 255, 255, .1); color: var(--fg); border-color: rgba(255, 255, 255, .18); }
-.hbtn.ghost:hover { background: rgba(255, 255, 255, .17); }
-
-/* ---------- 横滑轨道 ---------- */
-.row {
-  display: grid; grid-auto-flow: column; grid-auto-columns: 168px; gap: 14px;
-  overflow-x: auto; padding: 4px 2px 12px; scroll-snap-type: x proximity;
-  scrollbar-width: none;
-}
-.row::-webkit-scrollbar { display: none; }
-.row .card { scroll-snap-align: start; }
-
-/* ---------- 网格 ---------- */
-.grid {
-  display: grid; gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
-}
-
-/* ---------- 卡片 ---------- */
-.card { cursor: pointer; position: relative; }
-.pw {
-  position: relative; aspect-ratio: 2 / 3; border-radius: var(--r); overflow: hidden;
-  background: var(--card); border: 1px solid rgba(255, 255, 255, .04);
-  transition: transform .2s ease, box-shadow .2s ease, border-color .2s;
-}
-.card:hover .pw { transform: translateY(-4px); box-shadow: var(--shadow); border-color: rgba(240, 145, 153, .35); }
-.pw img { width: 100%; height: 100%; object-fit: cover; }
-.ph {
-  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
-  font-size: 26px; color: #3c3c48; background: linear-gradient(160deg, #1d1d26, #14141b);
-}
-.rate, .ep, .bili, .trailer-mark {
-  position: absolute; font-size: 11.5px; font-weight: 600; line-height: 1;
-  padding: 5px 7px; border-radius: 6px; backdrop-filter: blur(4px);
-}
-.rate { top: 8px; left: 8px; color: var(--star); background: rgba(8, 8, 12, .74); }
-.ep { bottom: 8px; right: 8px; color: #e6e6ee; background: rgba(8, 8, 12, .74); }
-.bili { bottom: 8px; left: 8px; color: #fff; background: rgba(251, 114, 153, .92); }
-.trailer-mark { top: 8px; right: 8px; color: #fff; background: rgba(8, 8, 12, .74); }
-.t {
-  margin: 9px 0 3px; font-size: 13.5px; font-weight: 560; line-height: 1.42;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.sub2 { font-size: 12px; color: var(--dim); display: flex; gap: 8px; }
-
-/* ---------- 番剧表（星期筛选） ---------- */
-.wdbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; }
-.wd-tab {
-  padding: 7px 15px; border-radius: 999px; font-size: 13.5px; cursor: pointer;
-  background: var(--card2); color: var(--dim); border: 1px solid transparent;
-  transition: color .18s, background .18s, border-color .18s;
-}
-.wd-tab:hover { color: var(--fg); }
-.wd-tab.on { background: rgba(240, 145, 153, .16); color: var(--accent); border-color: var(--accent-dim); font-weight: 600; }
-
-/* ---------- 媒体库类型切换 ---------- */
-.tabs { display: flex; gap: 8px; margin: 0 0 18px; }
-
-/* ---------- 弹窗 ---------- */
-.mask {
-  position: fixed; inset: 0; z-index: 90; background: rgba(4, 4, 7, .82);
-  backdrop-filter: blur(6px); display: none; align-items: flex-start; justify-content: center;
-  overflow-y: auto; padding: 4vh 20px;
-}
-.mask.on { display: flex; }
-.modal {
-  width: min(920px, 100%); background: var(--card); border-radius: 16px; overflow: hidden;
-  box-shadow: var(--shadow); border: 1px solid var(--line);
-}
-.mtop { display: flex; gap: 18px; padding: 24px 26px; }
-.mp { width: 150px; flex: 0 0 150px; aspect-ratio: 2 / 3; border-radius: var(--r-sm); overflow: hidden; background: var(--card2); }
-.mp img { width: 100%; height: 100%; object-fit: cover; }
-.mb { flex: 1; min-width: 0; }
-.mb h3 { margin: 2px 0 10px; font-size: 22px; line-height: 1.3; }
-.meta { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 12px; }
-.pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--card2); color: var(--dim); }
-.plot { font-size: 13.8px; line-height: 1.8; color: #c2c2cc; margin: 0 0 16px; max-height: 168px; overflow-y: auto; }
-.acts { display: flex; gap: 9px; flex-wrap: wrap; }
-.btn {
-  font-size: 13px; padding: 9px 15px; border-radius: var(--r-sm); cursor: pointer;
-  background: var(--card2); color: var(--fg); border: 1px solid var(--line);
-  transition: background .18s, border-color .18s;
-}
-.btn:hover { background: #2c2c38; border-color: var(--accent-dim); }
-.btn.pri { background: var(--accent); color: #17171d; border-color: transparent; font-weight: 600; }
-.x { position: absolute; top: 14px; right: 18px; font-size: 24px; color: var(--dim); cursor: pointer; line-height: 1; }
-.x:hover { color: var(--fg); }
-
-/* ---------- 内嵌播放 ---------- */
-.trailer { position: relative; aspect-ratio: 16 / 9; background: #000; border-top: 1px solid var(--line); }
-.trailer iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.nt { padding: 10px 26px 18px; font-size: 12.5px; color: var(--dim); }
-
-/* ---------- 状态 ---------- */
-.empty, .loading { padding: 60px 0; text-align: center; color: var(--dim); font-size: 14px; }
-.sk {
-  border-radius: var(--r); aspect-ratio: 2 / 3;
-  background: linear-gradient(100deg, #16161d 30%, #1e1e28 50%, #16161d 70%);
-  background-size: 220% 100%; animation: sk 1.4s infinite linear;
-}
-@keyframes sk { to { background-position: -220% 0; } }
-
-/* ---------- 移动端 ---------- */
-@media (max-width: 760px) {
-  .tw { padding: 0 16px; gap: 12px; }
-  .searchbox input { width: 130px; }
-  .searchbox input:focus { width: 160px; }
-  .cnt { display: none; }
-  main { padding: calc(var(--header-h) + 12px) 16px 60px; }
-  .hero { min-height: 320px; }
-  .hero-info { padding: 24px 20px; }
-  .hero h1 { font-size: 26px; }
-  .hero p { display: none; }
-  .row { grid-auto-columns: 132px; }
-  .grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 12px; }
-  .mtop { flex-direction: column; padding: 18px; }
-  .mp { width: 110px; flex-basis: 110px; }
-}
-
-/* ---------- 关联作品 ---------- */
-.relbox { margin: 0 0 16px; }
-.relhead { font-size: 12px; color: var(--dim); letter-spacing: 1px; margin-bottom: 8px; }
-.relchip {
-  display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 8px 0;
-  padding: 6px 12px; border-radius: 999px; font-size: 12.5px;
-  background: var(--card2); color: var(--fg); border: 1px solid var(--line);
-  transition: border-color .18s, color .18s;
-}
-.relchip:hover { border-color: var(--accent-dim); color: var(--accent); }
-.relchip em { font-style: normal; font-size: 11px; color: var(--dim); }
-
-/* ---------- 大图轮换 ---------- */
-.hero { cursor: grab; touch-action: pan-y; }
-.hero.grab { cursor: grabbing; }
-.hero .slide {
-  position: absolute; inset: 0; opacity: 0; transition: opacity .55s ease;
-  pointer-events: none; z-index: 0;
-}
-.hero .slide.on { opacity: 1; pointer-events: auto; z-index: 2; }
-.hero .slide .hero-bg { z-index: 0; }
-.hero .slide .hero-info { position: relative; z-index: 3; }
-.hero .slide .hero-bg { position: absolute; inset: 0; z-index: -2; }
-.hero .slide .hero-info { position: relative; z-index: 1; }
-.hero { position: relative; }
-.hero .dots {
-  position: absolute; left: 44px; bottom: 22px; z-index: 3; display: flex; gap: 8px;
-}
-.hero .dots i {
-  width: 22px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.28);
-  cursor: pointer; transition: background .2s, width .2s;
-}
-.hero .dots i.on { background: var(--accent); width: 34px; }
-
-/* ---------- 追番星标 ---------- */
-.card .fav {
-  position: absolute; top: 6px; right: 6px; z-index: 4; width: 26px; height: 26px;
-  display: flex; align-items: center; justify-content: center; border-radius: 50%;
-  font-size: 15px; color: #d8d8e2; background: rgba(8,8,12,.66);
-  opacity: 0; transition: opacity .18s, color .18s, transform .12s;
-}
-.card:hover .fav, .card .fav.on { opacity: 1; }
-.card .fav:hover { transform: scale(1.12); }
-.card .fav.on { color: var(--star); }
-
-/* ---------- 追番同步工具条 ---------- */
-.syncbar { margin-left: auto; display: flex; gap: 10px; }
-.syncbar a {
-  font-size: 12px; color: var(--dim); cursor: pointer; padding: 4px 9px;
-  border-radius: 999px; border: 1px solid var(--line); transition: color .18s, border-color .18s;
-}
-.syncbar a:hover { color: var(--accent); border-color: var(--accent-dim); }
-
-/* ---------- 看板娘 ---------- */
-@keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-7px) } }
-@media (max-width: 760px) {
-      .hero { height: 300px; }
-  .hero-info { padding: 20px 18px; }
-  .hero .dots { left: 20px; bottom: 14px; }
-}
-
-/* 看板娘改成位图素材后，保持同尺寸与悬浮动效 */
-
-/* ---------- 播放灯箱（首页/轮播按钮没有 #trailer 时用） ---------- */
-#lightbox {
-  position: fixed; inset: 0; z-index: 120; display: none; align-items: center;
-  justify-content: center; background: rgba(4,4,7,.9); backdrop-filter: blur(4px);
-}
-#lightbox.on { display: flex; }
-#lightbox .lb-inner { width: min(1100px, 92vw); aspect-ratio: 16 / 9; position: relative; }
-#lightbox iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 12px; }
-#lightbox .lb-x {
-  position: absolute; top: -38px; right: 0; font-size: 26px; color: #ddd; cursor: pointer;
-}
-
-/* ---------- 线路切换 ---------- */
-.regionsw {
-  display: inline-flex; align-items: center; gap: 6px; margin-left: 12px;
-  font-size: 12px; color: var(--dim);
-}
-.regionsw b { color: var(--accent); font-weight: 600; }
-.regionsw span.r {
-  cursor: pointer; padding: 3px 9px; border-radius: 999px;
-  border: 1px solid var(--line); transition: all .18s;
-}
-.regionsw span.r.on { background: rgba(240,145,153,.16); color: var(--accent); border-color: var(--accent-dim); }
-</style>
+<style>:root { --bg: #0b0b0f; --bg2: #14141b; --card: #181820; --card2: #22222c; --line: #2a2a36; --fg: #ececf1; --dim: #8a8a96; --accent: #f09199; --accent-dim: #b8656c; --star: #f5c451; --r: 12px; --r-sm: 8px; --shadow: 0 18px 48px rgba(0, 0, 0, .55); --header-h: 58px; } * { box-sizing: border-box; } html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); } body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; } a { color: inherit; text-decoration: none; } img { display: block; } .top { position: fixed; inset: 0 0 auto 0; height: var(--header-h); z-index: 50; background: linear-gradient(180deg, rgba(11, 11, 15, .96), rgba(11, 11, 15, .72) 70%, transparent); transition: background .25s, backdrop-filter .25s; } .top.solid { background: rgba(11, 11, 15, .97); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); } .tw { max-width: 1520px; height: 100%; margin: 0 auto; padding: 0 34px; display: flex; align-items: center; gap: 26px; } .logo { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 700; letter-spacing: .5px; white-space: nowrap; } .logo i { width: 10px; height: 18px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 12px rgba(240, 145, 153, .5); } .logo b { color: var(--accent); } .nav { display: flex; gap: 4px; } .nav a { padding: 7px 15px; border-radius: 999px; font-size: 14.5px; color: var(--dim); cursor: pointer; transition: color .18s, background .18s; white-space: nowrap; } .nav a:hover { color: var(--fg); } .nav a.on { color: var(--bg); background: var(--accent); font-weight: 600; } .searchbox { margin-left: auto; position: relative; } .searchbox input { width: 210px; padding: 8px 13px; border-radius: 999px; font-size: 13.5px; color: var(--fg); background: var(--card2); border: 1px solid transparent; outline: none; transition: border-color .2s, width .2s; } .searchbox input:focus { border-color: var(--accent-dim); width: 250px; } .cnt { font-size: 12.5px; color: var(--dim); white-space: nowrap; } main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 34px 70px; } .block { margin: 34px 0 0; } .bhead { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; } .bhead h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: .3px; } .bhead span { font-size: 12.5px; color: var(--dim); } .hero { position: relative; border-radius: 18px; overflow: hidden; margin-top: 6px; height: 420px; background: var(--bg2); } .hero-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center 30%; } .hero::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, rgba(11, 11, 15, .96) 8%, rgba(11, 11, 15, .72) 42%, rgba(11, 11, 15, .2) 72%, rgba(11, 11, 15, .6)), linear-gradient(0deg, var(--bg) 2%, transparent 46%); } .hero-info { position: absolute; left: 0; bottom: 0; padding: 40px 44px; max-width: 680px; z-index: 3; } .hero-tag { font-size: 12px; letter-spacing: 2px; color: var(--accent); font-weight: 600; margin-bottom: 12px; } .hero h1 { margin: 0 0 12px; font-size: 40px; line-height: 1.16; font-weight: 720; letter-spacing: -.5px; } .hero-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13.5px; color: var(--dim); margin-bottom: 14px; } .hero-meta b { color: var(--star); font-weight: 600; } .hero p { margin: 0 0 22px; font-size: 14.5px; line-height: 1.75; color: #c8c8d2; } .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; } .hbtn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 999px; font-size: 14.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: transform .16s, background .18s, border-color .18s; } .hbtn:hover { transform: translateY(-1px); } .hbtn.primary { background: var(--accent); color: #17171d; } .hbtn.ghost { background: rgba(255, 255, 255, .1); color: var(--fg); border-color: rgba(255, 255, 255, .18); } .hbtn.ghost:hover { background: rgba(255, 255, 255, .17); } .row { display: grid; grid-auto-flow: column; grid-auto-columns: 168px; gap: 14px; overflow-x: auto; padding: 4px 2px 12px; scroll-snap-type: x proximity; scrollbar-width: none; } .row::-webkit-scrollbar { display: none; } .row .card { scroll-snap-align: start; } .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); } .card { cursor: pointer; position: relative; } .pw { position: relative; aspect-ratio: 2 / 3; border-radius: var(--r); overflow: hidden; background: var(--card); border: 1px solid rgba(255, 255, 255, .04); transition: transform .2s ease, box-shadow .2s ease, border-color .2s; } .card:hover .pw { transform: translateY(-4px); box-shadow: var(--shadow); border-color: rgba(240, 145, 153, .35); } .pw img { width: 100%; height: 100%; object-fit: cover; } .ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #3c3c48; background: linear-gradient(160deg, #1d1d26, #14141b); } .rate, .ep, .bili, .trailer-mark { position: absolute; font-size: 11.5px; font-weight: 600; line-height: 1; padding: 5px 7px; border-radius: 6px; backdrop-filter: blur(4px); } .rate { top: 8px; left: 8px; color: var(--star); background: rgba(8, 8, 12, .74); } .ep { bottom: 8px; right: 8px; color: #e6e6ee; background: rgba(8, 8, 12, .74); } .bili { bottom: 8px; left: 8px; color: #fff; background: rgba(251, 114, 153, .92); } .trailer-mark { top: 8px; right: 8px; color: #fff; background: rgba(8, 8, 12, .74); } .t { margin: 9px 0 3px; font-size: 13.5px; font-weight: 560; line-height: 1.42; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } .sub2 { font-size: 12px; color: var(--dim); display: flex; gap: 8px; } .wdbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; } .wd-tab { padding: 7px 15px; border-radius: 999px; font-size: 13.5px; cursor: pointer; background: var(--card2); color: var(--dim); border: 1px solid transparent; transition: color .18s, background .18s, border-color .18s; } .wd-tab:hover { color: var(--fg); } .wd-tab.on { background: rgba(240, 145, 153, .16); color: var(--accent); border-color: var(--accent-dim); font-weight: 600; } .tabs { display: flex; gap: 8px; margin: 0 0 18px; } .mask { position: fixed; inset: 0; z-index: 90; background: rgba(4, 4, 7, .82); backdrop-filter: blur(6px); display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 4vh 20px; } .mask.on { display: flex; } .modal { width: min(920px, 100%); background: var(--card); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--line); } .mtop { display: flex; gap: 18px; padding: 24px 26px; } .mp { width: 150px; flex: 0 0 150px; aspect-ratio: 2 / 3; border-radius: var(--r-sm); overflow: hidden; background: var(--card2); } .mp img { width: 100%; height: 100%; object-fit: cover; } .mb { flex: 1; min-width: 0; } .mb h3 { margin: 2px 0 10px; font-size: 22px; line-height: 1.3; } .meta { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 12px; } .pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--card2); color: var(--dim); } .plot { font-size: 13.8px; line-height: 1.8; color: #c2c2cc; margin: 0 0 16px; max-height: 168px; overflow-y: auto; } .acts { display: flex; gap: 9px; flex-wrap: wrap; } .btn { font-size: 13px; padding: 9px 15px; border-radius: var(--r-sm); cursor: pointer; background: var(--card2); color: var(--fg); border: 1px solid var(--line); transition: background .18s, border-color .18s; } .btn:hover { background: #2c2c38; border-color: var(--accent-dim); } .btn.pri { background: var(--accent); color: #17171d; border-color: transparent; font-weight: 600; } .x { position: absolute; top: 14px; right: 18px; font-size: 24px; color: var(--dim); cursor: pointer; line-height: 1; } .x:hover { color: var(--fg); } .trailer { position: relative; aspect-ratio: 16 / 9; background: #000; border-top: 1px solid var(--line); } .trailer iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; } .nt { padding: 10px 26px 18px; font-size: 12.5px; color: var(--dim); } .empty, .loading { padding: 60px 0; text-align: center; color: var(--dim); font-size: 14px; } .sk { border-radius: var(--r); aspect-ratio: 2 / 3; background: linear-gradient(100deg, #16161d 30%, #1e1e28 50%, #16161d 70%); background-size: 220% 100%; animation: sk 1.4s infinite linear; } @keyframes sk { to { background-position: -220% 0; } } @media (max-width: 760px) { .tw { padding: 0 16px; gap: 12px; } .searchbox input { width: 130px; } .searchbox input:focus { width: 160px; } .cnt { display: none; } main { padding: calc(var(--header-h) + 12px) 16px 60px; } .hero { min-height: 320px; } .hero-info { padding: 24px 20px; } .hero h1 { font-size: 26px; } .hero p { display: none; } .row { grid-auto-columns: 132px; } .grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 12px; } .mtop { flex-direction: column; padding: 18px; } .mp { width: 110px; flex-basis: 110px; } } .relbox { margin: 0 0 16px; } .relhead { font-size: 12px; color: var(--dim); letter-spacing: 1px; margin-bottom: 8px; } .relchip { display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 8px 0; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; background: var(--card2); color: var(--fg); border: 1px solid var(--line); transition: border-color .18s, color .18s; } .relchip:hover { border-color: var(--accent-dim); color: var(--accent); } .relchip em { font-style: normal; font-size: 11px; color: var(--dim); } .hero { cursor: grab; touch-action: pan-y; } .hero.grab { cursor: grabbing; } .hero .slide { position: absolute; inset: 0; opacity: 0; transition: opacity .55s ease; pointer-events: none; z-index: 0; } .hero .slide.on { opacity: 1; pointer-events: auto; z-index: 2; } .hero .slide .hero-bg { z-index: 0; } .hero .slide .hero-info { position: relative; z-index: 3; } .hero .slide .hero-bg { position: absolute; inset: 0; z-index: -2; } .hero .slide .hero-info { position: relative; z-index: 1; } .hero { position: relative; } .hero .dots { position: absolute; left: 44px; bottom: 22px; z-index: 3; display: flex; gap: 8px; } .hero .dots i { width: 22px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.28); cursor: pointer; transition: background .2s, width .2s; } .hero .dots i.on { background: var(--accent); width: 34px; } .card .fav { position: absolute; top: 6px; right: 6px; z-index: 4; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 15px; color: #d8d8e2; background: rgba(8,8,12,.66); opacity: 0; transition: opacity .18s, color .18s, transform .12s; } .card:hover .fav, .card .fav.on { opacity: 1; } .card .fav:hover { transform: scale(1.12); } .card .fav.on { color: var(--star); } .syncbar { margin-left: auto; display: flex; gap: 10px; } .syncbar a { font-size: 12px; color: var(--dim); cursor: pointer; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); transition: color .18s, border-color .18s; } .syncbar a:hover { color: var(--accent); border-color: var(--accent-dim); } @keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-7px) } } @media (max-width: 760px) { .hero { height: 300px; } .hero-info { padding: 20px 18px; } .hero .dots { left: 20px; bottom: 14px; } } #lightbox { position: fixed; inset: 0; z-index: 120; display: none; align-items: center; justify-content: center; background: rgba(4,4,7,.9); backdrop-filter: blur(4px); } #lightbox.on { display: flex; } #lightbox .lb-inner { width: min(1100px, 92vw); aspect-ratio: 16 / 9; position: relative; } #lightbox iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 12px; } #lightbox .lb-x { position: absolute; top: -38px; right: 0; font-size: 26px; color: #ddd; cursor: pointer; } .regionsw { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; font-size: 12px; color: var(--dim); } .regionsw b { color: var(--accent); font-weight: 600; } .regionsw span.r { cursor: pointer; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); transition: all .18s; } .regionsw span.r.on { background: rgba(240,145,153,.16); color: var(--accent); border-color: var(--accent-dim); } .filterbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 -6px; align-items: center; } .filterbar .chip { font-size: 12.5px; padding: 5px 12px; border-radius: 999px; cursor: pointer; color: var(--dim); border: 1px solid var(--line); background: var(--card); transition: all .16s; } .filterbar .chip:hover { color: var(--fg); border-color: var(--accent-dim); } .filterbar .chip.on { background: rgba(240,145,153,.16); color: var(--accent); border-color: var(--accent-dim); font-weight: 600; } .filterbar .sep { width: 1px; height: 16px; background: var(--line); margin: 0 4px; } .build { font-size: 10.5px; color: var(--dim); opacity: .55; margin-left: 10px; white-space: nowrap; } @media (max-width: 760px) { .build { display: none; } } .tph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; color: var(--dim); background: #0d0d12; text-align: center; padding: 20px; }</style>
 </head>
 <body data-page="home">
 <header class="top" id="topbar"><div class="tw">
@@ -313,554 +21,604 @@ main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 
   </nav>
   <div class="searchbox"><input id="q" placeholder="搜索新番 / 新片…" autocomplete="off"></div>
   <div class="cnt" id="cnt"></div>
+  <div class="build" id="build">10-28 16:10</div>
 </div></header>
 
 <main id="main"><div class="loading">加载中…</div></main>
 
 <div class="mask" id="mask"><div class="modal" id="modal"></div></div>
 
-<script>window.DATA = {"fresh":{"anime":[{"kind":"fresh","type":"S","key":"a8b0f7d92cb","name":"サイバーパンク: エッジランナーズ2","rating":8.4,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx195539-4LdfmKIHzuxr.png","air":"2026-10-20","episodes":10,"overview":"Cyberpunk: Edgerunners 2 pulls you back into Night City, where lives become entangled to the extreme. Weak, a washed-up cyberpunk legend, is now forced to live without chrome as he searches for a sens","url":"https://anilist.co/anime/195539","trailer":"AtJMSUpG9GQ","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/195539-lO5SUdp4SOrq.jpg","next_ep":0,"next_at":0,"wd":"","genres":["Action","Drama","Sci-Fi"],"pop":109100,"st":"FINISHED","fm":"ONA","du":28,"studio":"TRIGGER","rel":[{"n":"サイバーパンク エッジランナーズ","f":"ONA","u":"https://anilist.co/anime/120377","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx120377-ayZPoxiWt4Li.jpg"}]},{"kind":"fresh","type":"S","key":"add1af47b52","name":"薬屋のひとりごと 第3期","rating":8.5,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx195516-MJpUZlOberqH.jpg","air":"2026-10-02","episodes":12,"overview":"In the aftermath of the Shi Clan’s rebellion, things have finally settled down, and Maomao has returned to her old life as a pharmacist in the pleasure district. One day, triggered by a breakfast serv","url":"https://anilist.co/anime/195516","trailer":"YvNvvUeCztE","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/195516-B5M0cPaQbQXI.jpg","next_ep":5,"next_at":1793368800,"wd":"周五","genres":["Drama","Mystery"],"pop":106255,"st":"RELEASING","fm":"TV","du":24,"studio":"OLM","rel":[{"n":"薬屋のひとりごと 第2期","f":"TV","u":"https://anilist.co/anime/176301","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx176301-TIGmldLffQGX.jpg"},{"n":"薬屋のひとりごと 第3期 第2クール","f":"TV","u":"https://anilist.co/anime/200927","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx200927-IXFYyIb728bM.png"},{"n":"薬屋のひとりごと 亡妃の秘宝","f":"MOVIE","u":"https://anilist.co/anime/200929","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx200929-dx3hnftE7K7C.jpg"},{"n":"猫猫のひとりごと 第3期","f":"ONA","u":"https://anilist.co/anime/218532","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx218532-I1GCprJrJ5sm.png"}]},{"kind":"fresh","type":"S","key":"aa9601f3b1c","name":"ブラッククローバー 第2期","rating":8.7,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx195604-tSZcfKbVqSEG.jpg","air":"2026-10-03","episodes":0,"overview":"As tyranny engulfs the Clover Kingdom, Asta and the Magic Knights launch a desperate raid on the Spade Kingdom to rescue their squad captains from the Dark Triad. But their mission leads them into a b","url":"https://anilist.co/anime/195604","trailer":"4MYo8FfiXMA","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/195604-lQpCzTziSA17.jpg","next_ep":5,"next_at":1793455200,"wd":"周六","genres":["Action","Adventure","Comedy"],"pop":100365,"st":"RELEASING","fm":"TV","du":24,"studio":"Studio Pierrot","rel":[{"n":"ブラッククローバー","f":"TV","u":"https://anilist.co/anime/97940","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx97940-fyh8o7gNbha0.png"}]},{"kind":"fresh","type":"S","key":"a90ec3fb989","name":"転生したら剣でした 第2期","rating":7.5,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx159042-GGFwlDskc5vR.png","air":"2026-10-01","episodes":12,"overview":"The second season of Tensei Shitara Ken Deshita. Note: Each episode was streamed one week in advance of the TV broadcast starting on October 1, 2026 on Abema. Regular broadcasting began on October 8, ","url":"https://anilist.co/anime/159042","trailer":"kbtRqqa2GyA","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/159042-X0mqyaUFBkms.jpg","next_ep":5,"next_at":1793201400,"wd":"周三","genres":["Action","Adventure","Fantasy"],"pop":52907,"st":"RELEASING","fm":"ONA","du":23,"studio":"C2C","rel":[{"n":"転生したら剣でした","f":"ONA","u":"https://anilist.co/anime/139587","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx139587-rbZVcigCRtHY.jpg"}]},{"kind":"fresh","type":"S","key":"a25df009a2d","name":"テムパル～アイテムの力～","rating":7.6,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx212888-NhyvqPt5aIuJ.jpg","air":"2026-09-27","episodes":12,"overview":"Sin Yeong-U (a.k.a. Grid), an unlucky man in life and a low-level player in the popular VR game “Satisfy,” finds a powerful item that earns him a rare legendary class title: “Pagma’s Successor.” He’s ","url":"https://anilist.co/anime/212888","trailer":"e1Km0FqUZl0","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/212888-ZsnNegBCKXQq.jpg","next_ep":6,"next_at":1793543400,"wd":"周日","genres":["Action","Adventure","Comedy"],"pop":51315,"st":"RELEASING","fm":"ONA","du":24,"studio":"J.C.STAFF","rel":[]},{"kind":"fresh","type":"S","key":"a28f891d4ea","name":"アオのハコ Season２","rating":8.1,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx189123-0secXELIhkIW.jpg","air":"2026-10-04","episodes":12,"overview":"The second season of Ao no Hako.","url":"https://anilist.co/anime/189123","trailer":"hJ6Y8PAOUk8","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/189123-s2oirY2r1Svy.jpg","next_ep":5,"next_at":1794123000,"wd":"周日","genres":["Romance","Slice of Life","Sports"],"pop":50621,"st":"RELEASING","fm":"TV","du":24,"studio":"Electric Circus","rel":[{"n":"アオのハコ","f":"ONA","u":"https://anilist.co/anime/170942","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx170942-KKcLfQzV57nG.jpg"}]},{"kind":"fresh","type":"S","key":"a6afb75e072","name":"ジョジョの奇妙な冒険 スティール・ボール・ラン 2nd＆3rd STAGE","rating":8.6,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx210482-P1VNKbqdJ6Zj.jpg","air":"2026-09-25","episodes":11,"overview":"In the 2nd STAGE, a desert crossing spanning roughly 750 miles- the land that Johnny Joestar and Gyro Zeppeli must challenge, is home to the area that is feared as the \"Devil's Palm.\" In 1875, a threa","url":"https://anilist.co/anime/210482","trailer":"jXtG_lcR9P4","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/210482-pYAD0IbzNbgS.jpg","next_ep":6,"next_at":1793347200,"wd":"周五","genres":["Action","Adventure","Drama"],"pop":47055,"st":"RELEASING","fm":"ONA","du":null,"studio":"david production","rel":[{"n":"ジョジョの奇妙な冒険 スティール・ボール・ラン 1st STAGE","f":"ONA","u":"https://anilist.co/anime/190327","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx190327-riJNCFL7w9y4.jpg"}]},{"kind":"fresh","type":"S","key":"a440cd465a8","name":"ホタルの嫁入り","rating":7.5,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx205909-DM0fAzNQulod.jpg","air":"2026-10-09","episodes":12,"overview":"On the surface, Satoko has it all—she’s beautiful, the daughter of a nobleman, and at a prime age for marriage. Unfortunately, she is also quite ill and only has a short time left to live. Before she ","url":"https://anilist.co/anime/205909","trailer":"Ex9LrBK-7hk","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/205909-hGeuFYrdhf9S.jpg","next_ep":4,"next_at":1793370600,"wd":"周五","genres":["Drama","Romance"],"pop":46406,"st":"RELEASING","fm":"TV","du":23,"studio":"david production","rel":[{"n":"ホタルの嫁入り ちょいたし","f":"ONA","u":"https://anilist.co/anime/218938","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx218938-i29Q90gbQcZQ.png"}]},{"kind":"fresh","type":"S","key":"a708250b08a","name":"生徒会にも穴はある！","rating":7.3,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx191656-xFHtxM8SUTdU.png","air":"2026-10-04","episodes":12,"overview":"This is Fujinasu Academy, a private high school with top-achieving students located on the outskirts of town. High School 1st-Year Ume Mizunoe has excellent grades in Japanese language class and has r","url":"https://anilist.co/anime/191656","trailer":"VTRVLnzhl90","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/191656-JQILdzh3FQxN.jpg","next_ep":5,"next_at":1793460600,"wd":"周六","genres":["Comedy","Ecchi","Slice of Life"],"pop":45269,"st":"RELEASING","fm":"TV","du":24,"studio":"Passione","rel":[{"n":"生徒会にも穴はある！ PV","f":"ONA","u":"https://anilist.co/anime/179207","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx179207-L1aK8hHWqeZm.png"}]},{"kind":"fresh","type":"S","key":"ab3d44f722f","name":"メイドインアビス 目覚める神秘","rating":8.0,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx160275-cBOWJpcCGeMq.jpg","air":"2026-10-23","episodes":1,"overview":"Sequel to Made in Abyss: Retsujitsu no Ougonkyou.","url":"https://anilist.co/anime/160275","trailer":"Sy7cLG6XHRY","banner":"","next_ep":0,"next_at":0,"wd":"","genres":["Adventure","Drama","Fantasy"],"pop":45074,"st":"FINISHED","fm":"MOVIE","du":71,"studio":"Kinema Citrus","rel":[{"n":"メイドインアビス 烈日の黄金郷","f":"TV","u":"https://anilist.co/anime/114745","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx114745-fBgTC12T7IAy.jpg"},{"n":"メイドインアビス 目覚める神秘 第二部","f":"MOVIE","u":"https://anilist.co/anime/218721","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx218721-zWDOhtrTAFU3.jpg"}]},{"kind":"fresh","type":"S","key":"a019d00dcec","name":"魔法使いの夜","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx143103-vvsaIpZPpIuE.png","air":"2026-11-20","episodes":1,"overview":"Aoko Aozaki, an ordinary high school girl, is actually a Magician who lives in the modern world...though she is still only an apprentice. As she spends her days living alongside her housemate, Alice K","url":"https://anilist.co/anime/143103","trailer":"k1jyM2kSBzA","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/143103-KwDRPfPl4OwL.jpg","next_ep":1,"next_at":1795100400,"wd":"周四","genres":["Action","Drama","Fantasy"],"pop":42721,"st":"NOT_YET_RELEASED","fm":"MOVIE","du":null,"studio":"ufotable","rel":[{"n":"真月譚 月姫","f":"TV","u":"https://anilist.co/anime/169","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx169-ATwPxULRSDRr.jpg"}]},{"kind":"fresh","type":"S","key":"ac992a77aac","name":"追放されたチート付与魔術師は気ままなセカンドライフを謳歌する。　～俺は武器だけじゃなく、あらゆるものに『強化ポイント』を付与できるし、俺の意思でいつでも効果を解除できるけど、残った人たち大丈夫？～","rating":7.3,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/b207329-6VPeZIDfF4Sr.png","air":"2026-10-07","episodes":0,"overview":"Rein, an enchanter, is suddenly expelled from his guild one day. But instead of despairing, he declares, “Now I can do anything!” and begins reclaiming the massive number of enhancement points he once","url":"https://anilist.co/anime/207329","trailer":"BJXBr_aFF8s","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/207329-9IqRSKIsM3TC.jpg","next_ep":5,"next_at":1793718000,"wd":"周二","genres":["Adventure","Comedy","Fantasy"],"pop":39895,"st":"RELEASING","fm":"TV","du":24,"studio":"P.A.WORKS","rel":[]},{"kind":"fresh","type":"S","key":"a8071e5a89b","name":"東京リベンジャーズ 三天戦争編","rating":7.6,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx178083-bg7pg6TCHwtG.jpg","air":"2026-10-03","episodes":13,"overview":"Sequel to Tokyo Revengers: Tenjiku-hen.","url":"https://anilist.co/anime/178083","trailer":"Nm21TTXUkf4","banner":"","next_ep":5,"next_at":1793379180,"wd":"周六","genres":["Action","Drama","Romance"],"pop":37261,"st":"RELEASING","fm":"TV","du":null,"studio":"LIDENFILMS","rel":[{"n":"東京リベンジャーズ 天竺編","f":"TV","u":"https://anilist.co/anime/163329","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx163329-lGJRnYV9dcjc.jpg"},{"n":"童話リベンジャーズ","f":"ONA","u":"https://anilist.co/anime/178084","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx178084-uy9FudPATgPM.jpg"}]},{"kind":"fresh","type":"S","key":"afca69d32dd","name":"氷の城壁 第2期","rating":8.1,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx213805-Nokui3uWlIlw.png","air":"2026-10-01","episodes":0,"overview":"Koyuki, the isolated girl; Miki, the former school idol; Minato, the guy with no concept of personal space; and Youta, the gentle basketball player. Clumsy, frustrating, yet deeply endearing — this co","url":"https://anilist.co/anime/213805","trailer":"VvzeL7UMCE8","banner":"","next_ep":5,"next_at":1793285760,"wd":"周四","genres":["Comedy","Drama","Romance"],"pop":37140,"st":"RELEASING","fm":"TV","du":25,"studio":"Studio KAI","rel":[{"n":"氷の城壁","f":"TV","u":"https://anilist.co/anime/186497","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx186497-uwPrNPphXvjP.jpg"}]},{"kind":"fresh","type":"S","key":"a967da9a017","name":"青春ブタ野郎はディアフレンドの夢を見ない","rating":8.4,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx199340-YQlmzvmcJzyt.jpg","air":"2026-10-16","episodes":1,"overview":"\"Actually, I’m Touko Kirishima.\" The audience erupted in excitement upon learning that the true identity of the mysterious, wildly popular internet singer was none other than the nation’s favorite act","url":"https://anilist.co/anime/199340","trailer":"ydmOU6gOi3k","banner":"","next_ep":0,"next_at":0,"wd":"","genres":["Drama","Psychological","Romance"],"pop":34784,"st":"FINISHED","fm":"MOVIE","du":118,"studio":"CloverWorks","rel":[{"n":"青春ブタ野郎はサンタクロースの夢を見ない","f":"TV","u":"https://anilist.co/anime/171046","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx171046-9leqLiNuOqNu.png"}]},{"kind":"fresh","type":"S","key":"ae102ab0847","name":"帰還者の魔法は特別です 第2期","rating":6.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx172192-W7P5xEUaxF3y.jpg","air":"2026-10-08","episodes":0,"overview":"In a land dominated by the formidable Shadow Worlds, most of humanity has been destroyed. To rescue their planet from impending doom, six brave heroes fight a perilous battle…and fail. But there’s a g","url":"https://anilist.co/anime/172192","trailer":"YBWOrQCB9r0","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/172192-jibcmb7wdbzk.jpg","next_ep":4,"next_at":1793202300,"wd":"周三","genres":["Action","Adventure","Fantasy"],"pop":32512,"st":"RELEASING","fm":"TV","du":null,"studio":"Arvo Animation","rel":[{"n":"帰還者の魔法は特別です","f":"TV","u":"https://anilist.co/anime/163142","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx163142-RjFeJrTnDA2B.png"}]},{"kind":"fresh","type":"S","key":"a465bd93901","name":"薬屋のひとりごと 亡妃の秘宝","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx200929-dx3hnftE7K7C.jpg","air":"2026-12-11","episodes":1,"overview":"The curtains rise on a new mystery surrounding a secret treasure hidden in a city on the water. The emperor gives Jinshi an order. He must grant the final wish of a concubine who passed away five year","url":"https://anilist.co/anime/200929","trailer":"1riTxHHBTX4","banner":"","next_ep":1,"next_at":1796914800,"wd":"周四","genres":["Drama","Mystery"],"pop":31945,"st":"NOT_YET_RELEASED","fm":"MOVIE","du":null,"studio":"TOHO animation STUDIO","rel":[{"n":"薬屋のひとりごと 第3期","f":"TV","u":"https://anilist.co/anime/195516","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx195516-MJpUZlOberqH.jpg"}]},{"kind":"fresh","type":"S","key":"aecd46f0c15","name":"ドラゴンボール超 ビルス","rating":8.1,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx206814-PVVzRbf1IQpe.jpg","air":"2026-10-11","episodes":0,"overview":"Several years have passed since the fierce battle against Majin Buu, and Earth has finally regained a brief moment of peace. At the same time, Beerus, the God of Destruction, awakens from his long, de","url":"https://anilist.co/anime/206814","trailer":"CFgEL7ei8VE","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/206814-ARuwrZJAGONN.jpg","next_ep":4,"next_at":1793542560,"wd":"周日","genres":["Action","Adventure","Sci-Fi"],"pop":28575,"st":"RELEASING","fm":"TV","du":23,"studio":"Toei Animation","rel":[{"n":"ドラゴンボールZ: 神と神","f":"MOVIE","u":"https://anilist.co/anime/14837","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/14837.jpg"},{"n":"ドラゴンボール超","f":"TV","u":"https://anilist.co/anime/21175","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx21175-EH06qlfF8TnB.jpg"},{"n":"ドラゴンボールZ","f":"TV","u":"https://anilist.co/anime/813","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx813-ZhnFNOeCU5dQ.png"},{"n":"ドラゴンボール改 (2014)","f":"TV","u":"https://anilist.co/anime/20635","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx20635-gUYy4KZfYRb0.jpg"},{"n":"ドラゴンボールDAIMA","f":"TV","u":"https://anilist.co/anime/170083","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx170083-GTwRrhTApcLR.png"}]},{"kind":"fresh","type":"S","key":"a0ff9f5e81c","name":"転生貴族、鑑定スキルで成り上がる 第3期","rating":7.0,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx185756-xPCl0RyQ7fXD.jpg","air":"2026-09-27","episodes":0,"overview":"The third season of Tensei Kizoku, Kantei Skill de Nariagaru. Note: On September 4, 2026, it was announced that GeyeG Pictures would take over the production from studio MOTHER while keeping the same ","url":"https://anilist.co/anime/185756","trailer":"8_Lxr7vO9l0","banner":"","next_ep":6,"next_at":1793543400,"wd":"周日","genres":["Adventure","Fantasy"],"pop":28508,"st":"RELEASING","fm":"TV","du":24,"studio":"GeyeG Pictures","rel":[{"n":"転生貴族、鑑定スキルで成り上がる 第2期","f":"TV","u":"https://anilist.co/anime/178434","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx178434-UtRCL4WqNcgv.png"}]},{"kind":"fresh","type":"S","key":"a95cacb7e32","name":"どうも、好きな人に惚れ薬を依頼された魔女です。","rating":7.2,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx207191-VgkIzfH92WoZ.jpg","air":"2026-10-05","episodes":12,"overview":"“Make me a love potion.” And with that single sentence, the Good Witch of the Lake’s secret crush on the dashing Sir Harij ends in heartbreak. Still, when he promises to help her gather the ingredient","url":"https://anilist.co/anime/207191","trailer":"hGRtocAh3iw","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/207191-xYgpkCDnXc5m.jpg","next_ep":5,"next_at":1793622600,"wd":"周一","genres":["Fantasy","Romance"],"pop":27708,"st":"RELEASING","fm":"TV","du":24,"studio":"diomedéa","rel":[]},{"kind":"fresh","type":"S","key":"a7eee70a7b2","name":"ダークサモナーとデキている","rating":6.7,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx208025-JKvqWNr8rz8l.jpg","air":"2026-10-05","episodes":12,"overview":"Amona’s a dark summoner with demonic powers. Roni’s a devout priest who’s way too uptight. By all rights, they should hate each other. Instead, they end up fast-tracking their enemies-to-lovers arc wi","url":"https://anilist.co/anime/208025","trailer":"-YCols5lYow","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/208025-s7hcRQO7kwmH.jpg","next_ep":5,"next_at":1793550000,"wd":"周一","genres":["Comedy","Ecchi","Fantasy"],"pop":27189,"st":"RELEASING","fm":"TV_SHORT","du":12,"studio":"AtoriE","rel":[{"n":"JKダークサモナーとデキ。。。。。。でいない!?","f":"TV_SHORT","u":"https://anilist.co/anime/218217","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx218217-crIGlnQDg0bJ.png"}]},{"kind":"fresh","type":"S","key":"ab84a2a0195","name":"凶乱令嬢ニア・リストン","rating":7.6,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx206949-4HYI3YuP0eLI.png","air":"2026-10-06","episodes":25,"overview":"A great hero lies undefeated on her deathbed, regretting that she never found a foe who could take her down. She never intended to meet her fate anywhere other than on the battlefield, and her peacefu","url":"https://anilist.co/anime/206949","trailer":"gxG4vntLtbk","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/206949-c5hfhixdgvy5.jpg","next_ep":5,"next_at":1793708760,"wd":"周二","genres":["Action","Fantasy"],"pop":26836,"st":"RELEASING","fm":"TV","du":24,"studio":"KONAMI animation","rel":[]},{"kind":"fresh","type":"S","key":"a84cd9caf33","name":"目覚めたら最強装備と宇宙船持ちだったので、一戸建て目指して傭兵として自由に生きたい","rating":6.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx186541-caYpLsLmbCh7.jpg","air":"2026-10-04","episodes":13,"overview":"Sato Takahiro was an ordinary office worker and hobbyist gamer until the day he woke up on a spaceship–one that strangely resembled a craft from a favorite space-shooter game. With a decked-out ship, ","url":"https://anilist.co/anime/186541","trailer":"Z9ofT53sz2U","banner":"","next_ep":5,"next_at":1793536200,"wd":"周日","genres":["Action","Comedy","Drama"],"pop":26793,"st":"RELEASING","fm":"TV","du":24,"studio":"studio A-CAT","rel":[]},{"kind":"fresh","type":"S","key":"a69c0fd5695","name":"アオアシ 第2期","rating":8.0,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx191788-XC6F24LdX6a4.jpg","air":"2026-10-04","episodes":24,"overview":"Aoi Ashito’s game has now earned him a spot on the A team, but he is quickly overwhelmed by his harsh new reality. Surrounded by elite players like Kuribayashi and Akutsu, practices are just as mercil","url":"https://anilist.co/anime/191788","trailer":"phKPnPXm74c","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/191788-tyhsHpXeF26X.jpg","next_ep":5,"next_at":1793520000,"wd":"周日","genres":["Sports"],"pop":25992,"st":"RELEASING","fm":"TV","du":24,"studio":"TMS Entertainment","rel":[{"n":"アオアシ","f":"TV","u":"https://anilist.co/anime/134732","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx134732-OXKSrOhF9pCM.jpg"}]},{"kind":"fresh","type":"S","key":"a03c3dafd39","name":"探偵はもう、死んでいる。Season2","rating":7.1,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx152677-gtJbgjE94lCN.png","air":"2026-10-07","episodes":13,"overview":"After thwarting a hijacking with beautiful, silver-haired detective Siesta, Kimihiko leads a life of globe-trotting and crime-solving—until Siesta dies. A year later, a new case will open old wounds a","url":"https://anilist.co/anime/152677","trailer":"8AnNxEp733c","banner":"","next_ep":5,"next_at":1793795400,"wd":"周三","genres":["Comedy","Drama","Mystery"],"pop":25908,"st":"RELEASING","fm":"TV","du":null,"studio":"ENGI","rel":[{"n":"探偵はもう、死んでいる。","f":"TV","u":"https://anilist.co/anime/128712","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx128712-AlVwHbrugvj6.jpg"}]},{"kind":"fresh","type":"S","key":"a13c1d05f59","name":"フールナイト","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx213457-gN5p1GZjK3zi.jpg","air":"2026-11-26","episodes":0,"overview":"The earth of the distant future is covered in thick clouds, and the sun no longer shines. Plants wither, and oxygen is thin. To fight extinction, humankind has developed a technology that turns humans","url":"https://anilist.co/anime/213457","trailer":"8E_SDmeOtVw","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/213457-4m8VEkWwzJEq.jpg","next_ep":1,"next_at":1795676400,"wd":"周四","genres":["Drama","Psychological","Sci-Fi"],"pop":24484,"st":"NOT_YET_RELEASED","fm":"ONA","du":null,"studio":"Shaft","rel":[]},{"kind":"fresh","type":"S","key":"af3d5954ee3","name":"マジカル★エクスプローラー　エロゲの友人キャラに転生したけど、ゲーム知識使って自由に生きる","rating":6.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx169581-UlAviVH36Hxi.png","air":"2026-09-27","episodes":13,"overview":"Few titles are more revered among horndogs-(ahem) connoisseurs of Japanese erotic video games-than Magical Explorer. One day, our smut-loving hero wakes up to find he has been reincarnated into the bo","url":"https://anilist.co/anime/169581","trailer":"XqrBfyUNYZs","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/169581-cdooqY7Jqy3x.jpg","next_ep":6,"next_at":1793458800,"wd":"周六","genres":["Action","Adventure","Ecchi"],"pop":23568,"st":"RELEASING","fm":"ONA","du":24,"studio":"WHITE FOX","rel":[]},{"kind":"fresh","type":"S","key":"a6d9c3cf1ba","name":"野生のラスボスが現れた！ 第2期","rating":7.3,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx204389-jCoFCeTthDMy.jpg","air":"2026-09-26","episodes":0,"overview":"The second season of Yasei no Last Boss ga Arawareta!","url":"https://anilist.co/anime/204389","trailer":"LyDMSUR6_Q8","banner":"","next_ep":6,"next_at":1793453400,"wd":"周六","genres":["Action","Adventure","Fantasy"],"pop":23496,"st":"RELEASING","fm":"ONA","du":24,"studio":"WAO World","rel":[{"n":"野生のラスボスが現れた！","f":"ONA","u":"https://anilist.co/anime/180523","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx180523-FjvW1XByUNMK.jpg"}]},{"kind":"fresh","type":"S","key":"a5938146a54","name":"貸した魔力は【リボ払い】で強制徴収","rating":6.1,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx202250-mpm2cvr92Au2.jpg","air":"2026-10-04","episodes":0,"overview":"If there's one thing you can never have enough of in a world of RPG-style swords and sorcery, it's magic points! Whether you're fueling spells, techniques, or showing off an incredible ability, you've","url":"https://anilist.co/anime/202250","trailer":"kXqx3rFSkxc","banner":"","next_ep":5,"next_at":1793464200,"wd":"周日","genres":["Action","Adventure","Fantasy"],"pop":23023,"st":"RELEASING","fm":"TV","du":23,"studio":"SynergySP","rel":[]},{"kind":"fresh","type":"S","key":"ad7e0596c30","name":"PSYREN -サイレン-","rating":6.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx204011-j45RZoqYbdZK.jpg","air":"2026-10-05","episodes":0,"overview":"One day, high schooler Ageha Yoshina picks up a mysterious “red phone card” left behind in a public telephone booth. A few days later, his childhood friend and classmate, Sakurako Amamiya—who possesse","url":"https://anilist.co/anime/204011","trailer":"fmUpSXFbSK0","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/204011-hBOwte9MzykA.jpg","next_ep":5,"next_at":1794232800,"wd":"周一","genres":["Action","Adventure","Sci-Fi"],"pop":22522,"st":"RELEASING","fm":"TV","du":24,"studio":"Satelight","rel":[]},{"kind":"fresh","type":"S","key":"abcfc06227a","name":"転生ゴブリンだけど質問ある？","rating":6.6,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx209219-3yhKlRx0LX3p.jpg","air":"2026-10-05","episodes":0,"overview":"Office worker Akira Yagami’s altruistic nature usually gets him the short end of the stick. When he dies after saving a kid from oncoming traffic...he reincarnates in another world as a goblin?! Norma","url":"https://anilist.co/anime/209219","trailer":"ynr8tFWrK4c","banner":"","next_ep":6,"next_at":1793624400,"wd":"周一","genres":["Action","Adventure","Comedy"],"pop":21180,"st":"RELEASING","fm":"ONA","du":24,"studio":"BAKKKA","rel":[]},{"kind":"fresh","type":"S","key":"a3ffe457e10","name":"塩対応の佐藤さんが俺にだけ甘い","rating":6.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx209502-C81oN8M4Smlo.jpg","air":"2026-10-06","episodes":12,"overview":"Sato-san is the unattainable flower of the class. She is always cold and curt with classmates, but only I know she's actually very cute when she smiles, even if she's not much of a photographer. Oshio","url":"https://anilist.co/anime/209502","trailer":"8XgKVzuLmJw","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/209502-TATgyznMxQOe.jpg","next_ep":5,"next_at":1793710800,"wd":"周二","genres":["Comedy","Romance"],"pop":21078,"st":"RELEASING","fm":"TV","du":24,"studio":"Tezuka Productions","rel":[]},{"kind":"fresh","type":"S","key":"a5574d306c6","name":"冰剣の魔術師が世界を統べるⅡ","rating":6.7,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx212503-sXBpRZr96c4e.jpg","air":"2026-10-09","episodes":0,"overview":"Once dismissed as the sole ordinary student at the elite Arnold Academy of Sorcery, Ray White—secretly, the Iceblade Sorcerer—has finally earned his place. With a new school year comes a new challenge","url":"https://anilist.co/anime/212503","trailer":"oxkxyAcKv2g","banner":"","next_ep":4,"next_at":1793291280,"wd":"周五","genres":["Action","Adventure","Fantasy"],"pop":21042,"st":"RELEASING","fm":"TV","du":24,"studio":"Zero-G","rel":[{"n":"冰剣の魔術師が世界を統べる","f":"TV","u":"https://anilist.co/anime/148116","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx148116-t6E73U8SJhYD.jpg"}]},{"kind":"fresh","type":"S","key":"a77d8e22df9","name":"桃源暗鬼 日光・華厳の滝編","rating":7.2,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx204650-cAQOzQ84Lwk8.png","air":"2026-10-02","episodes":12,"overview":"After battling in Kyoto and Nerima, the Rasetsu Academy students have grown stronger. But Yaoroshi leaves the academy to join the Oni Brigade for their \"the total eradication of the Momotaro.\" When Sh","url":"https://anilist.co/anime/204650","trailer":"upBWYExYoYc","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/204650-MpownoVlYv69.jpg","next_ep":5,"next_at":1793370600,"wd":"周五","genres":["Action","Mystery","Supernatural"],"pop":20105,"st":"RELEASING","fm":"TV","du":24,"studio":"Studio Hibari","rel":[{"n":"桃源暗鬼","f":"TV","u":"https://anilist.co/anime/177474","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx177474-oHil1yLWldfl.jpg"}]},{"kind":"fresh","type":"S","key":"a1191ce0cae","name":"信者ゼロの女神サマと始める異世界攻略","rating":6.5,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx205896-ElrV8oVAsuax.jpg","air":"2026-10-11","episodes":0,"overview":"RPG player Makoto Takatsuki is hurled into another world with awful skills and stats. But he soon meets a goddess named Noah, who asks him to become her 1st believer in return for blessings. (Source: ","url":"https://anilist.co/anime/205896","trailer":"qlMB8vSpLzc","banner":"","next_ep":4,"next_at":1793543400,"wd":"周日","genres":["Adventure","Fantasy"],"pop":18443,"st":"RELEASING","fm":"TV","du":null,"studio":"HORNETS","rel":[]},{"kind":"fresh","type":"S","key":"a8a1de59e65","name":"転生した大聖女は、聖女であることをひた隠す","rating":7.0,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx187402-ReKkLwFmMV3q.jpg","air":"2026-10-03","episodes":0,"overview":"Fia always dreamed of becoming a knight. Born into a family of knights, she’s the least talented among them, but she still clutches to her hope and trains with everything she has. When the day comes f","url":"https://anilist.co/anime/187402","trailer":"9oBywQ403ZA","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/187402-bRt4OO90jcmt.jpg","next_ep":6,"next_at":1793451600,"wd":"周六","genres":["Action","Adventure","Fantasy"],"pop":18333,"st":"RELEASING","fm":"ONA","du":24,"studio":"Felix Film","rel":[]},{"kind":"fresh","type":"S","key":"a894f7f3b23","name":"FX戦士くるみちゃん","rating":6.7,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx206401-8cAebkI0i8BA.png","air":"2026-10-01","episodes":12,"overview":"University student Kurumi Fukuga has finally fulfilled her long-held desire of starting foreign exchange (FX) trading, motivated by recouping the 20 million yen her late mother lost in trading. \"I'll ","url":"https://anilist.co/anime/206401","trailer":"7rxIZ3z0S4s","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/206401-Nsf3QKwKxDra.jpg","next_ep":5,"next_at":1793277000,"wd":"周四","genres":["Drama","Slice of Life"],"pop":17972,"st":"RELEASING","fm":"TV","du":24,"studio":"Passione","rel":[]},{"kind":"fresh","type":"S","key":"a6b7167455b","name":"らんま1/2 (2024) 第3期","rating":7.8,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx209872-RBeVPqwejHFp.jpg","air":"2026-10-04","episodes":0,"overview":"The third season of Ranma 1/2 (2024).","url":"https://anilist.co/anime/209872","trailer":"dbe8esPSfYI","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/209872-Qczb4k9Mw0pq.jpg","next_ep":5,"next_at":1793462160,"wd":"周六","genres":["Action","Comedy","Romance"],"pop":17509,"st":"RELEASING","fm":"TV","du":24,"studio":"MAPPA","rel":[{"n":"らんま1/2 (2024) 第2期","f":"TV","u":"https://anilist.co/anime/185731","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx185731-PJ6WKcFDUI4B.jpg"},{"n":"らんま1/2 熱闘編","f":"TV","u":"https://anilist.co/anime/149939","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx149939-3lDyYgDZ0AbI.png"}]},{"kind":"fresh","type":"S","key":"a17c8472bfa","name":"世界最強の魔女、始めました","rating":7.0,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx211778-0MXK5HqVFBYH.jpg","air":"2026-10-07","episodes":0,"overview":"After using her SSS-Rank skill, Internet, to crush her former family’s ambitions, Lorna is free to travel the world. Her next stop is the port town of Aquas, where she hopes to see the sights and chow","url":"https://anilist.co/anime/211778","trailer":"snJZD9vxfHY","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/211778-ZbXEhqfFkj62.jpg","next_ep":5,"next_at":1793797200,"wd":"周三","genres":["Action","Comedy","Fantasy"],"pop":17224,"st":"RELEASING","fm":"TV","du":24,"studio":"Bridge","rel":[]},{"kind":"fresh","type":"S","key":"a77f574a959","name":"ロメリア戦記 〜魔王を倒した後も人類やばそうだから軍隊組織した〜","rating":7.1,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx180894-o3pz4DWFm3je.png","air":"2026-10-03","episodes":24,"overview":"Romelia and her party succeed in defeating the Demon King Zelgis, though Prince Henri’s reckless charge forces them into a grueling battle. In the aftermath, Romelia is branded \"dead weight\" for not f","url":"https://anilist.co/anime/180894","trailer":"PxXPcoo8uGM","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/180894-NHYBUhwfDZGg.jpg","next_ep":5,"next_at":1793448000,"wd":"周六","genres":["Adventure","Drama","Fantasy"],"pop":16412,"st":"RELEASING","fm":"ONA","du":24,"studio":"Atra","rel":[]},{"kind":"fresh","type":"S","key":"a55ba55ec28","name":"朱色の仮面","rating":6.8,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx195571-fvj7u5GI7BRT.jpg","air":"2026-10-10","episodes":0,"overview":"\"The Mask” gives power to anyone who wears it. At times, that means endless possibility, or unimaginable tragedy… Peru, pupil of the legendary mask maker Gaston Roux, becomes controlled by the “Mask o","url":"https://anilist.co/anime/195571","trailer":"iX4N-Z5Hbxw","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/195571-UkdB06UpyL8k.jpg","next_ep":4,"next_at":1793435400,"wd":"周六","genres":["Action","Drama","Supernatural"],"pop":15769,"st":"RELEASING","fm":"TV","du":24,"studio":"100studio","rel":[]},{"kind":"fresh","type":"S","key":"ac2c6e9d20f","name":"千歳くんはラムネ瓶のなか 2クール","rating":7.7,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx198727-BL0JTpg0G8tq.jpg","air":"2026-10-13","episodes":11,"overview":"The second part of Chitose-kun wa Ramune Bin no Naka.","url":"https://anilist.co/anime/198727","trailer":"8RHh2AyKRfY","banner":"","next_ep":4,"next_at":1793714400,"wd":"周二","genres":["Comedy","Romance"],"pop":15430,"st":"RELEASING","fm":"TV","du":24,"studio":"feel.","rel":[{"n":"千歳くんはラムネ瓶のなか","f":"TV","u":"https://anilist.co/anime/180082","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx180082-IZAlf06G2VVm.png"}]},{"kind":"fresh","type":"S","key":"a3844acb4fe","name":"とある暗部の少女共棲","rating":6.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx186742-v7yfbefc8fuO.png","air":"2026-10-09","episodes":0,"overview":"This is a story of four girls living in the \"Dark Side\" of Academy City. In Academy City where \"ESP\" has been recognized as a general science. Behind the peace, there is a Dark Side organization that ","url":"https://anilist.co/anime/186742","trailer":"NNHxQJgZdbQ","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/186742-nZP1PcuUpcGg.jpg","next_ep":4,"next_at":1793367000,"wd":"周五","genres":["Action","Sci-Fi"],"pop":15094,"st":"RELEASING","fm":"TV","du":23,"studio":"J.C.STAFF","rel":[{"n":"とある魔術の禁書目録","f":"TV","u":"https://anilist.co/anime/4654","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx4654-ba44icsxDQZd.jpg"}]},{"kind":"fresh","type":"S","key":"addbd2a6c4b","name":"佐々木とピーちゃん シーズン２","rating":7.0,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx176314-lpvca6vjmkeO.jpg","air":"2026-10-07","episodes":12,"overview":"The second season of Sasaki to Pii-chan.","url":"https://anilist.co/anime/176314","trailer":"gY0hpk9E7p8","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/176314-nj2hmqbGQ9HJ.jpg","next_ep":5,"next_at":1793797200,"wd":"周三","genres":["Comedy","Fantasy","Mahou Shoujo"],"pop":14962,"st":"RELEASING","fm":"TV","du":24,"studio":"SILVER LINK.","rel":[{"n":"佐々木とピーちゃん","f":"TV","u":"https://anilist.co/anime/152682","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx152682-p91VzQq75uZV.jpg"}]},{"kind":"fresh","type":"S","key":"ab17a9c6065","name":"GROTESQQQUE-グロテスク-","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx178972-THp4trZ9uR9b.jpg","air":"2026-11-06","episodes":3,"overview":"Anthology movie consisting of three original animation segments: Q1 - ÆLIENS (エリィアンズ) Earth has entered an era of intergalatic exchange. Amidst swirling prejudice and fear of aliens, Elie, an alien gi","url":"https://anilist.co/anime/178972","trailer":"s4dAQP5MlCs","banner":"","next_ep":1,"next_at":1793890800,"wd":"周四","genres":["Action","Comedy","Drama"],"pop":14608,"st":"NOT_YET_RELEASED","fm":"MOVIE","du":null,"studio":"CloverWorks","rel":[]},{"kind":"fresh","type":"S","key":"a97cec085a3","name":"どこよりも遠い場所にいる君へ","rating":6.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx207327-OSrMbh8DrGE4.jpg","air":"2026-10-09","episodes":1,"overview":"The story centers on a boy named Kazuki Tsukigase, who transfers to a high school on a remote island to get away from anyone who knows him. Kazuki finds out that there is an inlet on the island where ","url":"https://anilist.co/anime/207327","trailer":"J2tjySs8UbA","banner":"","next_ep":0,"next_at":0,"wd":"","genres":["Mystery","Romance"],"pop":13444,"st":"FINISHED","fm":"MOVIE","du":116,"studio":"TMS Entertainment","rel":[]},{"kind":"fresh","type":"S","key":"a0d2f1f1098","name":"彼女の友達","rating":4.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx211877-yWQ2r7XmWvG6.jpg","air":"2026-10-05","episodes":12,"overview":"For the first time in my life, I have a girlfriend. But her friend tempts me with a body that's so seductive... What would you do if your girlfriend's friend came on to you like this? (Source: Yanmaga","url":"https://anilist.co/anime/211877","trailer":"E-stx_wwVSs","banner":"","next_ep":5,"next_at":1793549100,"wd":"周一","genres":["Drama","Ecchi","Romance"],"pop":13219,"st":"RELEASING","fm":"TV_SHORT","du":12,"studio":"Quad","rel":[{"n":"彼女の友達 ミニアニメ劇場","f":"TV_SHORT","u":"https://anilist.co/anime/217782","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx217782-DV0vODQ68ZRk.png"}]},{"kind":"fresh","type":"S","key":"a78fee267a9","name":"弱気MAX令嬢なのに、辣腕婚約者様の賭けに乗ってしまった","rating":6.7,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx200455-P3XStRQMJ7Di.png","air":"2026-10-04","episodes":12,"overview":"I was reborn as a villainous daughter in a reverse harem otome game. After being sick with a high fever at the age of 10, Pia Rockwell suddenly remembered her past life as a university student in Japa","url":"https://anilist.co/anime/200455","trailer":"e41RGxVwJRs","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/200455-rlIXyuk0jHE3.jpg","next_ep":5,"next_at":1793543400,"wd":"周日","genres":["Comedy","Fantasy","Romance"],"pop":12737,"st":"RELEASING","fm":"TV","du":24,"studio":"Jumondou","rel":[]},{"kind":"fresh","type":"S","key":"ad7b23b1f77","name":"魔法騎士レイアース (2026)","rating":6.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx178868-mfp0HIHNJNAm.jpg","air":"2026-10-07","episodes":0,"overview":"Hikaru Shidou, Umi Ryuuzaki, and Fuu Hououji aren't from Cephiro. While on a school field trip to the Tokyo Tower, the three girls' minds are on anything but different worlds filled with magic and won","url":"https://anilist.co/anime/178868","trailer":"67GqhfLw3ys","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/178868-l7VyM7j7LRtH.jpg","next_ep":4,"next_at":1793198760,"wd":"周三","genres":["Adventure","Fantasy","Mahou Shoujo"],"pop":11596,"st":"RELEASING","fm":"TV","du":null,"studio":"E&H Production","rel":[{"n":"魔法騎士（マジックナイト）レイアース","f":"TV","u":"https://anilist.co/anime/435","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx435-WO3USrR2jB5u.png"}]},{"kind":"fresh","type":"S","key":"a3059a667c3","name":"わたしの幸せな結婚 特別篇","rating":7.6,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx190054-8h0AuqQjwcCL.png","air":"2026-10-25","episodes":3,"overview":"As their big day draws closer, Miyo and Kiyoka feel their love deepening. And when Miyo attends a cooking class with Hazuki, she meets an old classmate! (Source: Netflix Anime)","url":"https://anilist.co/anime/190054","trailer":"SZc3Lp1_iS4","banner":"","next_ep":0,"next_at":0,"wd":"","genres":["Drama","Romance","Supernatural"],"pop":11527,"st":"FINISHED","fm":"SPECIAL","du":null,"studio":"Kinema Citrus","rel":[{"n":"わたしの幸せな結婚 第二期","f":"TV","u":"https://anilist.co/anime/169441","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx169441-DHutDkhkC8EN.jpg"}]},{"kind":"fresh","type":"S","key":"acc4027c2e1","name":"#ゾンビさがしてます","rating":6.1,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx199007-8R1HsnflnHJE.jpg","air":"2026-10-03","episodes":12,"overview":"It may be a ruined city ravaged by zombies, but to Aki and her friends, it’s amazing! Having grown up only hearing stories of the old world and the mysterious outbreak that wiped out humanity, she set","url":"https://anilist.co/anime/199007","trailer":"_0kVb8-uRSI","banner":"","next_ep":5,"next_at":1793457000,"wd":"周六","genres":["Action","Comedy","Horror"],"pop":10944,"st":"RELEASING","fm":"TV","du":23,"studio":"Studio Comet","rel":[]},{"kind":"fresh","type":"S","key":"ab18013a94e","name":"夜桜さんちの大作戦 第2期 第2クール","rating":7.2,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx213657-ORNXVEBCjXaz.jpg","air":"2026-10-11","episodes":0,"overview":"The second cour of the second season of Yozakura-san Chi no Daisakusen.","url":"https://anilist.co/anime/213657","trailer":"059cJjeY19Y","banner":"","next_ep":4,"next_at":1793520000,"wd":"周日","genres":["Action","Comedy","Romance"],"pop":9810,"st":"RELEASING","fm":"TV","du":null,"studio":"SILVER LINK.","rel":[{"n":"夜桜さんちの大作戦 第2期","f":"TV","u":"https://anilist.co/anime/182578","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx182578-Te8W0EwesgrS.jpg"}]},{"kind":"fresh","type":"S","key":"a249c9215a3","name":"TANK CHAIR-戦車椅子-","rating":6.2,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx209499-S0sWFrCpft85.jpg","air":"2026-10-04","episodes":0,"overview":"Shizuka takes on the most dangerous of assassin jobs, but she's not the one doing the killing. Rather, it's her brother, Nagi, a strong assassin who took a bullet to protect his sister, leaving him in","url":"https://anilist.co/anime/209499","trailer":"ihAvU833DHA","banner":"","next_ep":5,"next_at":1793541600,"wd":"周日","genres":["Action","Sci-Fi"],"pop":8789,"st":"RELEASING","fm":"TV","du":25,"studio":"POLYGON PICTURES","rel":[]},{"kind":"fresh","type":"S","key":"a58c9ac7272","name":"魔法少女育成計画 restart","rating":6.2,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx160803-Rcr3IvhE7q9c.png","air":"2026-10-06","episodes":0,"overview":"Some magical girls fight. Others do not. Chosen by the mysterious Land of Magic, which exists unbeknownst to the rest of the world, magical girls are each granted a unique power. Pechka, whose magic m","url":"https://anilist.co/anime/160803","trailer":"34ubb-j0kbI","banner":"","next_ep":5,"next_at":1793638800,"wd":"周二","genres":["Action","Fantasy","Mahou Shoujo"],"pop":7413,"st":"RELEASING","fm":"TV","du":24,"studio":"SynergySP","rel":[{"n":"魔法少女育成計画","f":"TV","u":"https://anilist.co/anime/21340","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx21340-0fOhJK8Qynmy.jpg"}]},{"kind":"fresh","type":"S","key":"a13e71d3a6e","name":"幻想水滸伝","rating":6.0,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx187316-jucYCojVTjSY.jpg","air":"2026-10-03","episodes":23,"overview":"Two young boys... the hero, Riliu, and his best friend Jowy, were members of a youth brigade of their home nation, the Highland Kingdom - a powerful military nation located in the north-east of the Du","url":"https://anilist.co/anime/187316","trailer":"m4T9VcBD0vo","banner":"","next_ep":5,"next_at":1793716200,"wd":"周二","genres":["Action","Adventure","Fantasy"],"pop":7379,"st":"RELEASING","fm":"TV","du":null,"studio":"KONAMI animation","rel":[]},{"kind":"fresh","type":"S","key":"a8f00d2f049","name":"マウスカーソルで現実を操作できるようになったので、女の子をいっぱいクリックしまーす","rating":5.1,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx206774-gXVdrySlLY6y.jpg","air":"2026-10-05","episodes":8,"overview":"What if you could control reality with a mouse cursor? One day during class, Takumi— an otaku — notices his mouse cursor has sprung out of the screen. Panicked, he asks his childhood friend Mone, sitt","url":"https://anilist.co/anime/206774","trailer":"2zhlC9mffas","banner":"","next_ep":4,"next_at":1793548800,"wd":"周一","genres":["Ecchi","Romance","Supernatural"],"pop":7215,"st":"RELEASING","fm":"TV_SHORT","du":6,"studio":"Studio Houkiboshi","rel":[]},{"kind":"fresh","type":"S","key":"a966b149fef","name":"超巡！超条先輩","rating":6.5,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx200294-E6KIgkFaJOfG.jpg","air":"2026-10-06","episodes":12,"overview":"The ultimate police duo is here to keep the peace! Rookie officer Nao just joined the force. She’s got a black belt in judo and earned the nickname “Gorilla” for her insane strength. Then there’s her ","url":"https://anilist.co/anime/200294","trailer":"rYpXoCdTNQI","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/200294-PPEwId1xfGNO.jpg","next_ep":5,"next_at":1793714400,"wd":"周二","genres":["Comedy","Slice of Life"],"pop":7083,"st":"RELEASING","fm":"TV","du":24,"studio":"Arvo Animation","rel":[]},{"kind":"fresh","type":"S","key":"a33e049cdf7","name":"マロニエ王国の七人の騎士","rating":6.6,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx212799-n7WDdic7IL1z.png","air":"2026-10-03","episodes":20,"overview":"At the heart of a continent of eight kingdoms lies the Marronnier Kingdom. Its general, Baribara, has seven sons, each with a unique gift and serving as a knight commander. Bound by a single noble cau","url":"https://anilist.co/anime/212799","trailer":"wk26nTxUzPY","banner":"","next_ep":5,"next_at":1793438700,"wd":"周六","genres":["Comedy","Fantasy","Romance"],"pop":7043,"st":"RELEASING","fm":"TV","du":25,"studio":"J.C.STAFF","rel":[]},{"kind":"fresh","type":"S","key":"a2dc4edc0ab","name":"恐怖コレクター","rating":5.1,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/b203473-pzyaqV432Qko.jpg","air":"2026-10-10","episodes":12,"overview":"Urban legends come to life…Everyone’s heard an urban legend before, but few have ever come face-to-face with one. These phenomena are everywhere, existing in the shadows of reality. More and more of t","url":"https://anilist.co/anime/203473","trailer":null,"banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/203473-KCGlCZL2ApjB.jpg","next_ep":4,"next_at":1793457900,"wd":"周六","genres":["Horror","Mystery","Supernatural"],"pop":6569,"st":"RELEASING","fm":"TV","du":25,"studio":"Studio Palette","rel":[]},{"kind":"fresh","type":"S","key":"a3e1535ba6c","name":"彼方から","rating":6.7,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx209463-Yxk2q10RXgg8.jpg","air":"2026-10-05","episodes":0,"overview":"On her way home from school one day, Noriko is unexpectedly plunged into a strange and extraordinary fantasy world. Her troubles compound exponentially when she is rescued and befriended by a handsome","url":"https://anilist.co/anime/209463","trailer":"dLRKywRu3iM","banner":"","next_ep":5,"next_at":1793545200,"wd":"周日","genres":["Adventure","Fantasy","Romance"],"pop":5961,"st":"RELEASING","fm":"TV","du":null,"studio":"Studio DEEN","rel":[]},{"kind":"fresh","type":"S","key":"a7d3d8c7d27","name":"デモンズ・クレスト","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/b203275-YyNHygkzIjMC.jpg","air":"2026-11-06","episodes":0,"overview":"Sixth-grader Yuuma Ashihara and his twin sister, Sawa, are playing Actual Magic, a brand-new virtual reality MMORPG, when it suddenly begins fusing with the real world. Amid all the chaos and confusio","url":"https://anilist.co/anime/203275","trailer":"z_aHrTag3Ig","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/203275-g8zkD7HCkJCn.jpg","next_ep":1,"next_at":1793930400,"wd":"周五","genres":["Action","Adventure","Fantasy"],"pop":5878,"st":"NOT_YET_RELEASED","fm":"TV","du":null,"studio":"Production I.G","rel":[]},{"kind":"fresh","type":"S","key":"a59a4fd4b01","name":"人付き合いが苦手な未亡人の雪女さんと呪いの指輪","rating":6.4,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx212667-8g5ktyrx34Yl.jpg","air":"2026-10-05","episodes":0,"overview":"Widowed Snow Woman Meets Young Man... It's the modern world, where humans, yokai, and various other races coexist... One day, Satoru—who works as the apartment manager—ends up angering his secret crus","url":"https://anilist.co/anime/212667","trailer":"NVbg3gNMz8I","banner":"","next_ep":5,"next_at":1793549100,"wd":"周一","genres":["Hentai","Supernatural"],"pop":5758,"st":"RELEASING","fm":"ONA","du":7,"studio":"Studio Houkiboshi","rel":[]},{"kind":"fresh","type":"S","key":"a0e80477df4","name":"タコピーの原罪 -ありがとう、また明日-","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx212539-uiod38Ml39AZ.png","air":"2026-11-27","episodes":1,"overview":"Theatrical compilation of all six episodes of the anime series Takopii no Genzai, including newly added scenes.","url":"https://anilist.co/anime/212539","trailer":"mnoR-kTU25E","banner":"","next_ep":1,"next_at":1795705200,"wd":"周四","genres":["Drama","Psychological","Sci-Fi"],"pop":5748,"st":"NOT_YET_RELEASED","fm":"MOVIE","du":null,"studio":"ENISHIYA","rel":[{"n":"タコピーの原罪","f":"ONA","u":"https://anilist.co/anime/185407","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx185407-7uzY4fA3hokP.jpg"}]},{"kind":"fresh","type":"S","key":"a87dbab5fc7","name":"おじさんはカワイイものがお好き。","rating":6.2,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx202079-nwBpDUms0Bab.png","air":"2026-10-04","episodes":12,"overview":"By day, Mitsutaka Oji is the handsome, dependable boss everyone admires. By night, he dotes on his favorite mascot, Pugtaro, and indulges his secret obsession with all things cute! He's kept his doubl","url":"https://anilist.co/anime/202079","trailer":"YKgjylmYeoA","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/202079-oeULOdC1R1AR.jpg","next_ep":5,"next_at":1793538000,"wd":"周日","genres":["Comedy","Slice of Life"],"pop":5576,"st":"RELEASING","fm":"TV","du":24,"studio":"LIDENFILMS","rel":[]},{"kind":"fresh","type":"S","key":"aa84b3868c6","name":"バーテックスフォース","rating":5.5,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx209562-kQQbTKDuql9p.jpg","air":"2026-10-03","episodes":0,"overview":"Akira lives a peaceful life with his older sister Haruka and his mother, who runs a cafe. The family however harbors a secret — Haruka has inherited a power from her father called \"Engine,\" and she hi","url":"https://anilist.co/anime/209562","trailer":"JqjXaJysS5w","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/209562-dvyIvOOVgDNp.jpg","next_ep":5,"next_at":1793457000,"wd":"周六","genres":["Action","Mecha"],"pop":4771,"st":"RELEASING","fm":"TV","du":24,"studio":"Shogakukan Music & Digital Entertainment","rel":[]},{"kind":"fresh","type":"S","key":"af630449f3a","name":"楽園追放 心のレゾナンス","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx157330-Ow09pWu8lqCT.jpg","air":"2026-11-13","episodes":1,"overview":"A sequel movie to the 2014 movie Rakuen Tsuihou: Expelled From Paradise.","url":"https://anilist.co/anime/157330","trailer":"gdqs6y-6R3g","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/157330-aj6Wx9iSvuaV.jpg","next_ep":1,"next_at":1794495600,"wd":"周四","genres":["Action","Mecha","Sci-Fi"],"pop":4298,"st":"NOT_YET_RELEASED","fm":"MOVIE","du":null,"studio":"Toei Animation","rel":[{"n":"楽園追放 -Expelled From Paradise-","f":"MOVIE","u":"https://anilist.co/anime/13391","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx13391-uj1wsF4E8mXO.jpg"}]},{"kind":"fresh","type":"S","key":"af32d230833","name":"ダイヤのA actⅡ -Second Season- 第2クール","rating":7.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx213658-D3BPJaqawLxS.png","air":"2026-10-11","episodes":0,"overview":"The Seido baseball club has been invited to the spring invitational at the hallowed Koshien Stadium. Sawamura will finally stand on the mound! Standing between Seido and the national title are the win","url":"https://anilist.co/anime/213658","trailer":"kLbI4teuPTc","banner":"","next_ep":4,"next_at":1793521800,"wd":"周日","genres":["Sports"],"pop":4229,"st":"RELEASING","fm":"TV","du":23,"studio":"OLM","rel":[{"n":"ダイヤのA actII -Second Season-","f":"TV","u":"https://anilist.co/anime/177634","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx177634-jYdKdbPOwWhR.png"}]},{"kind":"fresh","type":"S","key":"ab236369359","name":"てつりょー！meet with 鉄道むすめ","rating":6.0,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx199594-moYKzlfIH03U.jpg","air":"2026-10-09","episodes":12,"overview":"Misaki has often felt the urge to break free from everyday life and set out on a journey somewhere far away. Even though she doesn’t yet know what she wants to become, she longs to find something she ","url":"https://anilist.co/anime/199594","trailer":"GixEiC7k9_4","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/199594-iw8KRAiBp3sO.jpg","next_ep":4,"next_at":1793286000,"wd":"周四","genres":["Slice of Life"],"pop":4135,"st":"RELEASING","fm":"TV","du":null,"studio":"East Fish Studio","rel":[]},{"kind":"fresh","type":"S","key":"acc2de64600","name":"ガールズ＆パンツァー 最終章 第5話","rating":6.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/b202390-XrdgWaUKxDUg.jpg","air":"2026-10-09","episodes":1,"overview":"The fifth film in the six-part Girls und Panzer: Saishuushou film series.","url":"https://anilist.co/anime/202390","trailer":"yDRK9-yG9X8","banner":"","next_ep":0,"next_at":0,"wd":"","genres":["Action","Sports"],"pop":4060,"st":"FINISHED","fm":"MOVIE","du":null,"studio":"Actas","rel":[{"n":"ガールズ＆パンツァー 最終章 第4話","f":"MOVIE","u":"https://anilist.co/anime/132420","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx132420-aE5g1TCAbvUG.png"}]},{"kind":"fresh","type":"S","key":"adfa345af9b","name":"ガールズ＆パンツァー もっとらぶらぶ作戦です！","rating":7.4,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx188034-oRwVKBMezOOk.jpg","air":"2026-10-08","episodes":12,"overview":"A deep dive into the untold daily lives and the inter-school interactions of the Ooarai Girls' team and the other students (along with the colorful characters that surround them) who are wholeheartedl","url":"https://anilist.co/anime/188034","trailer":"AVIDW2dT2AM","banner":"","next_ep":4,"next_at":1793284200,"wd":"周四","genres":["Comedy"],"pop":4058,"st":"RELEASING","fm":"TV","du":24,"studio":"P.A.WORKS","rel":[{"n":"ガールズ&パンツァー","f":"TV","u":"https://anilist.co/anime/14131","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx14131-EP12xXteLTiF.jpg"},{"n":"ガールズ＆パンツァー リボンの武者 パイロット版","f":"SPECIAL","u":"https://anilist.co/anime/209312","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx209312-ZQGohKvgqGP6.png"},{"n":"ガールズ＆パンツァー もっとらぶらぶ作戦です！ ミニアニメ","f":"OVA","u":"https://anilist.co/anime/219063","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx219063-6IwmvXup3Em5.png"}]},{"kind":"fresh","type":"S","key":"a37c38060ec","name":"BanG Dream! Ave Mujica prima aurora","rating":6.3,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx197543-UhIhht4Gku8z.png","air":"2026-10-16","episodes":1,"overview":"","url":"https://anilist.co/anime/197543","trailer":"Sr1w-prNbH0","banner":"","next_ep":0,"next_at":0,"wd":"","genres":["Drama","Music"],"pop":3766,"st":"FINISHED","fm":"MOVIE","du":56,"studio":"NICHICALINE","rel":[{"n":"BanG Dream! Ave Mujica","f":"TV","u":"https://anilist.co/anime/169295","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx169295-WxoGTeMbje4T.jpg"}]},{"kind":"fresh","type":"S","key":"ab6978ba16e","name":"ホテル・インヒューマンズ 第2期","rating":6.2,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx199426-0nBgTV9BrcJn.jpg","air":"2026-10-04","episodes":13,"overview":"The second season of Hotel Inhumans.","url":"https://anilist.co/anime/199426","trailer":null,"banner":"","next_ep":5,"next_at":1793544300,"wd":"周日","genres":["Action","Drama"],"pop":3657,"st":"RELEASING","fm":"TV","du":23,"studio":"Bridge","rel":[{"n":"ホテル・インヒューマンズ","f":"TV","u":"https://anilist.co/anime/184034","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx184034-gjIi5TIHJpZv.jpg"}]},{"kind":"fresh","type":"S","key":"af6e7395f68","name":"獣王武神ダンデヴァイン","rating":5.1,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx213068-aFSedkY5bQ4m.png","air":"2026-10-08","episodes":0,"overview":"The story takes place 20 years after the robot Dandivine defeated the mysterious Aposdoll. The world is now in peace. However, toy manufacturer Kasuga, who relied on its toys of merchandise of Dandivi","url":"https://anilist.co/anime/213068","trailer":"ihJfkOT_0wU","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/213068-EQba2gbIKAy5.jpg","next_ep":4,"next_at":1793201400,"wd":"周三","genres":["Action","Mecha"],"pop":2899,"st":"RELEASING","fm":"TV","du":null,"studio":"LIDENFILMS","rel":[]},{"kind":"fresh","type":"S","key":"aae5b012b22","name":"DARK MACHINE -The Animation-","rating":5.4,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx179876-Wg62CAzp5WQ1.jpg","air":"2026-10-14","episodes":11,"overview":"Following his grandfather’s will to “seek out the Senki,” the protagonist Kairi visits Golden Valley, a special Dark Machine economic zone. There, he meets a mysterious girl named Rudra. Dragged into ","url":"https://anilist.co/anime/179876","trailer":"Tvvs_SlUYgA","banner":"","next_ep":4,"next_at":1793724300,"wd":"周三","genres":["Mecha","Sci-Fi"],"pop":2837,"st":"RELEASING","fm":"TV","du":null,"studio":"Production +h","rel":[]},{"kind":"fresh","type":"S","key":"adc89e8a959","name":"うまゆるふるげ〜と!","rating":6.9,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx215835-B0seSw93V5qM.png","air":"2026-09-27","episodes":26,"overview":"\"Umayuru\" is a short anime series featuring pint-sized Uma Musume! This time, it’s a \"Full-Gate\" three-minute race where *all* the Uma Musume take to the track! A super-sized, laid-back gathering with","url":"https://anilist.co/anime/215835","trailer":"rUHYbwZDVVI","banner":"","next_ep":6,"next_at":1793534400,"wd":"周日","genres":["Comedy","Slice of Life"],"pop":2828,"st":"RELEASING","fm":"ONA","du":3,"studio":"AtoriE","rel":[{"n":"うまゆる ぷりてぃ～ぐれい","f":"ONA","u":"https://anilist.co/anime/191689","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx191689-GcPVOgZLgdMa.png"},{"n":"ウマ娘 プリティーダービー","f":"TV","u":"https://anilist.co/anime/98514","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx98514-mEh3Gl58AWgc.jpg"}]},{"kind":"fresh","type":"S","key":"a31f4daba4f","name":"蒼き伝承 ウェルシュ&シェーダー","rating":5.5,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx216895-Ofx4FSKFa4CQ.jpg","air":"2026-10-02","episodes":12,"overview":"The story of Aoki Denshou Welsh & Shedar follows Welsh, a teenage boy from the country who loves to cook, and Shedar, a young prince who is destined to become king one day. When the two young men with","url":"https://anilist.co/anime/216895","trailer":"4QafpDIgjS4","banner":"","next_ep":5,"next_at":1793363160,"wd":"周五","genres":["Adventure","Fantasy"],"pop":2682,"st":"RELEASING","fm":"TV","du":23,"studio":"Studio Massket","rel":[]},{"kind":"fresh","type":"S","key":"a6116bd654a","name":"装甲騎兵ボトムズ 灰色の魔女","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx206163-pDqpH6qyKhmV.png","air":"2026-11-20","episodes":0,"overview":"The story of Armored Trooper VOTOMS: Die Graue Hexe is set during the final stages of the Hundred Year War between Gilgamesh and Balarant that ravaged the Astragius Galaxy. Against this backdrop, army","url":"https://anilist.co/anime/206163","trailer":"7NH-89IIBZ4","banner":"","next_ep":1,"next_at":1795100400,"wd":"周四","genres":["Mecha","Sci-Fi"],"pop":2535,"st":"NOT_YET_RELEASED","fm":"MOVIE","du":null,"studio":"Production I.G","rel":[{"n":"装甲騎兵ボトムズ","f":"TV","u":"https://anilist.co/anime/2582","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx2582-aB1Vh1jDobQ3.jpg"}]},{"kind":"fresh","type":"S","key":"a7f1ca67f05","name":"傷だらけ聖女より報復をこめて Season2","rating":6.0,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/b212144-9qJMcEdy4Xbo.jpg","air":"2026-10-02","episodes":0,"overview":"The second season of Kizu darake Seijo yori Houfuku wo Komete.","url":"https://anilist.co/anime/212144","trailer":"vnOrtJ4vRmw","banner":"","next_ep":5,"next_at":1793286000,"wd":"周四","genres":["Fantasy","Romance"],"pop":2253,"st":"RELEASING","fm":"TV_SHORT","du":13,"studio":"Imageworks Studio","rel":[{"n":"傷だらけ聖女より報復をこめて","f":"TV_SHORT","u":"https://anilist.co/anime/195209","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/b195209-IwHhCJUcmoK0.jpg"}]},{"kind":"fresh","type":"S","key":"a7a6ce10e40","name":"Battle Spirits [Re] 絶界の空","rating":5.1,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx187990-tNyQPmr9TkYi.png","air":"2026-10-06","episodes":0,"overview":"Keio 3, Hinomoto, Eito. As the Bakumatsu throws Japan into turmoil, young Kuu Bashin dreams of becoming stronger through Standard Battle Spirits. His world changes when he encounters Ajara Zetsu, a wa","url":"https://anilist.co/anime/187990","trailer":"cXd4pKTx2pI","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/187990-iDUZ4BGtmEct.jpg","next_ep":5,"next_at":1793714400,"wd":"周二","genres":["Action","Fantasy"],"pop":1886,"st":"RELEASING","fm":"TV","du":24,"studio":"Bandai Namco Pictures","rel":[{"n":"バトルスピリッツ 少年突破バシン","f":"TV","u":"https://anilist.co/anime/5082","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx5082-TPZqtEmnSqSx.jpg"},{"n":"バトルスピリッツ 少年激覇ダン","f":"TV","u":"https://anilist.co/anime/6901","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx6901-DCQE7Lzhrvhy.png"},{"n":"バトルスピリッツ 覇王（ヒーローズ）","f":"TV","u":"https://anilist.co/anime/11017","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx11017-DPHTLtFvyDeN.jpg"},{"n":"バトルスピリッツ ソードアイズ","f":"TV","u":"https://anilist.co/anime/14913","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx14913-0loTaP0agXoa.jpg"},{"n":"最強銀河 究極[アルティメット]ゼロ~バトルスピリッツ~","f":"TV","u":"https://anilist.co/anime/19825","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx19825-tYWnHBZlqCzY.jpg"},{"n":"バトルスピリッツ 烈火魂","f":"TV","u":"https://anilist.co/anime/21020","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx21020-NTBIpthsCJ5k.jpg"},{"n":"バトルスピリッツ ダブルドライブ","f":"TV","u":"https://anilist.co/anime/21635","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx21635-aZCTEl0HhzUZ.jpg"}]},{"kind":"fresh","type":"S","key":"acd947d3c3c","name":"ケロロ軍曹☆","rating":6.0,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx216557-b72dAqbVEDO7.jpg","air":"2026-10-03","episodes":0,"overview":"Sergeant Keroro comes to conquer Earth, only to get captured and stuck living with the Hinata family! (Source: Crunchyroll)","url":"https://anilist.co/anime/216557","trailer":"iMyre5xXDzE","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/216557-FdbwnWM2oskW.jpg","next_ep":5,"next_at":1793406600,"wd":"周六","genres":["Comedy","Sci-Fi"],"pop":1872,"st":"RELEASING","fm":"TV","du":24,"studio":"Bandai Namco Pictures","rel":[{"n":"ケロロ軍曹","f":"TV","u":"https://anilist.co/anime/516","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx516-ofBmeR4TcbKb.jpg"},{"n":"ケロロ","f":"TV_SHORT","u":"https://anilist.co/anime/20543","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/20543.jpg"}]},{"kind":"fresh","type":"S","key":"a3e019020b3","name":"新テニスの王子様 U-17 WORLD CUP 決勝メンバー決定戦","rating":5.8,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx199068-2afNaytl50Ko.png","air":"2026-10-01","episodes":0,"overview":"Old rivalries reignite as Team Japan players face off to earn spots in the lineup for the World Cup final. (Source: Crunchyroll News)","url":"https://anilist.co/anime/199068","trailer":"bsNeADDQFD4","banner":"","next_ep":5,"next_at":1793199600,"wd":"周三","genres":["Action","Comedy","Sports"],"pop":1507,"st":"RELEASING","fm":"TV","du":24,"studio":"M.S.C","rel":[{"n":"新テニスの王子様 U-17 WORLD CUP SEMIFINAL","f":"TV","u":"https://anilist.co/anime/165810","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx165810-xEt3MeCRRRev.jpg"}]},{"kind":"fresh","type":"S","key":"a634c83f60e","name":"魔法の姉妹ルルットリリィ 第2クール","rating":6.2,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx209032-R0gP5IFdk7Vd.jpg","air":"2026-10-04","episodes":0,"overview":"The second half of Mahou no Shimai LuluttoLilly.","url":"https://anilist.co/anime/209032","trailer":"rwUPmzMpECo","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/209032-hpYi0dlKkagd.jpg","next_ep":5,"next_at":1793539800,"wd":"周日","genres":["Mahou Shoujo","Music"],"pop":1450,"st":"RELEASING","fm":"TV","du":23,"studio":"Studio Pierrot","rel":[{"n":"魔法の姉妹ルルットリリィ","f":"TV","u":"https://anilist.co/anime/178749","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx178749-2TRwfr1T7jzI.jpg"}]},{"kind":"fresh","type":"S","key":"a34057f5857","name":"劇場版 前橋ウィッチーズ ～魔女見習いのエモエモリーズ～","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx209642-qNj4Wz2hXTvi.jpg","air":"2026-10-23","episodes":1,"overview":"Compilation film of Maebashi Witches.","url":"https://anilist.co/anime/209642","trailer":"txDov2HH7xM","banner":"","next_ep":0,"next_at":0,"wd":"","genres":["Drama","Mahou Shoujo","Music"],"pop":655,"st":"FINISHED","fm":"MOVIE","du":117,"studio":"Sunrise","rel":[{"n":"前橋ウィッチーズ","f":"TV","u":"https://anilist.co/anime/180825","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx180825-trzjP1VDF19U.jpg"}]},{"kind":"fresh","type":"S","key":"a9d472fef51","name":"パンどろぼう","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx194207-7n4M6jOwLdcF.jpg","air":"2026-10-02","episodes":0,"overview":"Kadokawa announced on June 9th, 2025 that Keiko Shibata's Pan Dorobou (Bread Thief) picture book will have an anime adaptation. The announcement did not reveal the anime's format. The picture books ce","url":"https://anilist.co/anime/194207","trailer":"dUSYa-7rKpM","banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/194207-6yQitDZ3uOi5.jpg","next_ep":5,"next_at":1793353200,"wd":"周五","genres":["Comedy"],"pop":556,"st":"RELEASING","fm":"TV_SHORT","du":9,"studio":"Shin-Ei Animation","rel":[]},{"kind":"fresh","type":"S","key":"a20e5e40560","name":"カードファイト!! ヴァンガード Divinez 運命星戦編","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx214536-dl2KJdHcKWJl.jpg","air":"2026-11-07","episodes":3,"overview":"Note: The anime first premiered in theaters across Japan on October 2, 2026. It was later split into 3 episodes aired weekly on TV starting November 7, 2026.","url":"https://anilist.co/anime/214536","trailer":"zxgmRfemSMI","banner":"","next_ep":1,"next_at":1794061800,"wd":"周六","genres":["Action","Adventure","Fantasy"],"pop":442,"st":"NOT_YET_RELEASED","fm":"TV","du":null,"studio":"Kinema Citrus","rel":[{"n":"カードファイト!! ヴァンガード Divinez 幻真星戦編","f":"TV","u":"https://anilist.co/anime/203296","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx203296-LYXWSdP4N4YF.jpg"}]},{"kind":"fresh","type":"S","key":"a9dc010fc32","name":"猫猫のひとりごと 第3期","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx218532-I1GCprJrJ5sm.png","air":"2026-10-05","episodes":0,"overview":"Chibi shorts to Kusuriya no Hitorigoto 3rd Season released on the TOHO animation YouTube channel. Note: Episode count begins at 49.","url":"https://anilist.co/anime/218532","trailer":"FuGZ0Cl8YMY","banner":"","next_ep":5,"next_at":1793588400,"wd":"周一","genres":["Comedy"],"pop":388,"st":"RELEASING","fm":"ONA","du":2,"studio":null,"rel":[{"n":"猫猫のひとりごと 第2期","f":"ONA","u":"https://anilist.co/anime/186148","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/b186148-Tx8InzoohmXs.png"},{"n":"薬屋のひとりごと 第3期","f":"TV","u":"https://anilist.co/anime/195516","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx195516-MJpUZlOberqH.jpg"}]},{"kind":"fresh","type":"S","key":"a4c0cf967cc","name":"彼女の友達 ミニアニメ劇場","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx217782-DV0vODQ68ZRk.png","air":"2026-10-05","episodes":12,"overview":"A weekly mini anime shown with each episode of Kanojo no Tomodachi exclusively on the AT-X broadcast of the TV anime and online on OceanVeil.","url":"https://anilist.co/anime/217782","trailer":null,"banner":"","next_ep":5,"next_at":1793549820,"wd":"周一","genres":["Drama","Ecchi","Romance"],"pop":333,"st":"RELEASING","fm":"TV_SHORT","du":12,"studio":null,"rel":[{"n":"彼女の友達","f":"TV_SHORT","u":"https://anilist.co/anime/211877","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx211877-yWQ2r7XmWvG6.jpg"}]},{"kind":"fresh","type":"S","key":"a027c52210f","name":"Duel Masters LOST ～断罪の少年～","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx208367-qWKRaOpokGoG.jpg","air":"2026-10-09","episodes":4,"overview":"Sequel to Duel Masters LOST: Boukyaku no Taiyou.","url":"https://anilist.co/anime/208367","trailer":null,"banner":"","next_ep":4,"next_at":1793361600,"wd":"周五","genres":["Adventure","Supernatural"],"pop":331,"st":"RELEASING","fm":"ONA","du":24,"studio":"J.C.STAFF","rel":[{"n":"Duel Masters LOST ～忘却の太陽～","f":"ONA","u":"https://anilist.co/anime/187508","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx187508-kFWf3Fq0wl56.png"}]},{"kind":"fresh","type":"S","key":"aa8b088117b","name":"しろたん","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx209709-Wz8BKL1fm5MC.png","air":"2026-10-03","episodes":0,"overview":"","url":"https://anilist.co/anime/209709","trailer":"4iOFqQ1E4Mo","banner":"","next_ep":5,"next_at":1793431740,"wd":"周六","genres":[],"pop":331,"st":"RELEASING","fm":"TV","du":null,"studio":"Lesprit","rel":[{"n":"しろたん しろたんがいっぱい!","f":"ONA","u":"https://anilist.co/anime/99966","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx99966-Z3SMkIqxRTCg.png"}]},{"kind":"fresh","type":"S","key":"a9a90505865","name":"JKダークサモナーとデキ。。。。。。でいない!?","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx218217-crIGlnQDg0bJ.png","air":"2026-10-05","episodes":12,"overview":"A weekly mini anime shown with each episode of Dark Summoner to Dekiteiru exclusively on the AT-X broadcast of the TV anime and online on Abema.","url":"https://anilist.co/anime/218217","trailer":null,"banner":"","next_ep":5,"next_at":1793556000,"wd":"周一","genres":["Comedy","Ecchi","Fantasy"],"pop":296,"st":"RELEASING","fm":"TV_SHORT","du":10,"studio":"Frontier Works","rel":[{"n":"ダークサモナーとデキている","f":"TV_SHORT","u":"https://anilist.co/anime/208025","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx208025-JKvqWNr8rz8l.jpg"}]},{"kind":"fresh","type":"S","key":"ac4597d11ed","name":"真面目なキミにハマるカラダ THE ANIMATION","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx216171-IhhbG5GAio2C.png","air":"2026-11-27","episodes":0,"overview":"After entering college, Azusa Shirakawa was enjoying campus life, marking a fresh start from her high school days, when she had devoted herself entirely to judo. But a casual joke from her childhood f","url":"https://anilist.co/anime/216171","trailer":null,"banner":"","next_ep":1,"next_at":1795705200,"wd":"周四","genres":["Hentai"],"pop":266,"st":"NOT_YET_RELEASED","fm":"OVA","du":30,"studio":"Studio 1st","rel":[]},{"kind":"fresh","type":"S","key":"a6063721f8c","name":"ホタルの嫁入り ちょいたし","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx218938-i29Q90gbQcZQ.png","air":"2026-10-12","episodes":0,"overview":"Mini anime for Hotari no Yomeiri released on YouTube.","url":"https://anilist.co/anime/218938","trailer":"A2ZuZt01_Po","banner":"","next_ep":0,"next_at":0,"wd":"","genres":["Comedy","Romance"],"pop":243,"st":"RELEASING","fm":"ONA","du":1,"studio":"NOKID","rel":[{"n":"ホタルの嫁入り","f":"TV","u":"https://anilist.co/anime/205909","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx205909-DM0fAzNQulod.jpg"}]},{"kind":"fresh","type":"S","key":"a75bc077dc5","name":"ギャルズフィクション THE ANIMATION","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx217009-jcuGzZxbNDQo.png","air":"2026-12-18","episodes":0,"overview":"Based on the erotic game by Jitaku Studio. Hatsune Nijo’s tastes were thoroughly warped by the influence of a childhood friend’s mother, leaving him with an intense obsession with gyaru (gal) fashion ","url":"https://anilist.co/anime/217009","trailer":null,"banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/217009-CAEY3cs7LqB6.jpg","next_ep":1,"next_at":1797519600,"wd":"周四","genres":["Hentai"],"pop":215,"st":"NOT_YET_RELEASED","fm":"OVA","du":null,"studio":"Seven","rel":[]},{"kind":"fresh","type":"S","key":"a50661cb587","name":"夏日 The Animation","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx215527-OggEWJJVg8pI.png","air":"2026-12-25","episodes":0,"overview":"Takeru, a married salaryman on a business trip to the countryside, meets Nazuna Tokiwa—a \"gal\"—through a dating app. Nazuna is a calculated \"little devil\" type who actively uses her charms to ensnare ","url":"https://anilist.co/anime/215527","trailer":null,"banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/215527-c3AZea98ZRFH.jpg","next_ep":1,"next_at":1798124400,"wd":"周四","genres":["Hentai"],"pop":213,"st":"NOT_YET_RELEASED","fm":"OVA","du":20,"studio":null,"rel":[]},{"kind":"fresh","type":"S","key":"af363873925","name":"お隣の贄","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx216926-FDFaH12RueCw.png","air":"2026-11-27","episodes":0,"overview":"Kazu reunites with his childhood friend, Shion, for the first time in a long while. He falls for her all over again as he realizes she’s become even more beautiful, but despite this long-awaited reuni","url":"https://anilist.co/anime/216926","trailer":null,"banner":"https://s4.anilist.co/file/anilistcdn/media/anime/banner/216926-JKxPNnGV89bf.jpg","next_ep":1,"next_at":1795705200,"wd":"周四","genres":["Hentai"],"pop":210,"st":"NOT_YET_RELEASED","fm":"OVA","du":16,"studio":"T-REX","rel":[]},{"kind":"fresh","type":"S","key":"a11965cdff2","name":"ノーマン・ザ・スノーマン ~こどもたちのひとつ星~","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx205289-RYXB6QzgHUMZ.png","air":"2026-12","episodes":1,"overview":"The boy has grown into a young man, living apart from his mother. Although he returned to his hometown, he is unable to be honest with her. After reuniting with Norman, a mysterious child searching fo","url":"https://anilist.co/anime/205289","trailer":"HZWfn56_vms","banner":"","next_ep":0,"next_at":0,"wd":"","genres":["Fantasy"],"pop":186,"st":"NOT_YET_RELEASED","fm":"MOVIE","du":null,"studio":"TECARAT","rel":[{"n":"ノーマン・ザ・スノーマン ～流れ星のふる夜に～","f":"MOVIE","u":"https://anilist.co/anime/128020","i":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/b128020-KIIYHdJX9tj2.jpg"}]},{"kind":"fresh","type":"S","key":"ad9f60a9f26","name":"ゆるゆる図鑑","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx213298-ymB1Sw0yDZ0Y.jpg","air":"2026-10-04","episodes":0,"overview":"Gakken's hugely popular illustrated encyclopedia series, which everyone can enjoy with its laid-back four-panel comics, is finally being adapted into a TV anime! Discover surprising aspects and fun fa","url":"https://anilist.co/anime/213298","trailer":"cH7enqqATwE","banner":"","next_ep":5,"next_at":1793484000,"wd":"周日","genres":[],"pop":185,"st":"RELEASING","fm":"TV_SHORT","du":2,"studio":"Imagica Infos","rel":[]},{"kind":"fresh","type":"S","key":"a5c48cae116","name":"堕ちるパート妻 年下男との情事に溺れた果てに…","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx215989-jXzvgQ6QVAhj.png","air":"2026-11-27","episodes":0,"overview":"Based on the erotic game by Studio Pork. Sunao Saiki, who had just moved into an apartment, was a student preparing for college entrance exams. He began his new life living alone with a somber express","url":"https://anilist.co/anime/215989","trailer":null,"banner":"","next_ep":1,"next_at":1795705200,"wd":"周四","genres":["Hentai"],"pop":180,"st":"NOT_YET_RELEASED","fm":"OVA","du":null,"studio":"Suzuki Mirano petit","rel":[]},{"kind":"fresh","type":"S","key":"a768063bb8f","name":"ふたなり神社は乙女おチ○ポ相談所","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx216617-EfEXreUg9Zn4.png","air":"2026-12-04","episodes":0,"overview":"","url":"https://anilist.co/anime/216617","trailer":null,"banner":"","next_ep":1,"next_at":1796310000,"wd":"周四","genres":["Hentai"],"pop":173,"st":"NOT_YET_RELEASED","fm":"OVA","du":null,"studio":null,"rel":[]},{"kind":"fresh","type":"S","key":"aaf139bfb5d","name":"ヒトリ妻","rating":null,"poster":"https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx214443-0xrurj3XnjFD.png","air":"2026-10-30","episodes":0,"overview":"Here we go again… Yukina had come to visit her husband, who’d been injured at work, but she was dumbfounded to see him striking up conversations with every woman in sight. She ignored him and sat down","url":"https://anilist.co/anime/214443","trailer":null,"banner":"","next_ep":1,"next_at":1793286000,"wd":"周四","genres":["Hentai"],"pop":162,"st":"NOT_YET_RELEASED","fm":"OVA","du":null,"studio":"Nur","rel":[]}],"movies":[{"kind":"fresh","type":"M","key":"d91fffbcc0e","name":"杯雪·一战成名","rating":7.5,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2936719035.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37516455/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d1b06c446a0","name":"逃出布迪秀","rating":7.4,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934286660.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37446297/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d45271a3748","name":"不择手段","rating":6.1,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2932972362.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37104948/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"df87c9fcced","name":"实习生","rating":6.9,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2934654245.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36944373/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"deee7814867","name":"黑球","rating":8.6,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2935652656.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37215318/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dc193e65dbe","name":"希望","rating":5.5,"poster":"https://img2.doubanio.com/view/photo/s_ratio_poster/public/p2933326871.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36179101/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d8cb0d37489","name":"空枪","rating":7.2,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934946788.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37508847/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d8d8bdb4280","name":"罗斯","rating":8.5,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935294362.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/35322132/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"df584f1f895","name":"登峰传奇：丹增诺盖","rating":7.7,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935498318.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36887293/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dc4506033c0","name":"潜伏6","rating":6.6,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2931576822.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37525017/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dd8b00a6032","name":"一个部门的诞生","rating":7.2,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2933113603.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36937765/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d0413445176","name":"突如其来","rating":7.7,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2931445409.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37342630/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dcf20f2f399","name":"人性本兽","rating":5.9,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935862659.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36749187/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d8983f04ab5","name":"功夫女足","rating":5.9,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2933860063.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36452545/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d494c30173c","name":"瘴气营地的青春性事与死亡","rating":6.7,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2932757705.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36801617/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d3c960a238c","name":"爱情假说","rating":6.6,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935295277.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37365064/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"de42798288f","name":"大濛","rating":8.2,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2925804842.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36680492/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d96912dfb86","name":"蜘蛛侠：崭新之日","rating":7.7,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934276912.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36246195/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dbb081a9bb6","name":"一生所爱","rating":6.4,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2936742829.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37246674/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"ddd9f0865a7","name":"家弑服务","rating":7.1,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2932673659.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36367195/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dc1c7b77fba","name":"不存在的罪人","rating":5.8,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934844988.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37124892/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"db67a74f643","name":"故土","rating":7.7,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2935691855.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37487816/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d096da97402","name":"茫然女王","rating":7.9,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2930593644.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/35765242/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"de1b86c845e","name":"给阿嬷的情书","rating":9.3,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2931851430.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37116446/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d42588a3c2f","name":"理智与情感","rating":6.6,"poster":"https://img2.doubanio.com/view/photo/s_ratio_poster/public/p2936957901.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37247236/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d67d4d43a1c","name":"求救信号","rating":7.2,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2935448686.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36439868/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"de9e38229b8","name":"火柴盒大电影","rating":6.2,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935696033.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36885557/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d049eb1b23b","name":"激情邀约","rating":7.3,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2932993239.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/35801126/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"de9cc28356e","name":"年会不能停！2","rating":6.2,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2934583425.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36850814/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d77d0bd6fad","name":"阳光女子合唱团","rating":7.3,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2930838026.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37193250/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d0235d6630d","name":"抓特务","rating":7.2,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2933198755.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36812879/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d7cf7d53f5f","name":"卖冰淇淋的人","rating":5.6,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2936042502.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37346752/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d900405c48b","name":"逃出绝命街","rating":5.5,"poster":"https://img2.doubanio.com/view/photo/s_ratio_poster/public/p2934546481.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36318703/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d6ed479a1e2","name":"特立独行","rating":6.6,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2933638302.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36953973/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d7bc1113122","name":"致命录像带：混音带","rating":5.4,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935914663.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/38584401/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d6629781dad","name":"八仙！","rating":8.2,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2934074566.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36882191/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d357425ce99","name":"挽救计划","rating":8.6,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2931370692.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/35010610/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"db721906504","name":"眩晕","rating":6.7,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2932533736.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/38424785/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d40f2456b02","name":"寻找艾米丽","rating":7.5,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2932264143.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36912404/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d99e540aeec","name":"群体","rating":6.1,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2932381127.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37096700/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d9beaf289c6","name":"夜王","rating":7.7,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2929673775.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37375594/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"db160ae4aa9","name":"玩具总动员5","rating":8.0,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2933391462.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36238849/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dc84a404858","name":"500英里","rating":7.6,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2932686404.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36772727/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d12d4f53754","name":"揭秘日","rating":6.3,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2933170423.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36860212/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d968427864f","name":"双喜","rating":7.5,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2930587034.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36576765/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"da1aefb7f8c","name":"魔方小姐","rating":6.8,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2933654136.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36808520/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dab4e7d37e8","name":"后室","rating":6.6,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2933327977.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36235977/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d3780f2d8f6","name":"利未记","rating":7.0,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2932806762.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37559942/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d64d7a176b6","name":"诺曼底72小时","rating":8.2,"poster":"https://img2.doubanio.com/view/photo/s_ratio_poster/public/p2932334501.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36916000/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d979fe474dc","name":"爱情抓马","rating":6.9,"poster":"https://img2.doubanio.com/view/photo/s_ratio_poster/public/p2929524191.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36995126/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d1bd7e0ac54","name":"魔法少女小圆：沃普尔吉斯的回天","rating":6.5,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2923423510.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/35316478/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d27d594cb2f","name":"东京出租车","rating":8.0,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2924658739.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37213104/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dca18d2ec7b","name":"呼啸山庄","rating":6.2,"poster":"https://img2.doubanio.com/view/photo/s_ratio_poster/public/p2930238411.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36963690/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dccefe0cd7c","name":"人为何要写情书","rating":6.6,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2933130655.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37170532/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d9453162fb2","name":"起义","rating":6.3,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934146453.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37425363/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"da462fc0287","name":"鬼玩人6：炼狱","rating":6.5,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2932170733.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36767846/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"da9e85d8003","name":"奇幻秘密之旅","rating":5.6,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2930623716.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/38227269/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"ddcc7294689","name":"穿普拉达的女王2","rating":6.3,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2930952195.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36956594/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d2adc0c70aa","name":"怒之杀","rating":5.6,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935069903.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36889088/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d2edabef350","name":"绵羊侦探团","rating":7.5,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2931958860.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36918069/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"da71db7a6ca","name":"偷天父子兵","rating":5.7,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2936095806.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37660136/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d560c8da04b","name":"宝莱坞双雄之战2","rating":6.1,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2923654954.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36504323/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d1467e89ffc","name":"大学炸弹客","rating":6.4,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2936115679.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/38184963/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d3d455f99cb","name":"一击3","rating":6.3,"poster":"https://img2.doubanio.com/view/photo/s_ratio_poster/public/p2935341851.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37646059/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d35191c311e","name":"最佳舞伴","rating":6.7,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935920442.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36565928/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dc394328ee9","name":"最后之吻","rating":5.5,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935674819.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36977235/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d41433bbca0","name":"M.I.S.S.I.O.N. 歌剧般的潜入搜查官","rating":5.7,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934261763.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/38460894/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d171b2ca448","name":"拨乱行动","rating":5.8,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934308192.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36723797/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d3881bc4a39","name":"百分之十(电影版)","rating":6.8,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2932583933.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36988706/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d897da9ca0e","name":"护肝人","rating":5.9,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934139047.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37218260/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d16df750dde","name":"雨光","rating":5.8,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934727389.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/34982207/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d5fb4320190","name":"逃亡者","rating":5.5,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2934307715.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37200003/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d0e577474e6","name":"数到三","rating":6.3,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935012359.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36931140/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d27da989213","name":"耳语者","rating":5.9,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934088022.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37228429/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dc2a8ef780c","name":"最后的曙光","rating":5.5,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935325350.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37364618/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dc4ac0e3904","name":"蝙蝠侠：骑士陨落 第一部：骑士陨落","rating":7.3,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934315813.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37657215/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d62786b121b","name":"灵魂摆渡·蝴蝶梦","rating":6.5,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935132883.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/38509943/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d5657c9083f","name":"夜巡毒枭","rating":6.8,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2935254634.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/38220877/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"de5a468884b","name":"歪心狼对阵ACME","rating":7.3,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934713062.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/27190137/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d748568cde4","name":"核战边缘","rating":6.3,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934422508.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36996121/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d0724e76a9e","name":"汪汪队立大功大电影3：勇闯恐龙岛","rating":7.1,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2933198257.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36791178/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d50d2757da4","name":"空闲的日子","rating":5.5,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2934115556.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36514251/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"daa655be8e3","name":"托尼","rating":6.8,"poster":"https://img2.doubanio.com/view/photo/s_ratio_poster/public/p2933405221.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37002986/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d0ce4403510","name":"最后孤屋","rating":5.4,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2934739676.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36877284/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d00f3ca9e30","name":"去你的岛","rating":7.5,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2934742318.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/35275131/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d3536b5272d","name":"一夜限定","rating":6.3,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2935635427.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37233476/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dc9ddd8e9cf","name":"灵魂伴侣","rating":5.9,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2934590754.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36935883/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d5113126090","name":"安昂传奇：最后的气宗","rating":7.2,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2934419386.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/35930978/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d94550b0f20","name":"吉伊卡哇：人鱼之岛的秘密","rating":8.2,"poster":"https://img2.doubanio.com/view/photo/s_ratio_poster/public/p2931938481.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37868459/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d84797b2e5f","name":"低弧慢球","rating":6.1,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2933548415.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37054667/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d8f66ad86e0","name":"末路讨债人","rating":6.0,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2933559560.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/38352042/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dd51d9da0d6","name":"想你了","rating":6.8,"poster":"https://img2.doubanio.com/view/photo/s_ratio_poster/public/p2933938761.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37021936/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"dd235c27931","name":"永远心跳漏一拍","rating":7.3,"poster":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2934199164.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/37326018/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"d78c48aa6eb","name":"海洋奇缘：启航","rating":6.5,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2933001869.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36343469/","year":null,"genres":[]},{"kind":"fresh","type":"M","key":"decb53e30cc","name":"夺命航班","rating":5.7,"poster":"https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2933925290.jpg","banner":"","trailer":null,"overview":"","url":"https://movie.douban.com/subject/36885610/","year":null,"genres":[]}],"season":"FALL 2026"},"bili_fresh":{"a8b0f7d92cb":"BV1BCHT6kEp3","add1af47b52":"BV1uwpU61ERJ","aa9601f3b1c":"BV15kH564EZa","a90ec3fb989":"BV1jE42157HC","a25df009a2d":"BV1Vapv6mELg","a28f891d4ea":"BV1dyxE6LE1T","a6afb75e072":"BV1eb411h7bJ","a440cd465a8":"BV1g94y1Y71E","a708250b08a":"BV1zPHr6TER3","ab3d44f722f":"BV1fecTzKEtr","a019d00dcec":"BV1MR4y1C7BA","ac992a77aac":"BV1sxxT6fEtd","a8071e5a89b":"BV1SEaN67EBZ","afca69d32dd":"BV1QC4y1n7rL","a967da9a017":"BV1WNJy6jEem","ae102ab0847":"BV17G411S7Wx","a465bd93901":"BV1Fonn67Eha","aecd46f0c15":"BV1AZ421u7Z7","a0ff9f5e81c":"BV1Tmnw6rEhG","a95cacb7e32":"BV1cynU6FEPc","a7eee70a7b2":"BV1TjH565EqN","ab84a2a0195":"BV1cpHg69EBG","a84cd9caf33":"BV1MaQqBmE8j","a69c0fd5695":"BV1d4411S7Ra","a03c3dafd39":"BV1ujnh6xEbp","a13c1d05f59":"BV1PYx366ELM","af3d5954ee3":"BV1sVpq6BEoh","a6d9c3cf1ba":"BV1ZWHM65Emm","a5938146a54":"BV1DfLR6LEsE","ad7e0596c30":"BV1pNHs6aEGk","abcfc06227a":"BV1GeXSBZENf","a3ffe457e10":"BV11o4y1U7Ev","a5574d306c6":"BV1hbph6PEr8","a77d8e22df9":"BV1Rsap6TESN","a1191ce0cae":"BV1Smpj69E25","a8a1de59e65":"BV1mBHi6BEwP","a894f7f3b23":"BV1c1ar6iEZQ","a6b7167455b":"BV1dSqRYmEKp","a17c8472bfa":"BV1ezWw6oEng","a77f574a959":"BV1XF411L7Jd","a55ba55ec28":"BV1PtnM6UEVP","ac2c6e9d20f":"BV1V54y167Yt","a3844acb4fe":"BV1Zjn86vEbz","addbd2a6c4b":"BV1Pvp46CEpd","ab17a9c6065":"BV1BWxG6vErZ","a97cec085a3":"BV15Cpu65ELz","a0d2f1f1098":"BV1Abpn6WECX","a78fee267a9":"BV1PwppenEg9","ad7b23b1f77":"BV1i9HC6rEeJ","a3059a667c3":"BV1bUBKBtEJd","acc4027c2e1":"BV1cynU6FEPc","ab18013a94e":"BV1VQ4y1q7M6","a249c9215a3":"BV1copy6pEcB","a58c9ac7272":"BV1p9H46qE4A","a13e71d3a6e":"BV1xLHY6oEBh","a8f00d2f049":"BV1RtnR6NETB","a966b149fef":"BV1Hw3Lz4EqH","a33e049cdf7":"BV1YtJv6zEmT","a2dc4edc0ab":"BV1rBpi6aENb","a3e1535ba6c":"BV131wezqEVH","a7d3d8c7d27":"BV1Lr4y1k78f","a59a4fd4b01":"BV1tAnR6HEH1","a0e80477df4":"BV1Lj411m7yK","a87dbab5fc7":"BV1fJ4m1j7su","aa84b3868c6":"BV1hNpD6HESq","af630449f3a":"BV1VRUWBCEcm","af32d230833":"BV1peQgBhEVN","ab236369359":"BV1USak6DEnB","acc2de64600":"BV1hsp76bEVJ","adfa345af9b":"BV137ps67EKY","a37c38060ec":"BV19BnV6jEvy","ab6978ba16e":"BV12Qa66rEu8","af6e7395f68":"BV1QPnS6LEPC","aae5b012b22":"BV1VnWA6fEtu","adc89e8a959":"BV1hZTN6WEfg","a31f4daba4f":"BV17LpJ65EhW","a6116bd654a":"BV1wx411w7AL","a7f1ca67f05":"BV1YedNYnEzs","a7a6ce10e40":"BV1zMHC6GESb","acd947d3c3c":"BV1Dt411t7wB","a3e019020b3":"BV1gf4y1U7i1","a634c83f60e":"BV144j96GEfo","a34057f5857":"BV1MAnw6rESP","a9d472fef51":"BV1zdpM6jEJv","a20e5e40560":"BV13uxuzbEgL","a9dc010fc32":"BV16Nn56ZE9u","a4c0cf967cc":"BV1Abpn6WECX","a027c52210f":"BV1gz4y1f7bf","aa8b088117b":"BV1wi87zmE8x","a9a90505865":"BV186QuBBEAk","ac4597d11ed":"BV1hZ4y1o75c","a6063721f8c":"BV1g94y1Y71E","a75bc077dc5":"BV1zk4y1b72f","a50661cb587":"BV1dg4y1z7Ev","af363873925":"BV1zt4y1i7gx","a11965cdff2":"BV1Ui4y147mW","ad9f60a9f26":"BV1a7tv6dE7b","a5c48cae116":"BV1SYp96fEwx","a768063bb8f":"BV1jpHP68Eff","aaf139bfb5d":"BV18X8u6XEiD","d91fffbcc0e":"BV17QnA6oE5x","d1b06c446a0":"BV18unb6HE7R","d45271a3748":"BV1k9nF6ZEE4","df87c9fcced":"BV1Qit36sE7Q","deee7814867":"BV1dpHP6bE7y","dc193e65dbe":"BV167p26oESR","d8cb0d37489":"BV1MFHP6LEHV","d8d8bdb4280":"BV1EhpE65EB3","df584f1f895":"BV157JQ6HE3q","dc4506033c0":"BV14vp76QEgz","dd8b00a6032":"BV1G8pY63E6W","d0413445176":"BV1YdHT6eERw","dcf20f2f399":"BV16Zpg69Ejn","d8983f04ab5":"BV1BEhz6HEYy","d494c30173c":"BV1y4em6fEVv","d3c960a238c":"BV1xJhf6pELQ","de42798288f":"BV1kru96jEaU","d96912dfb86":"BV1rNtE6fEdf","dbb081a9bb6":"BV1nV411E7RX","ddd9f0865a7":"BV1hPfPBVEqf","dc1c7b77fba":"BV1xCxM6KEam","db67a74f643":"BV1Yrn46QETM","d096da97402":"BV1BnHK6zECt","de1b86c845e":"BV1A4HZ64E9y","d42588a3c2f":"BV1h5VyzZELj","d67d4d43a1c":"BV1dShy6vECn","de9e38229b8":"BV1DTpt6DEFh","d049eb1b23b":"BV1Ne8B6bEx3","de9cc28356e":"BV1LNaq67EDk","d77d0bd6fad":"BV14rhN6BEAb","d0235d6630d":"BV14hjh63EK9","d7cf7d53f5f":"BV1ofhq6jE9Q","d900405c48b":"BV1mTe86UEzs","d6ed479a1e2":"BV1zKHveGEEE","d7bc1113122":"BV1G7ps67EEt","d6629781dad":"BV1g3nM68E48","d357425ce99":"BV1uiobB6Ew2","db721906504":"BV1tq4y1K7QH","d40f2456b02":"BV18xYL6jESv","d99e540aeec":"BV1UHgZ6zETk","d9beaf289c6":"BV187kDBwEfp","db160ae4aa9":"BV1sX8q64ESA","dc84a404858":"BV1bCa76UEfC","d12d4f53754":"BV1e27H6AEdA","d968427864f":"BV1KiEi6FEKL","da1aefb7f8c":"BV162Tr6BEQG","dab4e7d37e8":"BV1DJKWzEEFm","d3780f2d8f6":"BV1D1Th6tEVM","d64d7a176b6":"BV1kxM86jEZQ","d979fe474dc":"BV1XCdMBnE67","d1bd7e0ac54":"BV1HMnE6GEYw","d27d594cb2f":"BV11KVr64EgC","dca18d2ec7b":"BV1peJB6AEha","dccefe0cd7c":"BV1nCp46METc","d9453162fb2":"BV1XCaJ64E2T","da462fc0287":"BV18dN36AEtH","da9e85d8003":"BV1b6HK6dEjK","ddcc7294689":"BV1eGRbBuEET","d2adc0c70aa":"BV1LChB6jEy7","d2edabef350":"BV1vDN46DEXE","da71db7a6ca":"BV1gcxg6CEwt","d560c8da04b":"BV1mXe3zLEgL","d1467e89ffc":"BV1oi4y1g7jX","d3d455f99cb":"BV1VVhk6pEBf","d35191c311e":"BV1rVxM6dEjk","dc394328ee9":"BV1tDen6bEQY","d41433bbca0":"BV1d8eX6wE8B","d171b2ca448":"BV15Ce16gEwc","d3881bc4a39":"BV1Yo4y1R7kf","d897da9ca0e":"BV1Avtv65E7j","d16df750dde":"BV18JHE6ZELc","d5fb4320190":"BV11ax363ESH","d0e577474e6":"BV1xebp6JEMB","d27da989213":"BV1GRVGz3ESQ","dc2a8ef780c":"BV1fs411w7mq","dc4ac0e3904":"BV1B4411L7Ah","d62786b121b":"BV17LTn6uEj8","d5657c9083f":"BV1Uyn36eEgf","de5a468884b":"BV1Js411a7S2","d748568cde4":"BV1Yutk65EUg","d0724e76a9e":"BV1NTHK6EEYj","d50d2757da4":"BV12Q4y1F7JZ","daa655be8e3":"BV1PGHM6XErg","d0ce4403510":"BV1NhHX6EECQ","d00f3ca9e30":"BV1hweu6aEas","d3536b5272d":"BV1VyYN6WEvM","dc9ddd8e9cf":"BV1UM3d6eEpK","d5113126090":"BV1uWMe6PES1","d94550b0f20":"BV1hpgq6EEYM","d84797b2e5f":"BV1LA3T6yEdv","d8f66ad86e0":"BV17L3f64Eiv","dd51d9da0d6":"BV1wX4y1P7UK","dd235c27931":"BV1XVNf6KEH3","d78c48aa6eb":"BV1PhM36cE5y","decb53e30cc":"BV1PZNT6LE1z"}};</script>
+<script>window.DATA_URL="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/index-6200faec48.json";window.DATA_FB="https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/index-6200faec48.json";window.DATA_LOCAL="index-6200faec48.json";window.DATA=null;</script>
 <script>/* 共用交互：首页与媒体库页都加载这一份（由 _headers 长缓存） */
 (function () {
-  'use strict';
-  var DATA = window.DATA || {};
-  var $ = function (s) { return document.querySelector(s); };
-  var PAGE = document.body.dataset.page || 'home';
-  var DAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-  var TODAY = DAYS[new Date().getDay()];
-  var WDFILTER = PAGE === 'home' ? TODAY : '';
-  var ALL = [];
-  var ROW_CAP = 24;   // 轨道只渲前 24 张：一次挂 300+ 张远程海报会被 CDN 限流
-
-  /* 区域：/cdn-cgi/trace 在 Pages 上不给 loc，只能用客户端信号。
-     时区优先（VPN 下比语言准），语言兜底。 */
-  var REGION_AUTO = (function () {
-    try {
-      var tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || '');
-      if (/^Asia\/(Shanghai|Chongqing|Urumqi|Harbin)$/.test(tz)) return true;
-      if (tz) return false;
-      return /^zh(-|$)/i.test(navigator.language || '');
-    } catch (e) { return false; }
-  })();
-  var RMODE = (function () { try { return localStorage.getItem('bgm_region') || 'auto'; } catch (e) { return 'auto'; } })();
-  function useCN() { return RMODE === 'cn' ? true : RMODE === 'intl' ? false : REGION_AUTO; }
-  function setRegion(mode) {
-    RMODE = mode;
-    try { localStorage.setItem('bgm_region', mode); } catch (e) {}
-    renderRegionSwitch();
-    if (PAGE === 'home') renderHome(); else renderLibrary();
-  }
-  function renderRegionSwitch() {
-    var box = $('#regionsw');
-    if (!box) return;
-    box.innerHTML = '<span style="opacity:.7">线路</span>';
-    [['auto', '自动'], ['cn', '国内'], ['intl', '海外']].forEach(function (p) {
-      var el = document.createElement('span');
-      el.className = 'r' + (RMODE === p[0] ? ' on' : '');
-      el.textContent = p[1];
-      el.onclick = function (e) { e.stopPropagation(); setRegion(p[0]); };
-      box.appendChild(el);
-    });
-    var hint = document.createElement('span');
-    hint.style.cssText = 'opacity:.55;font-size:11px';
-    hint.textContent = '（' + (useCN() ? 'B 站' : '预告') + '）';
-    box.appendChild(hint);
-  }
-
-  /* ---------- 追番（本地 + GitHub Gist 可选同步） ---------- */
-  var FOLLOW_KEY = 'bgm_follow_v1', GIST_KEY = 'bgm_gist_cfg';
-  function follows() {
-    try { return JSON.parse(localStorage.getItem(FOLLOW_KEY) || '[]'); } catch (e) { return []; }
-  }
-  function saveFollows(list) {
-    localStorage.setItem(FOLLOW_KEY, JSON.stringify(list));
-    document.dispatchEvent(new CustomEvent('follow-change'));
-  }
-  function fkey(it) { return String(it.key || it.id || it.name); }
-  function isFollowed(k) { return follows().indexOf(k) >= 0; }
-  function toggleFollow(k) {
-    var list = follows(), i = list.indexOf(k);
-    if (i >= 0) list.splice(i, 1); else list.push(k);
-    saveFollows(list);
-    return i < 0;
-  }
-  function gistCfg() {
-    try { return JSON.parse(localStorage.getItem(GIST_KEY) || '{}'); } catch (e) { return {}; }
-  }
-  function pushGist() {
-    var cfg = gistCfg();
-    if (!cfg.token) { alert('先在「追番同步」里填 GitHub Token（只存在本机浏览器）'); return; }
-    var body = {
-      description: '番组计划 · 我的追番',
-      public: true,
-      files: { 'bgm-follow.json': { content: JSON.stringify({ updated: new Date().toISOString(), list: follows() }, null, 1) } }
-    };
-    var url = cfg.gistId ? 'https://api.github.com/gists/' + cfg.gistId : 'https://api.github.com/gists';
-    fetch(url, {
-      method: cfg.gistId ? 'PATCH' : 'POST',
-      headers: { 'Authorization': 'token ' + cfg.token, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    }).then(function (r) { return r.json(); }).then(function (d) {
-      if (d.id) { cfg.gistId = d.id; localStorage.setItem(GIST_KEY, JSON.stringify(cfg)); alert('已同步到 Gist：' + d.html_url); }
-      else alert('同步失败：' + (d.message || '未知错误'));
-    }).catch(function (e) { alert('同步失败：' + e.message); });
-  }
-  function pullGist() {
-    var cfg = gistCfg();
-    if (!cfg.token || !cfg.gistId) { alert('先填 Token 并推送一次，才能拉取'); return; }
-    fetch('https://api.github.com/gists/' + cfg.gistId, { headers: { 'Authorization': 'token ' + cfg.token } })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        var f = (d.files || {})['bgm-follow.json'];
-        if (!f) return alert('Gist 里没有 bgm-follow.json');
-        var data = JSON.parse(f.content || '{}');
-        saveFollows((data.list || []).map(String));
-        alert('已从 Gist 恢复 ' + (data.list || []).length + ' 条追番');
-        location.reload();
-      }).catch(function (e) { alert('拉取失败：' + e.message); });
-  }
-  function exportFollows() {
-    var blob = new Blob([JSON.stringify({ list: follows() }, null, 1)], { type: 'application/json' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'bgm-follow.json'; a.click();
-  }
-  function importFollows() {
-    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json';
-    inp.onchange = function () {
-      var f = inp.files[0]; if (!f) return;
-      var rd = new FileReader();
-      rd.onload = function () {
-        try {
-          var d = JSON.parse(rd.result);
-          saveFollows(((d.list || d || [])).map(String));
-          alert('已导入 ' + follows().length + ' 条'); location.reload();
-        } catch (e) { alert('文件格式不对'); }
-      };
-      rd.readAsText(f);
-    };
-    inp.click();
-  }
-
-
-  var FMT = { TV: 'TV', TV_SHORT: '短片', ONA: '网络放送', OVA: 'OVA', MOVIE: '剧场版',
-              SPECIAL: '特别篇', MUSIC: '音乐' };
-  var ST = { RELEASING: '连载中', FINISHED: '已完结', NOT_YET_RELEASED: '未播出', CANCELLED: '已取消' };
-
-  function countdown(ts) {
-    var d = ts * 1000 - Date.now();
-    if (d <= 0) return '待更新';
-    var h = Math.floor(d / 3600000);
-    if (h >= 24) return Math.floor(h / 24) + ' 天后更新';
-    if (h >= 1) return h + ' 小时后更新';
-    return Math.max(1, Math.floor(d / 60000)) + ' 分钟后更新';
-  }
-
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
-
-  function imgHTML(it, cls) {
-    if (!it.poster) return '<div class="' + (cls || 'ph') + '">🎬</div>';
-    var fb = it.pf ? ' data-fb="' + esc(it.pf) + '" onerror="__fb(this)"' : '';
-    return '<img class="' + (cls || '') + '" src="' + esc(it.poster) + '"' + fb
-      + ' loading="lazy" decoding="async" alt="">';
-  }
-
-  /* 海报三级回退：jsDelivr → gh-proxy → 同源 Pages（顺序写在 data-fb 里，用 | 分隔） */
-  window.__fb = function (img) {
-    var q = (img.dataset.fb || '').split('|').filter(Boolean);
-    if (!q.length) { img.onerror = null; return; }
-    img.src = q.shift();
-    img.dataset.fb = q.join('|');
-  };
-
-  function bvidOf(it) {
-    if (it.id && DATA.bili && DATA.bili[it.id]) return DATA.bili[it.id];
-    if (it.key && DATA.bili_fresh && DATA.bili_fresh[it.key]) return DATA.bili_fresh[it.key];
-    return '';
-  }
-
-  function cardHTML(it) {
-    var bv = bvidOf(it);
-    var html = '<div class="card" data-key="' + esc(it.key || it.id || it.name) + '">';
-    html += '<div class="pw">' + imgHTML(it)
-      + (it.rating ? '<span class="rate">★ ' + it.rating.toFixed(1) + '</span>' : '')
-      + (it.episodes ? '<span class="ep">' + it.episodes + ' 集</span>' : '')
-      + (bv ? '<span class="bili">B站</span>' : '')
-      + (it.trailer ? '<span class="trailer-mark">预告</span>' : '')
-      + (it.st === 'RELEASING' ? '<span class="ep" style="left:8px;right:auto;bottom:auto;top:8px;background:rgba(240,145,153,.92);color:#181820">连载</span>' : '')
-      + '</div>';
-    var k = fkey(it), fv = isFollowed(k);
-    html += '<span class="fav' + (fv ? ' on' : '') + '" data-fav="' + esc(k) + '" title="追番">'
-      + (fv ? '★' : '☆') + '</span>';
-    html += '<div class="t">' + esc(it.name) + '</div>';
-    var sub = [];
-    if (it.st === 'RELEASING' && it.next_at) sub.push(countdown(it.next_at));
-    else if (it.type === 'S' && it.wd && it.wd !== '-') sub.push(it.wd);
-    if (it.year) sub.push(it.year);
-    if (it.air) sub.push(it.air.slice(5));
-    html += '<div class="sub2">' + sub.filter(Boolean).map(esc).join(' · ') + '</div>';
-    return html + '</div>';
-  }
-
-  function bindCards(root) {
-    root.querySelectorAll('.card').forEach(function (el) {
-      el.onclick = function (ev) {
-        var fv = ev.target.closest ? ev.target.closest('.fav') : null;
-        if (fv) {
-          ev.stopPropagation();
-          var on = toggleFollow(fv.dataset.fav);
-          fv.classList.toggle('on', on);
-          fv.textContent = on ? '★' : '☆';
-          if (PAGE === 'home' && location.hash !== 'skip') renderHome();
-          return;
-        }
-        var k = el.dataset.key;
-        var it = ALL.find(function (x) { return String(x.key || x.id || x.name) === k; });
-        if (it) openModal(it);
-      };
-    });
-  }
-
-  function fill(el, items, chunk) {
-    if (!el) return;
-    el.innerHTML = '';
-    ALL = ALL.concat(items);
-    var i = 0;
-    (function step() {
-      var end = Math.min(i + (chunk || 40), items.length);
-      var html = '';
-      for (; i < end; i++) html += cardHTML(items[i]);
-      el.insertAdjacentHTML('beforeend', html);
-      bindCards(el);
-      if (i < items.length) requestAnimationFrame(step);
-    })();
-  }
-
-  /* ---------- 弹窗 ---------- */
-  function openModal(it) {
-    var isFresh = it.kind === 'fresh';
-    var bv = bvidOf(it);
-    var h = '<span class="x" onclick="closeM()">×</span><div class="mtop">'
-      + '<div class="mp">' + imgHTML(it, '') + '</div><div class="mb">';
-    h += '<h3>' + esc(it.name) + '</h3><div class="meta">';
-    if (it.rating) h += '<span class="pill" style="color:var(--star)">★ ' + it.rating.toFixed(1) + '</span>';
-    if (it.year) h += '<span class="pill">' + esc(it.year) + '</span>';
-    if (it.episodes) h += '<span class="pill">' + it.episodes + ' 集</span>';
-    if (it.wd && it.wd !== '-') h += '<span class="pill">' + esc(it.wd) + '</span>';
-    if (it.air) h += '<span class="pill">' + esc(it.air) + '</span>';
-    if (it.st) h += '<span class="pill" style="color:var(--accent)">' + esc(ST[it.st] || it.st) + '</span>';
-    if (it.fm) h += '<span class="pill">' + esc(FMT[it.fm] || it.fm) + '</span>';
-    if (it.du) h += '<span class="pill">' + it.du + ' 分钟</span>';
-    if (it.studio) h += '<span class="pill">' + esc(it.studio) + '</span>';
-    if (it.st === 'RELEASING' && it.next_at) h += '<span class="pill" style="color:var(--star)">' + countdown(it.next_at) + '</span>';
-    (it.genres || []).slice(0, 4).forEach(function (g) { h += '<span class="pill">' + esc(g) + '</span>'; });
-    h += '</div>';
-    if (it.overview) h += '<p class="plot">' + esc(it.overview) + '</p>';
-    if ((it.rel || []).length) {
-      h += '<div class="relbox"><div class="relhead">关联作品</div>';
-      (it.rel || []).forEach(function (r) {
-        if (!r || !r.n) return;
-        h += '<a class="relchip" target="_blank" rel="noopener" href="' + esc(r.u || '#') + '">'
-          + esc(r.n) + (r.f ? '<em>' + esc(FMT[r.f] || r.f) + '</em>' : '') + '</a>';
-      });
-      h += '</div>';
-    }
-    h += '<div class="acts">';
-    var cn = useCN();
-    if (bv) {
-      h += '<span class="btn' + (cn ? ' pri' : '') + '" onclick="playBili(&#39;' + esc(bv) + '&#39;,' + (cn ? 'true' : 'false') + ')">▶ B站播放</span>';
-    }
-    if (it.trailer) {
-      h += '<span class="btn' + (bv && cn ? '' : ' pri') + '" onclick="playTrailer(&#39;' + esc(it.trailer) + '&#39;)">▶ 预告</span>';
-    }
-    h += '<span class="pill" style="align-self:center;color:var(--dim)">' + (cn ? '国内线路 · 优先 B 站' : '海外线路 · 优先预告') + '</span>';
-    if (!isFresh && it.id) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc((window.JF || 'http://127.0.0.1:8100')) + '/web/#/details?id=' + esc(it.id) + '">Jellyfin</a>';
-    if (it.url) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(it.url) + '">来源页</a>';
-    if (it.name) h += '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name) + '">B站搜索</a>';
-    h += '</div></div></div><div class="trailer" id="trailer"></div>';
-    $('#modal').innerHTML = h;
-    $('#mask').classList.add('on');
-    document.body.style.overflow = 'hidden';
-    if (useCN() && bv) playBili(bv, true);
-    else if (it.trailer) playTrailer(it.trailer);
-  }
-
-  function playerHost() {
-    var t = $('#trailer');
-    if (t) return t;
-    var lb = $('#lightbox');
-    if (!lb) {
-      lb = document.createElement('div');
-      lb.id = 'lightbox';
-      lb.innerHTML = '<div class="lb-inner"><span class="lb-x" onclick="closeLB()">×</span>'
-        + '<div id="trailer"></div></div>';
-      lb.onclick = function (e) { if (e.target.id === 'lightbox') closeLB(); };
-      document.body.appendChild(lb);
-      /* #trailer 在灯箱里要撑满 */
-      $('#trailer').style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
-    }
-    lb.classList.add('on');
-    document.body.style.overflow = 'hidden';
-    return $('#trailer');
-  }
-  function closeLB() {
-    var lb = $('#lightbox');
-    if (lb) { lb.classList.remove('on'); var t = $('#trailer'); if (t) t.innerHTML = ''; }
-    document.body.style.overflow = '';
-  }
-  window.closeLB = closeLB;
-
-  function playTrailer(vid) {
-    playerHost().innerHTML = '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(vid)
-      + '?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
-  }
-
-  function playBili(bvid, auto) {
-    playerHost().innerHTML = '<iframe src="//player.bilibili.com/player.html?bvid=' + encodeURIComponent(bvid)
-      + '&page=1&high_quality=1&danmaku=0&autoplay=' + (auto ? '1' : '0')
-      + '" allowfullscreen scrolling="no" allow="autoplay; fullscreen"></iframe>';
-  }
-
-  function closeM() {
-    $('#mask').classList.remove('on');
-    $('#trailer').innerHTML = '';
-    document.body.style.overflow = '';
-  }
-
-  /* ---------- 大图轮换（自动 + 拖拽/滑动 + 圆点） ---------- */
-  var heroTimer = null, heroIdx = 0, heroN = 0;
-  function showSlide(n) {
-    if (!heroN) return;
-    heroIdx = (n + heroN) % heroN;
-    document.querySelectorAll('#hero .slide').forEach(function (el, i) {
-      el.classList.toggle('on', i === heroIdx);
-    });
-    document.querySelectorAll('#hero .dots i').forEach(function (el, i) {
-      el.classList.toggle('on', i === heroIdx);
-    });
-  }
-  function initHero() {
-    var hero = $('#hero');
-    if (!hero) return;
-    heroN = hero.querySelectorAll('.slide').length;
-    if (heroN < 2) return;
-    clearInterval(heroTimer);
-    heroTimer = setInterval(function () { showSlide(heroIdx + 1); }, 6000);
-    hero.querySelectorAll('.dots i').forEach(function (d) {
-      d.onclick = function () { showSlide(+d.dataset.dot); restartHero(); };
-    });
-    var x0 = null;
-    hero.addEventListener('pointerdown', function (e) { x0 = e.clientX; hero.classList.add('grab'); });
-    hero.addEventListener('pointerup', function (e) {
-      hero.classList.remove('grab');
-      if (x0 === null) return;
-      var dx = e.clientX - x0; x0 = null;
-      if (Math.abs(dx) > 60) { showSlide(heroIdx + (dx < 0 ? 1 : -1)); restartHero(); }
-    });
-    hero.addEventListener('pointerleave', function () { x0 = null; hero.classList.remove('grab'); });
-    hero.addEventListener('mouseenter', function () { clearInterval(heroTimer); });
-    hero.addEventListener('mouseleave', function () { restartHero(); });
-    hero.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
-    hero.addEventListener('touchend', function (e) {
-      if (x0 === null) return;
-      var dx = e.changedTouches[0].clientX - x0; x0 = null;
-      if (Math.abs(dx) > 45) { showSlide(heroIdx + (dx < 0 ? 1 : -1)); restartHero(); }
-    });
-  }
-  function restartHero() {
-    clearInterval(heroTimer);
-    if (heroN > 1) heroTimer = setInterval(function () { showSlide(heroIdx + 1); }, 6000);
-  }
-
-  /* ---------- 首页 ---------- */
-  function renderHome() {
-    var fa = (DATA.fresh && DATA.fresh.anime) || [];
-    var fm = (DATA.fresh && DATA.fresh.movies) || [];
-    /* 大图轮换：取有 banner 的前 6 部，自动 6s 切换 + 鼠标拖拽 / 触摸滑动 */
-    var slides = fa.filter(function (x) { return x.banner; }).slice(0, 6);
-    var out = '';
-    if (slides.length) {
-      out += '<section class="hero" id="hero">';
-      slides.forEach(function (it, i) {
-        out += '<div class="slide' + (i === 0 ? ' on' : '') + '" data-i="' + i + '">'
-          + '<div class="hero-bg" style="background-image:url(\'' + esc(it.banner || it.poster || '') + '\')"></div>'
-          + '<div class="hero-info"><div class="hero-tag">本季新番 · ' + esc((DATA.fresh.season || '').split(' ')[0] || '') + '</div>'
-          + '<h1>' + esc(it.name) + '</h1><div class="hero-meta">';
-        if (it.rating) out += '<span><b>★ ' + it.rating.toFixed(1) + '</b></span>';
-        if (it.episodes) out += '<span>' + it.episodes + ' 集</span>';
-        if (it.fm) out += '<span>' + esc(FMT[it.fm] || it.fm) + '</span>';
-        if (it.st === 'RELEASING' && it.next_at) out += '<span>' + countdown(it.next_at) + '</span>';
-        out += '</div><p>' + esc((it.overview || '').slice(0, 180)) + '</p><div class="hero-btns">';
-        if (it.trailer) out += '<span class="hbtn primary" onclick="playTrailer(\'' + esc(it.trailer) + '\')">▶ 播放预告</span>';
-        out += '<span class="hbtn ghost" data-open="' + esc(fkey(it)) + '">详情</span>';
-        out += '</div></div></div>';
-      });
-      out += '<div class="dots">' + slides.map(function (_, i) {
-        return '<i class="' + (i === 0 ? ' on' : '') + '" data-dot="' + i + '"></i>';
-      }).join('') + '</div></section>';
-    }
-
-    var fl = follows();
-    if (fl.length) {
-      out += '<section class="block" id="myfollow"><div class="bhead"><h2>我的追番</h2><span>' + fl.length + ' 部</span>'
-        + '<span class="syncbar"><a data-act="push">同步 Gist</a><a data-act="pull">恢复</a>'
-        + '<a data-act="export">导出</a><a data-act="import">导入</a></span></div>'
-        + '<div class="row" id="r-follow"></div></section>';
-    }
-
-    out += '<section class="block" id="sched"><div class="bhead"><h2>番剧表</h2><span>按放送日筛选</span></div>'
-      + '<div class="wdbar" id="wdbar"></div><div class="grid" id="g-sched"></div></section>';
-    out += '<section class="block"><div class="bhead"><h2>本季新番</h2><span>' + fa.length + ' 部</span></div><div class="row" id="r-anime"></div></section>';
-    out += '<section class="block"><div class="bhead"><h2>新片</h2><span>' + fm.length + ' 部</span></div><div class="row" id="r-movie"></div></section>';
-
-    $('#main').innerHTML = out;
-    ALL = [];
-    initHero();
-    /* 先画 hero + 番剧表；两条轨道用空闲时间补，避免首屏被 48 张远程海报堵住 */
-    var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 60); };
-    later(function () {
-      fill($('#r-anime'), fa.slice(0, ROW_CAP), ROW_CAP);
-      fill($('#r-movie'), fm.slice(0, ROW_CAP), ROW_CAP);
-    });
-    if (follows().length) {
-      var pool = fa.concat(fm);
-      fill($('#r-follow'), pool.filter(function (x) { return isFollowed(fkey(x)); }), 24);
-    }
-    document.querySelectorAll('[data-open]').forEach(function (el) {
-      el.onclick = function () {
-        var it = ALL.find(function (x) { return fkey(x) === el.dataset.open; });
-        if (it) openModal(it);
-      };
-    });
-    document.querySelectorAll('.syncbar a').forEach(function (a) {
-      a.onclick = function () {
-        var act = a.dataset.act;
-        if (act === 'push') pushGist();
-        else if (act === 'pull') pullGist();
-        else if (act === 'export') exportFollows();
-        else importFollows();
-      };
-    });
-
-    var days = ['全部'].concat(DAYS.slice(1), DAYS.slice(0, 1));
-    var bar = $('#wdbar');
-    days.forEach(function (d) {
-      var n = d === '全部' ? fa.length : fa.filter(function (x) { return x.wd === d; }).length;
-      var el = document.createElement('span');
-      el.className = 'wd-tab' + ((d === '全部' && !WDFILTER) || d === WDFILTER ? ' on' : '');
-      el.textContent = d + ' ' + n;
-      el.onclick = function () { WDFILTER = d === '全部' ? '' : d; renderSched(fa); syncWd(); };
-      bar.appendChild(el);
-    });
-    renderSched(fa);
-    setCnt(fa.length + fm.length);
-  }
-
-  function syncWd() {
-    document.querySelectorAll('#wdbar .wd-tab').forEach(function (el) {
-      var label = el.textContent.split(' ')[0];
-      el.classList.toggle('on', WDFILTER ? label === WDFILTER : label === '全部');
-    });
-  }
-
-  function renderSched(fa) {
-    var list = WDFILTER ? fa.filter(function (x) { return x.wd === WDFILTER; }) : fa;
-    var g = $('#g-sched');
-    g.innerHTML = '';
-    ALL = ALL.filter(function (x) { return x.kind !== 'fresh' || x.type !== 'S' || !x._sched; });
-    list.forEach(function (x) { x._sched = true; });
-    fill(g, list, 30);
-    if (!list.length) g.innerHTML = '<div class="empty">这一天没有放送</div>';
-  }
-
-  /* ---------- 媒体库 ---------- */
-  function renderLibrary() {
-    var lib = DATA.lib || [];
-    var series = lib.filter(function (x) { return x.type === 'S'; });
-    var movies = lib.filter(function (x) { return x.type !== 'S'; });
-    var out = '<section class="block"><div class="bhead"><h2>我的媒体库</h2><span>番剧 ' + series.length + ' · 电影 ' + movies.length + '</span></div>'
-      + '<div class="tabs" id="typebar"></div><div class="grid" id="g"></div></section>';
-    $('#main').innerHTML = out;
-    ALL = [];
-    setCnt(lib.length);
-    renderType('all', lib);
-  }
-
-  function renderType(kind, lib) {
-    lib = lib || (DATA.lib || []);
-    var list = kind === 'S' ? lib.filter(function (x) { return x.type === 'S'; })
-      : kind === 'M' ? lib.filter(function (x) { return x.type !== 'S'; }) : lib;
-    var bar = $('#typebar');
-    if (bar && !bar.dataset.built) {
-      bar.dataset.built = '1';
-      [['all', '全部'], ['S', '番剧'], ['M', '电影']].forEach(function (p) {
-        var el = document.createElement('span');
-        el.className = 'wd-tab' + (p[0] === kind ? ' on' : '');
-        el.textContent = p[1];
-        el.onclick = function () {
-          bar.querySelectorAll('.wd-tab').forEach(function (x) { x.classList.remove('on'); });
-          el.classList.add('on');
-          ALL = [];
-          renderType(p[0], lib);
-        };
-        bar.appendChild(el);
-      });
-    }
-    fill($('#g'), list, 60);
-    if (!list.length) $('#g').innerHTML = '<div class="empty">没有内容</div>';
-  }
-
-  /* ---------- 搜索 ---------- */
-  function bindSearch() {
-    var q = $('#q');
-    if (!q) return;
-    q.oninput = function () {
-      var kw = q.value.trim().toLowerCase();
-      if (!kw) { PAGE === 'home' ? renderHome() : renderLibrary(); return; }
-      var pool = PAGE === 'home'
-        ? [].concat((DATA.fresh && DATA.fresh.anime) || [], (DATA.fresh && DATA.fresh.movies) || [])
-        : (DATA.lib || []);
-      var hits = pool.filter(function (x) { return (x.name || '').toLowerCase().indexOf(kw) >= 0; });
-      ALL = [];
-      var host = PAGE === 'home' ? $('#g-sched') : $('#g');
-      if (!host) return;
-      host.innerHTML = '';
-      fill(host, hits, 60);
-      if (!hits.length) host.innerHTML = '<div class="empty">没有匹配</div>';
-      setCnt(hits.length);
-    };
-  }
-
-  function setCnt(n) {
-    var el = $('#cnt');
-    if (el) el.textContent = n + ' 部';
-  }
-
-  /* ---------- 启动 ---------- */
-  window.openModal = openModal;
-  window.closeM = closeM;
-  window.playTrailer = playTrailer;
-  window.playBili = playBili;
-
-  document.addEventListener('DOMContentLoaded', function () {
-    window.JF = window.JF || 'http://127.0.0.1:8100';
-    $('#mask').onclick = function (e) { if (e.target.id === 'mask') closeM(); };
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeM(); });
-    var top = $('#topbar');
-    window.addEventListener('scroll', function () {
-      top.classList.toggle('solid', window.scrollY > 12);
-    }, { passive: true });
-    var sw = document.createElement('div');
-    sw.className = 'regionsw'; sw.id = 'regionsw';
-    document.querySelector('.tw').appendChild(sw);
-    renderRegionSwitch();
-    bindSearch();
-    if (PAGE === 'home') renderHome(); else renderLibrary();
-  });
+'use strict';
+var DATA = window.DATA || {};
+var $ = function (s) { return document.querySelector(s); };
+var PAGE = document.body.dataset.page || 'home';
+var DAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+var TODAY = DAYS[new Date().getDay()];
+var WDFILTER = PAGE === 'home' ? TODAY : '';
+var ALL = [];
+var SORT = (function(){ try { return localStorage.getItem('bgm_sort') || 'rating'; } catch(e){ return 'rating'; } })();
+var STATUS_F = '';   // '' | RELEASING | FINISHED
+function bySort(list) {
+var a = list.slice();
+if (SORT === 'rating') a.sort(function (x, y) { return (y.rating || 0) - (x.rating || 0); });
+else if (SORT === 'new') a.sort(function (x, y) { return String(y.air || '').localeCompare(String(x.air || '')); });
+else if (SORT === 'name') a.sort(function (x, y) { return String(x.name).localeCompare(String(y.name), 'zh'); });
+return a;
+}
+function byStatus(list) {
+return STATUS_F ? list.filter(function (x) { return x.st === STATUS_F; }) : list;
+}
+var ROW_CAP = 24;   // 轨道只渲前 24 张：一次挂 300+ 张远程海报会被 CDN 限流
+/* 区域：/cdn-cgi/trace 在 Pages 上不给 loc，只能用客户端信号。
+时区优先（VPN 下比语言准），语言兜底。 */
+var REGION_AUTO = (function () {
+try {
+var tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || '');
+if (/^Asia\/(Shanghai|Chongqing|Urumqi|Harbin)$/.test(tz)) return true;
+if (tz) return false;
+return /^zh(-|$)/i.test(navigator.language || '');
+} catch (e) { return false; }
 })();
-</script>
+var RMODE = (function () { try { return localStorage.getItem('bgm_region') || 'auto'; } catch (e) { return 'auto'; } })();
+function useCN() { return RMODE === 'cn' ? true : RMODE === 'intl' ? false : REGION_AUTO; }
+function setRegion(mode) {
+RMODE = mode;
+try { localStorage.setItem('bgm_region', mode); } catch (e) {}
+renderRegionSwitch();
+if (PAGE === 'home') renderHome(); else renderLibrary();
+}
+function renderRegionSwitch() {
+var box = $('#regionsw');
+if (!box) return;
+box.innerHTML = '<span style="opacity:.7">线路</span>';
+[['auto', '自动'], ['cn', '国内'], ['intl', '海外']].forEach(function (p) {
+var el = document.createElement('span');
+el.className = 'r' + (RMODE === p[0] ? ' on' : '');
+el.textContent = p[1];
+el.onclick = function (e) { e.stopPropagation(); setRegion(p[0]); };
+box.appendChild(el);
+});
+var hint = document.createElement('span');
+hint.style.cssText = 'opacity:.55;font-size:11px';
+hint.textContent = '（' + (useCN() ? 'B 站' : '预告') + '）';
+box.appendChild(hint);
+}
+/* ---------- 追番（本地 + GitHub Gist 可选同步） ---------- */
+var FOLLOW_KEY = 'bgm_follow_v1', GIST_KEY = 'bgm_gist_cfg';
+function follows() {
+try { return JSON.parse(localStorage.getItem(FOLLOW_KEY) || '[]'); } catch (e) { return []; }
+}
+function saveFollows(list) {
+localStorage.setItem(FOLLOW_KEY, JSON.stringify(list));
+document.dispatchEvent(new CustomEvent('follow-change'));
+}
+function fkey(it) { return String(it.key || it.id || it.name); }
+function isFollowed(k) { return follows().indexOf(k) >= 0; }
+function toggleFollow(k) {
+var list = follows(), i = list.indexOf(k);
+if (i >= 0) list.splice(i, 1); else list.push(k);
+saveFollows(list);
+return i < 0;
+}
+function gistCfg() {
+try { return JSON.parse(localStorage.getItem(GIST_KEY) || '{}'); } catch (e) { return {}; }
+}
+function pushGist() {
+var cfg = gistCfg();
+if (!cfg.token) { alert('先在「追番同步」里填 GitHub Token（只存在本机浏览器）'); return; }
+var body = {
+description: '番组计划 · 我的追番',
+public: true,
+files: { 'bgm-follow.json': { content: JSON.stringify({ updated: new Date().toISOString(), list: follows() }, null, 1) } }
+};
+var url = cfg.gistId ? 'https://api.github.com/gists/' + cfg.gistId : 'https://api.github.com/gists';
+fetch(url, {
+method: cfg.gistId ? 'PATCH' : 'POST',
+headers: { 'Authorization': 'token ' + cfg.token, 'Content-Type': 'application/json' },
+body: JSON.stringify(body)
+}).then(function (r) { return r.json(); }).then(function (d) {
+if (d.id) { cfg.gistId = d.id; localStorage.setItem(GIST_KEY, JSON.stringify(cfg)); alert('已同步到 Gist：' + d.html_url); }
+else alert('同步失败：' + (d.message || '未知错误'));
+}).catch(function (e) { alert('同步失败：' + e.message); });
+}
+function pullGist() {
+var cfg = gistCfg();
+if (!cfg.token || !cfg.gistId) { alert('先填 Token 并推送一次，才能拉取'); return; }
+fetch('https://api.github.com/gists/' + cfg.gistId, { headers: { 'Authorization': 'token ' + cfg.token } })
+.then(function (r) { return r.json(); })
+.then(function (d) {
+var f = (d.files || {})['bgm-follow.json'];
+if (!f) return alert('Gist 里没有 bgm-follow.json');
+var data = JSON.parse(f.content || '{}');
+saveFollows((data.list || []).map(String));
+alert('已从 Gist 恢复 ' + (data.list || []).length + ' 条追番');
+location.reload();
+}).catch(function (e) { alert('拉取失败：' + e.message); });
+}
+function exportFollows() {
+var blob = new Blob([JSON.stringify({ list: follows() }, null, 1)], { type: 'application/json' });
+var a = document.createElement('a');
+a.href = URL.createObjectURL(blob); a.download = 'bgm-follow.json'; a.click();
+}
+function importFollows() {
+var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json';
+inp.onchange = function () {
+var f = inp.files[0]; if (!f) return;
+var rd = new FileReader();
+rd.onload = function () {
+try {
+var d = JSON.parse(rd.result);
+saveFollows(((d.list || d || [])).map(String));
+alert('已导入 ' + follows().length + ' 条'); location.reload();
+} catch (e) { alert('文件格式不对'); }
+};
+rd.readAsText(f);
+};
+inp.click();
+}
+var FMT = { TV: 'TV', TV_SHORT: '短片', ONA: '网络放送', OVA: 'OVA', MOVIE: '剧场版',
+SPECIAL: '特别篇', MUSIC: '音乐' };
+var ST = { RELEASING: '连载中', FINISHED: '已完结', NOT_YET_RELEASED: '未播出', CANCELLED: '已取消' };
+function countdown(ts) {
+var d = ts * 1000 - Date.now();
+if (d <= 0) return '待更新';
+var h = Math.floor(d / 3600000);
+if (h >= 24) return Math.floor(h / 24) + ' 天后更新';
+if (h >= 1) return h + ' 小时后更新';
+return Math.max(1, Math.floor(d / 60000)) + ' 分钟后更新';
+}
+function esc(s) {
+return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+});
+}
+function imgHTML(it, cls) {
+if (!it.poster) return '<div class="' + (cls || 'ph') + '">🎬</div>';
+var fb = it.pf ? ' data-fb="' + esc(it.pf) + '" onerror="__fb(this)"' : '';
+return '<img class="' + (cls || '') + '" src="' + esc(it.poster) + '"' + fb
++ ' loading="lazy" decoding="async" alt="">';
+}
+/* 海报三级回退：jsDelivr → gh-proxy → 同源 Pages（顺序写在 data-fb 里，用 | 分隔） */
+window.__fb = function (img) {
+var q = (img.dataset.fb || '').split('|').filter(Boolean);
+if (!q.length) { img.onerror = null; return; }
+img.src = q.shift();
+img.dataset.fb = q.join('|');
+};
+function bvidOf(it) {
+if (it.id && DATA.bili && DATA.bili[it.id]) return DATA.bili[it.id];
+if (it.key && DATA.bili_fresh && DATA.bili_fresh[it.key]) return DATA.bili_fresh[it.key];
+return '';
+}
+function cardHTML(it) {
+var bv = bvidOf(it);
+var html = '<div class="card" data-key="' + esc(it.key || it.id || it.name) + '">';
+html += '<div class="pw">' + imgHTML(it)
++ (it.rating ? '<span class="rate">★ ' + it.rating.toFixed(1) + '</span>' : '')
++ (it.episodes ? '<span class="ep">' + it.episodes + ' 集</span>' : '')
++ (bv ? '<span class="bili">B站</span>' : '')
++ (it.trailer ? '<span class="trailer-mark">预告</span>' : '')
++ (it.st === 'RELEASING' ? '<span class="ep" style="left:8px;right:auto;bottom:auto;top:8px;background:rgba(240,145,153,.92);color:#181820">连载</span>' : '')
++ '</div>';
+var k = fkey(it), fv = isFollowed(k);
+html += '<span class="fav' + (fv ? ' on' : '') + '" data-fav="' + esc(k) + '" title="追番">'
++ (fv ? '★' : '☆') + '</span>';
+html += '<div class="t">' + esc(it.name) + '</div>';
+var sub = [];
+if (it.st === 'RELEASING' && it.next_at) sub.push(countdown(it.next_at));
+else if (it.type === 'S' && it.wd && it.wd !== '-') sub.push(it.wd);
+if (it.year) sub.push(it.year);
+if (it.air) sub.push(it.air.slice(5));
+html += '<div class="sub2">' + sub.filter(Boolean).map(esc).join(' · ') + '</div>';
+return html + '</div>';
+}
+function bindCards(root) {
+root.querySelectorAll('.card').forEach(function (el) {
+el.onclick = function (ev) {
+var fv = ev.target.closest ? ev.target.closest('.fav') : null;
+if (fv) {
+ev.stopPropagation();
+var on = toggleFollow(fv.dataset.fav);
+fv.classList.toggle('on', on);
+fv.textContent = on ? '★' : '☆';
+if (PAGE === 'home' && location.hash !== 'skip') renderHome();
+return;
+}
+var k = el.dataset.key;
+var it = ALL.find(function (x) { return String(x.key || x.id || x.name) === k; });
+if (it) openModal(it);
+};
+});
+}
+function fill(el, items, chunk) {
+if (!el) return;
+el.innerHTML = '';
+ALL = ALL.concat(items);
+var i = 0;
+(function step() {
+var end = Math.min(i + (chunk || 40), items.length);
+var html = '';
+for (; i < end; i++) html += cardHTML(items[i]);
+el.insertAdjacentHTML('beforeend', html);
+bindCards(el);
+if (i < items.length) requestAnimationFrame(step);
+})();
+}
+/* ---------- 弹窗 ---------- */
+function openModal(it) {
+var isFresh = it.kind === 'fresh';
+var bv = bvidOf(it);
+var h = '<span class="x" onclick="closeM()">×</span><div class="mtop">'
++ '<div class="mp">' + imgHTML(it, '') + '</div><div class="mb">';
+h += '<h3>' + esc(it.name) + '</h3><div class="meta">';
+if (it.rating) h += '<span class="pill" style="color:var(--star)">★ ' + it.rating.toFixed(1) + '</span>';
+if (it.year) h += '<span class="pill">' + esc(it.year) + '</span>';
+if (it.episodes) h += '<span class="pill">' + it.episodes + ' 集</span>';
+if (it.wd && it.wd !== '-') h += '<span class="pill">' + esc(it.wd) + '</span>';
+if (it.air) h += '<span class="pill">' + esc(it.air) + '</span>';
+if (it.st) h += '<span class="pill" style="color:var(--accent)">' + esc(ST[it.st] || it.st) + '</span>';
+if (it.fm) h += '<span class="pill">' + esc(FMT[it.fm] || it.fm) + '</span>';
+if (it.du) h += '<span class="pill">' + it.du + ' 分钟</span>';
+if (it.studio) h += '<span class="pill">' + esc(it.studio) + '</span>';
+if (it.st === 'RELEASING' && it.next_at) h += '<span class="pill" style="color:var(--star)">' + countdown(it.next_at) + '</span>';
+(it.genres || []).slice(0, 4).forEach(function (g) { h += '<span class="pill">' + esc(g) + '</span>'; });
+h += '</div>';
+if (it.overview) h += '<p class="plot">' + esc(it.overview) + '</p>';
+if ((it.rel || []).length) {
+h += '<div class="relbox"><div class="relhead">关联作品</div>';
+(it.rel || []).forEach(function (r) {
+if (!r || !r.n) return;
+h += '<a class="relchip" target="_blank" rel="noopener" href="' + esc(r.u || '#') + '">'
++ esc(r.n) + (r.f ? '<em>' + esc(FMT[r.f] || r.f) + '</em>' : '') + '</a>';
+});
+h += '</div>';
+}
+h += '<div class="acts">';
+var cn = useCN();
+if (bv) {
+h += '<span class="btn' + (cn ? ' pri' : '') + '" onclick="playBili(&#39;' + esc(bv) + '&#39;,' + (cn ? 'true' : 'false') + ')">▶ B站播放</span>';
+}
+if (it.trailer) {
+h += '<span class="btn' + (bv && cn ? '' : ' pri') + '" onclick="playTrailer(&#39;' + esc(it.trailer) + '&#39;)">▶ 预告</span>';
+}
+h += '<span class="pill" style="align-self:center;color:var(--dim)">' + (cn ? '国内线路 · 优先 B 站' : '海外线路 · 优先预告') + '</span>';
+if (!isFresh && it.id) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc((window.JF || 'http://127.0.0.1:8100')) + '/web/#/details?id=' + esc(it.id) + '">Jellyfin</a>';
+if (it.url) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(it.url) + '">来源页</a>';
+if (it.name) h += '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name) + '">B站搜索</a>';
+h += '</div></div></div><div class="trailer" id="trailer"></div>';
+$('#modal').innerHTML = h;
+$('#mask').classList.add('on');
+document.body.style.overflow = 'hidden';
+if (useCN() && bv) playBili(bv, true);
+else if (it.trailer && !useCN()) playTrailer(it.trailer);
+else if (useCN() && !bv) {
+$('#trailer').innerHTML = '<div class="tph">国内网络无法直接播放 YouTube 预告<br>'
++ '<a class="btn pri" style="display:inline-block;margin-top:12px" target="_blank" rel="noopener" '
++ 'href="https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name || '') + '">在 B 站搜索</a></div>';
+}
+}
+function playerHost() {
+var t = $('#trailer');
+if (t) return t;
+var lb = $('#lightbox');
+if (!lb) {
+lb = document.createElement('div');
+lb.id = 'lightbox';
+lb.innerHTML = '<div class="lb-inner"><span class="lb-x" onclick="closeLB()">×</span>'
++ '<div id="trailer"></div></div>';
+lb.onclick = function (e) { if (e.target.id === 'lightbox') closeLB(); };
+document.body.appendChild(lb);
+/* #trailer 在灯箱里要撑满 */
+$('#trailer').style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+}
+lb.classList.add('on');
+document.body.style.overflow = 'hidden';
+return $('#trailer');
+}
+function closeLB() {
+var lb = $('#lightbox');
+if (lb) { lb.classList.remove('on'); var t = $('#trailer'); if (t) t.innerHTML = ''; }
+document.body.style.overflow = '';
+}
+window.closeLB = closeLB;
+function playTrailer(vid) {
+playerHost().innerHTML = '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(vid)
++ '?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
+}
+function playBili(bvid, auto) {
+playerHost().innerHTML = '<iframe src="//player.bilibili.com/player.html?bvid=' + encodeURIComponent(bvid)
++ '&page=1&high_quality=1&danmaku=0&autoplay=' + (auto ? '1' : '0')
++ '" allowfullscreen scrolling="no" allow="autoplay; fullscreen"></iframe>';
+}
+function closeM() {
+$('#mask').classList.remove('on');
+$('#trailer').innerHTML = '';
+document.body.style.overflow = '';
+}
+/* ---------- 大图轮换（自动 + 拖拽/滑动 + 圆点） ---------- */
+var heroTimer = null, heroIdx = 0, heroN = 0;
+function showSlide(n) {
+if (!heroN) return;
+heroIdx = (n + heroN) % heroN;
+document.querySelectorAll('#hero .slide').forEach(function (el, i) {
+var on = i === heroIdx;
+el.classList.toggle('on', on);
+if (on) {
+var bg = el.querySelector('.hero-bg');
+if (bg && !bg.style.backgroundImage && bg.dataset.bg) {
+bg.style.backgroundImage = 'url(' + bg.dataset.bg + ')';
+}
+}
+});
+document.querySelectorAll('#hero .dots i').forEach(function (el, i) {
+el.classList.toggle('on', i === heroIdx);
+});
+}
+function initHero() {
+var hero = $('#hero');
+if (!hero) return;
+heroN = hero.querySelectorAll('.slide').length;
+if (heroN < 2) return;
+clearInterval(heroTimer);
+heroTimer = setInterval(function () { showSlide(heroIdx + 1); }, 6000);
+hero.querySelectorAll('.dots i').forEach(function (d) {
+d.onclick = function () { showSlide(+d.dataset.dot); restartHero(); };
+});
+var x0 = null;
+hero.addEventListener('pointerdown', function (e) { x0 = e.clientX; hero.classList.add('grab'); });
+hero.addEventListener('pointerup', function (e) {
+hero.classList.remove('grab');
+if (x0 === null) return;
+var dx = e.clientX - x0; x0 = null;
+if (Math.abs(dx) > 60) { showSlide(heroIdx + (dx < 0 ? 1 : -1)); restartHero(); }
+});
+hero.addEventListener('pointerleave', function () { x0 = null; hero.classList.remove('grab'); });
+hero.addEventListener('mouseenter', function () { clearInterval(heroTimer); });
+hero.addEventListener('mouseleave', function () { restartHero(); });
+hero.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+hero.addEventListener('touchend', function (e) {
+if (x0 === null) return;
+var dx = e.changedTouches[0].clientX - x0; x0 = null;
+if (Math.abs(dx) > 45) { showSlide(heroIdx + (dx < 0 ? 1 : -1)); restartHero(); }
+});
+}
+function restartHero() {
+clearInterval(heroTimer);
+if (heroN > 1) heroTimer = setInterval(function () { showSlide(heroIdx + 1); }, 6000);
+}
+/* ---------- 首页 ---------- */
+function renderHome() {
+var fa = (DATA.fresh && DATA.fresh.anime) || [];
+/* 大图轮换：取有 banner 的前 6 部，自动 6s 切换 + 鼠标拖拽 / 触摸滑动 */
+var slides = fa.filter(function (x) { return x.banner; }).slice(0, 6);
+var out = '';
+if (slides.length) {
+out += '<section class="hero" id="hero">';
+slides.forEach(function (it, i) {
+out += '<div class="slide' + (i === 0 ? ' on' : '') + '" data-i="' + i + '">'
++ (i === 0
+? '<div class="hero-bg" style="background-image:url(' + "'" + esc(it.banner || it.poster || '') + "'" + ')"></div>'
+: '<div class="hero-bg" data-bg="' + esc(it.banner || it.poster || '') + '"></div>')
++ '<div class="hero-info"><div class="hero-tag">动漫库 · ' + fa.length + ' 部</div>'
++ '<h1>' + esc(it.name) + '</h1><div class="hero-meta">';
+if (it.rating) out += '<span><b>★ ' + it.rating.toFixed(1) + '</b></span>';
+if (it.episodes) out += '<span>' + it.episodes + ' 集</span>';
+if (it.fm) out += '<span>' + esc(FMT[it.fm] || it.fm) + '</span>';
+if (it.st === 'RELEASING' && it.next_at) out += '<span>' + countdown(it.next_at) + '</span>';
+out += '</div><p>' + esc((it.overview || '').slice(0, 180)) + '</p><div class="hero-btns">';
+if (it.trailer) out += '<span class="hbtn primary" onclick="playTrailer(\'' + esc(it.trailer) + '\')">▶ 播放预告</span>';
+out += '<span class="hbtn ghost" data-open="' + esc(fkey(it)) + '">详情</span>';
+out += '</div></div></div>';
+});
+out += '<div class="dots">' + slides.map(function (_, i) {
+return '<i class="' + (i === 0 ? ' on' : '') + '" data-dot="' + i + '"></i>';
+}).join('') + '</div></section>';
+}
+var fl = follows();
+if (fl.length) {
+out += '<section class="block" id="myfollow"><div class="bhead"><h2>我的追番</h2><span>' + fl.length + ' 部</span>'
++ '<span class="syncbar"><a data-act="push">同步 Gist</a><a data-act="pull">恢复</a>'
++ '<a data-act="export">导出</a><a data-act="import">导入</a></span></div>'
++ '<div class="row" id="r-follow"></div></section>';
+}
+out += '<div class="filterbar" id="fbar"></div>';
+out += '<section class="block" id="sched"><div class="bhead"><h2>番剧表</h2><span>按放送日筛选</span></div>'
++ '<div class="wdbar" id="wdbar"></div><div class="grid" id="g-sched"></div></section>';
+out += '<section class="block"><div class="bhead"><h2>本季新番</h2><span>' + fa.length + ' 部</span></div><div class="row" id="r-anime"></div></section>';
+out += '<section class="block" id="allanime"><div class="bhead"><h2>全部动漫</h2><span>' + fa.length + ' 部</span></div><div class="grid" id="g-all"></div></section>';
+$('#main').innerHTML = out;
+ALL = [];
+initHero();
+renderFilterBar();
+/* 先画 hero + 番剧表；两条轨道用空闲时间补，避免首屏被 48 张远程海报堵住 */
+var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 60); };
+later(function () {
+fill($('#r-anime'), bySort(fa).slice(0, ROW_CAP), ROW_CAP);
+fill($('#g-all'), bySort(byStatus(fa)), 80);
+});
+if (follows().length) {
+var pool = fa.concat(fm);
+fill($('#r-follow'), pool.filter(function (x) { return isFollowed(fkey(x)); }), 24);
+}
+document.querySelectorAll('[data-open]').forEach(function (el) {
+el.onclick = function () {
+var it = ALL.find(function (x) { return fkey(x) === el.dataset.open; });
+if (it) openModal(it);
+};
+});
+document.querySelectorAll('.syncbar a').forEach(function (a) {
+a.onclick = function () {
+var act = a.dataset.act;
+if (act === 'push') pushGist();
+else if (act === 'pull') pullGist();
+else if (act === 'export') exportFollows();
+else importFollows();
+};
+});
+var days = ['全部'].concat(DAYS.slice(1), DAYS.slice(0, 1));
+var bar = $('#wdbar');
+days.forEach(function (d) {
+var n = d === '全部' ? fa.length : fa.filter(function (x) { return x.wd === d; }).length;
+var el = document.createElement('span');
+el.className = 'wd-tab' + ((d === '全部' && !WDFILTER) || d === WDFILTER ? ' on' : '');
+el.textContent = d + ' ' + n;
+el.onclick = function () { WDFILTER = d === '全部' ? '' : d; renderSched(fa); syncWd(); };
+bar.appendChild(el);
+});
+renderSched(fa);
+setCnt(fa.length);
+}
+function renderFilterBar() {
+var bar = $('#fbar'); if (!bar) return;
+bar.innerHTML = '';
+var mk = function (label, on, fn) {
+var el = document.createElement('span');
+el.className = 'chip' + (on ? ' on' : '');
+el.textContent = label;
+el.onclick = fn;
+bar.appendChild(el);
+};
+mk('评分', SORT === 'rating', function () { setSort('rating'); });
+mk('最新', SORT === 'new', function () { setSort('new'); });
+mk('名称', SORT === 'name', function () { setSort('name'); });
+var sep = document.createElement('i'); sep.className = 'sep'; bar.appendChild(sep);
+mk('全部状态', !STATUS_F, function () { setStatus(''); });
+mk('连载中', STATUS_F === 'RELEASING', function () { setStatus('RELEASING'); });
+mk('已完结', STATUS_F === 'FINISHED', function () { setStatus('FINISHED'); });
+}
+function setSort(v) { SORT = v; try { localStorage.setItem('bgm_sort', v); } catch (e) {} renderHome(); }
+function setStatus(v) { STATUS_F = v; renderHome(); }
+function syncWd() {
+document.querySelectorAll('#wdbar .wd-tab').forEach(function (el) {
+var label = el.textContent.split(' ')[0];
+el.classList.toggle('on', WDFILTER ? label === WDFILTER : label === '全部');
+});
+}
+function renderSched(fa) {
+var pool = byStatus(fa);
+var list = bySort(WDFILTER ? pool.filter(function (x) { return x.wd === WDFILTER; }) : pool);
+var g = $('#g-sched');
+g.innerHTML = '';
+ALL = ALL.filter(function (x) { return x.kind !== 'fresh' || x.type !== 'S' || !x._sched; });
+list.forEach(function (x) { x._sched = true; });
+fill(g, list, 30);
+if (!list.length) g.innerHTML = '<div class="empty">这一天没有放送</div>';
+}
+/* ---------- 媒体库 ---------- */
+function renderLibrary() {
+var lib = DATA.lib || [];
+var series = lib.filter(function (x) { return x.type === 'S'; });
+var movies = lib.filter(function (x) { return x.type !== 'S'; });
+var out = '<section class="block"><div class="bhead"><h2>我的媒体库</h2><span>番剧 ' + series.length + ' · 电影 ' + movies.length + '</span></div>'
++ '<div class="tabs" id="typebar"></div><div class="grid" id="g"></div></section>';
+$('#main').innerHTML = out;
+ALL = [];
+setCnt(lib.length);
+renderType('all', lib);
+}
+function renderType(kind, lib) {
+var _old = false;
+lib = lib || (DATA.lib || []);
+var list = kind === 'S' ? lib.filter(function (x) { return x.type === 'S'; })
+: kind === 'M' ? lib.filter(function (x) { return x.type !== 'S'; }) : lib;
+var bar = $('#typebar');
+if (bar && !bar.dataset.built) {
+bar.dataset.built = '1';
+[['all', '全部'], ['S', '番剧'], ['M', '电影']].forEach(function (p) {
+var el = document.createElement('span');
+el.className = 'wd-tab' + (p[0] === kind ? ' on' : '');
+el.textContent = p[1];
+el.onclick = function () {
+bar.querySelectorAll('.wd-tab').forEach(function (x) { x.classList.remove('on'); });
+el.classList.add('on');
+ALL = [];
+renderType(p[0], lib);
+};
+bar.appendChild(el);
+});
+}
+fill($('#g'), bySort(list), 60);
+if (!list.length) $('#g').innerHTML = '<div class="empty">没有内容</div>';
+}
+/* ---------- 搜索 ---------- */
+function bindSearch() {
+var q = $('#q');
+if (!q) return;
+q.oninput = function () {
+var kw = q.value.trim().toLowerCase();
+if (!kw) { PAGE === 'home' ? renderHome() : renderLibrary(); return; }
+var pool = PAGE === 'home'
+? ((DATA.fresh && DATA.fresh.anime) || [])
+: (DATA.lib || []);
+var hits = pool.filter(function (x) { return (x.name || '').toLowerCase().indexOf(kw) >= 0; });
+ALL = [];
+var host = PAGE === 'home' ? ($('#g-all') || $('#g-sched')) : $('#g');
+if (!host) return;
+host.innerHTML = '';
+fill(host, hits, 60);
+if (!hits.length) host.innerHTML = '<div class="empty">没有匹配</div>';
+setCnt(hits.length);
+};
+}
+function allItems() {
+return [].concat((DATA.fresh && DATA.fresh.anime) || [],
+DATA.lib || []);
+}
+function openFromQuery() {
+var id = new URLSearchParams(location.search).get('id');
+if (!id) return;
+var tryOpen = function () {
+var it = allItems().find(function (x) { return fkey(x) === id || String(x.id) === id; });
+if (it) { ALL = allItems(); openModal(it); return true; }
+return false;
+};
+if (!tryOpen()) setTimeout(tryOpen, 1200);
+}
+function setCnt(n) {
+var el = $('#cnt');
+if (el) el.textContent = n + ' 部';
+}
+/* ---------- 启动 ---------- */
+window.openModal = openModal;
+window.closeM = closeM;
+window.playTrailer = playTrailer;
+window.playBili = playBili;
+function loadData(cb) {
+if (window.DATA) { cb(); return; }
+var urls = [window.DATA_URL, window.DATA_FB,
+window.DATA_LOCAL ? './' + window.DATA_LOCAL : null].filter(Boolean);
+var i = 0;
+function next() {
+if (i >= urls.length) { cb(); return; }
+fetch(urls[i++], { cache: 'force-cache' })
+.then(function (r) { if (!r.ok) throw 0; return r.json(); })
+.then(function (d) { window.DATA = d || {}; DATA = window.DATA; cb(); })
+.catch(next);
+}
+next();
+}
+document.addEventListener('DOMContentLoaded', function () {
+window.JF = window.JF || 'http://127.0.0.1:8100';
+$('#mask').onclick = function (e) { if (e.target.id === 'mask') closeM(); };
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeM(); });
+var top = $('#topbar');
+window.addEventListener('scroll', function () {
+top.classList.toggle('solid', window.scrollY > 12);
+}, { passive: true });
+var sw = document.createElement('div');
+sw.className = 'regionsw'; sw.id = 'regionsw';
+document.querySelector('.tw').appendChild(sw);
+renderRegionSwitch();
+bindSearch();
+loadData(function () {
+if (!window.DATA) { $('#main').innerHTML = '<div class="empty">数据加载失败，请刷新重试</div>'; return; }
+if (PAGE === 'home') renderHome(); else renderLibrary();
+openFromQuery();
+});
+});
+})();</script>
 </body>
 </html>
