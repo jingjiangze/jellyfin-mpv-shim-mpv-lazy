@@ -222,3 +222,68 @@ main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 
 }
 .relchip:hover { border-color: var(--accent-dim); color: var(--accent); }
 .relchip em { font-style: normal; font-size: 11px; color: var(--dim); }
+
+/* ---------- 大图轮换 ---------- */
+.hero { cursor: grab; touch-action: pan-y; }
+.hero.grab { cursor: grabbing; }
+.hero .slide {
+  position: absolute; inset: 0; opacity: 0; transition: opacity .55s ease;
+  pointer-events: none; display: flex; align-items: flex-end;
+}
+.hero .slide.on { opacity: 1; pointer-events: auto; position: relative; }
+.hero .slide .hero-bg { position: absolute; inset: 0; z-index: -2; }
+.hero .slide .hero-info { position: relative; z-index: 1; }
+.hero { position: relative; }
+.hero .dots {
+  position: absolute; left: 44px; bottom: 22px; z-index: 3; display: flex; gap: 8px;
+}
+.hero .dots i {
+  width: 22px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.28);
+  cursor: pointer; transition: background .2s, width .2s;
+}
+.hero .dots i.on { background: var(--accent); width: 34px; }
+
+/* ---------- 追番星标 ---------- */
+.card .fav {
+  position: absolute; top: 6px; right: 6px; z-index: 4; width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center; border-radius: 50%;
+  font-size: 15px; color: #d8d8e2; background: rgba(8,8,12,.66);
+  opacity: 0; transition: opacity .18s, color .18s, transform .12s;
+}
+.card:hover .fav, .card .fav.on { opacity: 1; }
+.card .fav:hover { transform: scale(1.12); }
+.card .fav.on { color: var(--star); }
+
+/* ---------- 追番同步工具条 ---------- */
+.syncbar { margin-left: auto; display: flex; gap: 10px; }
+.syncbar a {
+  font-size: 12px; color: var(--dim); cursor: pointer; padding: 4px 9px;
+  border-radius: 999px; border: 1px solid var(--line); transition: color .18s, border-color .18s;
+}
+.syncbar a:hover { color: var(--accent); border-color: var(--accent-dim); }
+
+/* ---------- 看板娘 ---------- */
+#mascot {
+  position: fixed; right: 22px; bottom: 18px; z-index: 80;
+  width: 108px; pointer-events: none;
+}
+#mascot .fish {
+  pointer-events: auto; cursor: pointer; width: 108px; height: 126px;
+  filter: drop-shadow(0 10px 22px rgba(0,0,0,.55));
+  animation: bob 3.4s ease-in-out infinite;
+}
+@keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-7px) } }
+#mascot .bubble {
+  position: absolute; right: 4px; bottom: 118px; max-width: 220px;
+  background: rgba(24,24,32,.95); color: var(--fg); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 13px; font-size: 12.5px; line-height: 1.6;
+  opacity: 0; transform: translateY(6px); transition: opacity .25s, transform .25s;
+  pointer-events: none; box-shadow: var(--shadow);
+}
+#mascot .bubble.on { opacity: 1; transform: translateY(0); }
+@media (max-width: 760px) {
+  #mascot { width: 74px; right: 10px; bottom: 10px; }
+  #mascot .fish { width: 74px; height: 88px; }
+  #mascot .bubble { bottom: 84px; max-width: 160px; font-size: 11.5px; }
+  .hero .dots { left: 20px; bottom: 14px; }
+}
