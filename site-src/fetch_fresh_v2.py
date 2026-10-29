@@ -43,20 +43,8 @@ def anilist_fetch(per=50):
          'trailer{id site} nextAiringEpisode{airingAt episode} '
          'relations{nodes{id type format siteUrl title{romaji native} coverImage{large}}}}}}' % per)
     out = []
-    max_pages = int(os.environ.get("ANIME_PAGES", "0") or 0) or 10 ** 9
-    try:
-        _st = json.loads((HERE / "site" / "anime_pages.json").read_text(encoding="utf-8"))
-    except Exception:
-        _st = {}
-    _start_page = int(_st.get("last_page", 0)) + 1
-    page = _start_page
-    _fetched = []
-    _reason = "max"
-    while page <= _start_page + max_pages - 1:
+    for page in range(1, 3):  # 2 页 = 100 部
         body = json.dumps({"query": q, "variables": {"s": s, "y": y, "p": page}}).encode()
-        if "seasonYear" not in q and "type:ANIME,sort" in q:
-            body = json.dumps({"query": q, "variables": {"p": page}}).encode()
-        ms = []
         for i in range(3):
             try:
                 req = urllib.request.Request("https://graphql.anilist.co", data=body,
@@ -64,24 +52,11 @@ def anilist_fetch(per=50):
                 with DIRECT.open(req, timeout=25) as x:
                     d = json.loads(x.read().decode("utf-8", "replace"))
                 ms = (((d.get("data") or {}).get("Page") or {}).get("media")) or []
+                out += ms
                 break
             except Exception:
                 time.sleep(1.5 * (i + 1))
-        if not ms:
-            _reason = "empty"
-            break
-        out += ms
-        _fetched.append(page)
-        print(f"    page {page}: +{len(ms)}（累计 {len(out)}）", flush=True)
-        if len(ms) < per:
-            _reason = "end"
-            break
-        page += 1
         time.sleep(0.8)
-    _st["last_page"] = 0 if _reason in ("empty", "end") else (_fetched[-1] if _fetched else 0)
-    (HERE / "site" / "anime_pages.json").write_text(json.dumps(_st), encoding="utf-8")
-    print(f"    断点 last_page={_st['last_page']}（{_reason}）", flush=True)
-
     return out
 
 
@@ -236,23 +211,6 @@ def main():
                 "u": s.get("url"), "trailer": None,
             })
     print(f"豆瓣补充: {len(out['movies'])} 部总计", flush=True)
-
-    # 只增不减：与既有目录按 k 合并，避免某轮超时抓不全时目录缩水
-    try:
-        _prev = json.loads((HERE / "site" / "fresh.json").read_text(encoding="utf-8")).get("anime") or []
-    except Exception:
-        _prev = []
-    out["anime"] += _prev
-    _seen = set()
-    _dedup = []
-    for _x in out["anime"]: 
-        if _x["k"] in _seen:
-            continue
-        _seen.add(_x["k"])
-        _dedup.append(_x)
-    out["anime"] = _dedup
-    print(f"目录合并后: {len(out['anime'])} 部", flush=True)
-
 
     (SITE / "fresh.json").write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"-> fresh.json {len(json.dumps(out))/1024:.0f} KB")
