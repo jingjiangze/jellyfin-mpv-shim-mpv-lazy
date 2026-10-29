@@ -9,7 +9,6 @@
 import datetime
 import hashlib
 import json
-import os
 import pathlib
 import re
 import time
@@ -35,8 +34,8 @@ def season_now():
 
 def anilist_fetch(per=50):
     s, y = season_now()
-    q = ('query($p:Int){Page(page:$p,perPage:%d){media('
-         'type:ANIME,sort:POPULARITY_DESC){'
+    q = ('query($s:MediaSeason,$y:Int,$p:Int){Page(page:$p,perPage:%d){media('
+         'type:ANIME,season:$s,seasonYear:$y,sort:POPULARITY_DESC){'
          'id title{romaji native english} startDate{year month day} '
          'coverImage{large} bannerImage averageScore episodes '
          'description(asHtml:false) genres siteUrl popularity status format duration '
@@ -45,17 +44,18 @@ def anilist_fetch(per=50):
          'relations{nodes{id type format siteUrl title{romaji native} coverImage{large}}}}}}' % per)
     out = []
     max_pages = int(os.environ.get("ANIME_PAGES", "0") or 0) or 10 ** 9
-    state = {}
     try:
-        state = json.loads((HERE / "site" / "anime_pages.json").read_text(encoding="utf-8"))
+        _st = json.loads((HERE / "site" / "anime_pages.json").read_text(encoding="utf-8"))
     except Exception:
-        state = {}
-    start_page = int(state.get("last_page", 0)) + 1
-    page = start_page
-    fetched = []
-    reason = "max"
-    while page <= start_page + max_pages - 1:
-        body = json.dumps({"query": q, "variables": {"p": page}}).encode()
+        _st = {}
+    _start_page = int(_st.get("last_page", 0)) + 1
+    page = _start_page
+    _fetched = []
+    _reason = "max"
+    while page <= _start_page + max_pages - 1:
+        body = json.dumps({"query": q, "variables": {"s": s, "y": y, "p": page}}).encode()
+        if "seasonYear" not in q and "type:ANIME,sort" in q:
+            body = json.dumps({"query": q, "variables": {"p": page}}).encode()
         ms = []
         for i in range(3):
             try:
@@ -68,23 +68,20 @@ def anilist_fetch(per=50):
             except Exception:
                 time.sleep(1.5 * (i + 1))
         if not ms:
-            reason = "empty"
+            _reason = "empty"
             break
         out += ms
-        fetched.append(page)
+        _fetched.append(page)
         print(f"    page {page}: +{len(ms)}（累计 {len(out)}）", flush=True)
         if len(ms) < per:
-            reason = "end"
+            _reason = "end"
             break
         page += 1
         time.sleep(0.8)
-    # 空页 = 扫描完毕，复位从第 1 页重扫；未到末页 = 记住最后成功页，下次接着
-    state["last_page"] = 0 if reason in ("empty", "end") else (fetched[-1] if fetched else 0)
-    if reason == "end":
-        print("    已抓到目录末页，下轮从头重扫", flush=True)
-    else:
-        print(f"    断点: last_page={state['last_page']}（{reason}）", flush=True)
-    (HERE / "site" / "anime_pages.json").write_text(json.dumps(state), encoding="utf-8")
+    _st["last_page"] = 0 if _reason in ("empty", "end") else (_fetched[-1] if _fetched else 0)
+    (HERE / "site" / "anime_pages.json").write_text(json.dumps(_st), encoding="utf-8")
+    print(f"    断点 last_page={_st['last_page']}（{_reason}）", flush=True)
+
     return out
 
 
@@ -146,33 +143,6 @@ def douban_fetch(tags=("热门", "最新"), limit=60):
     return out
 
 
-def anilist_airing(per=50):
-    """正在连载的动画（不限季节），补上跨季番。"""
-    q = ('query($p:Int){Page(page:$p,perPage:%d){media(type:ANIME,status:RELEASING,'
-         'sort:POPULARITY_DESC){'
-         'id title{romaji native english} startDate{year month day} '
-         'coverImage{large} bannerImage averageScore episodes '
-         'description(asHtml:false) genres siteUrl popularity status format duration '
-         'studios(isMain:true){nodes{name}} '
-         'trailer{id site} nextAiringEpisode{airingAt episode} '
-         'relations{nodes{id type format siteUrl title{romaji native} coverImage{large}}}}}}' % per)
-    out = []
-    for page in range(1, 3):
-        body = json.dumps({"query": q, "variables": {"p": page}}).encode()
-        for i in range(3):
-            try:
-                req = urllib.request.Request("https://graphql.anilist.co", data=body,
-                                             headers={"Content-Type": "application/json", "User-Agent": UA})
-                with DIRECT.open(req, timeout=25) as x:
-                    d = json.loads(x.read().decode("utf-8", "replace"))
-                out += (((d.get("data") or {}).get("Page") or {}).get("media")) or []
-                break
-            except Exception:
-                time.sleep(1.5 * (i + 1))
-        time.sleep(0.6)
-    return out
-
-
 def clean_desc(s, n=200):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", s or "")).strip()[:n]
 
@@ -183,17 +153,7 @@ def main():
 
     # ---- AniList 当季新番（含 trailer + weekday + banner）----
     an_raw = anilist_fetch(50)
-    print(f"AniList 当季: {len(an_raw)} 部", flush=True)
-    air_raw = anilist_airing(50)
-    seen = {m.get("id") for m in an_raw}
-    extra = [m for m in air_raw if m.get("id") not in seen]
-    an_raw += extra
-    print(f"AniList 连载中追加: {len(extra)} 部（合计 {len(an_raw)}）", flush=True)
-    air_raw = anilist_airing(50)
-    seen = {m.get("id") for m in an_raw}
-    extra = [m for m in air_raw if m.get("id") not in seen]
-    an_raw += extra
-    print(f"AniList 连载中追加: {len(extra)} 部（合计 {len(an_raw)}）", flush=True)
+    print(f"AniList: {len(an_raw)} 部", flush=True)
     for m in an_raw:
         t = m.get("title") or {}
         name = t.get("native") or t.get("romaji") or t.get("english")
@@ -250,23 +210,7 @@ def main():
             trailer_id = tmdb_videos(vid)
         rd = (m.get("release_date") or "")[:4]
         key = "m" + hashlib.md5(str(vid).encode()).hexdigest()[:10]
-        # 只增不减：与既有目录按 k 合并，避免某轮超时抓不全时目录缩水
-    try:
-        _prev = json.loads((HERE / "site" / "fresh.json").read_text(encoding="utf-8")).get("anime") or []
-    except Exception:
-        _prev = []
-    out["anime"] += _prev
-    _seen_k = set()
-    _dedup = []
-    for x in out["anime"]:
-        if x["k"] in _seen_k:
-            continue
-        _seen_k.add(x["k"])
-        _dedup.append(x)
-    out["anime"] = _dedup
-    print(f"目录合并后: {len(out['anime'])} 部", flush=True)
-
-    out["movies"].append({
+        out["movies"].append({
             "k": key, "n": title,
             "y": int(rd) if rd else None,
             "r": round(m["vote_average"], 1) if m.get("vote_average") else None,
@@ -285,29 +229,30 @@ def main():
         t = (s.get("title") or "").strip()
         if t and t.lower() not in tm_titles:
             key = "d" + hashlib.md5(str(s.get("id")).encode()).hexdigest()[:10]
-            # 只增不减：与既有目录按 k 合并，避免某轮超时抓不全时目录缩水
-    try:
-        _prev = json.loads((HERE / "site" / "fresh.json").read_text(encoding="utf-8")).get("anime") or []
-    except Exception:
-        _prev = []
-    out["anime"] += _prev
-    _seen_k = set()
-    _dedup = []
-    for x in out["anime"]:
-        if x["k"] in _seen_k:
-            continue
-        _seen_k.add(x["k"])
-        _dedup.append(x)
-    out["anime"] = _dedup
-    print(f"目录合并后: {len(out['anime'])} 部", flush=True)
-
-    out["movies"].append({
+            out["movies"].append({
                 "k": key, "n": t,
                 "r": float(s["rate"]) if s.get("rate") else None,
                 "img": s.get("cover") or "",
                 "u": s.get("url"), "trailer": None,
             })
     print(f"豆瓣补充: {len(out['movies'])} 部总计", flush=True)
+
+    # 只增不减：与既有目录按 k 合并，避免某轮超时抓不全时目录缩水
+    try:
+        _prev = json.loads((HERE / "site" / "fresh.json").read_text(encoding="utf-8")).get("anime") or []
+    except Exception:
+        _prev = []
+    out["anime"] += _prev
+    _seen = set()
+    _dedup = []
+    for _x in out["anime"]: 
+        if _x["k"] in _seen:
+            continue
+        _seen.add(_x["k"])
+        _dedup.append(_x)
+    out["anime"] = _dedup
+    print(f"目录合并后: {len(out['anime'])} 部", flush=True)
+
 
     (SITE / "fresh.json").write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"-> fresh.json {len(json.dumps(out))/1024:.0f} KB")
