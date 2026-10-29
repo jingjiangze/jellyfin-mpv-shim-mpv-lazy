@@ -32,6 +32,7 @@ jobs:
           cp site-src/data/*.json site-src/site/ 2>/dev/null || true
           cp site-src/data/poster_cache.json site-src/ 2>/dev/null || true
           cp site-src/data/data.json site-src/data/bili.json site-src/site/ 2>/dev/null || true
+          cp site-src/data/years_state.json site-src/site/ 2>/dev/null || true
           ls -la site-src/site | head -6
 
       - name: Fetch fresh anime and movies
@@ -67,6 +68,7 @@ jobs:
         env:
           NO_LOCAL_PROXY: "1"
           YEARS_PER_RUN: "9"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python -u fetch_years.py
 
       - name: Fill missing posters
@@ -101,6 +103,7 @@ jobs:
           set -euo pipefail
           cp -f site-src/site/data.json site-src/site/bili.json site-src/data/ || true
           cp -f site-src/poster_cache.json site-src/data/ || true
+          cp -f site-src/site/years_state.json site-src/data/ || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A site-src/data site-src/site site-src/poster_cache.json || true
