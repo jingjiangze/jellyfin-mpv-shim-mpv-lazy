@@ -141,6 +141,10 @@ jobs:
           # 结果 HTML 里引用的 index-<hash>.json 根本没进 media/ —— 线上 404 的根因。
           # 用 autoStash 让 rebase 自己把改动收起来，成功后自动恢复。
           git fetch origin "${GITHUB_REF_NAME}"
+          # 仓库里有文件是以 CRLF 存的（历史 API 推送留下的），检出后 git 会认为
+          # 它们全都被改过，rebase 直接报 "You have unstaged changes" 然后跳过 push。
+          # 此刻该提交的都已经 commit 了，直接丢弃这些纯换行差异最稳。
+          git checkout -- . || true
           git status --short | head -20 || true
           git -c rebase.autoStash=true rebase FETCH_HEAD || {
             echo "rebase conflict, skip push"; git status --short | head -20 || true
