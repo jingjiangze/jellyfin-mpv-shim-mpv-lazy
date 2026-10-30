@@ -27,6 +27,12 @@ ASSET_PROXY = os.environ.get("ASSET_PROXY",
                              "https://gh-proxy.com/https://raw.githubusercontent.com/"
                              "jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media")
 
+# 海报主源 = ModelScope 数据集（国内 CDN，实测 0.35s，比 jsDelivr 1.9s / gh-proxy 1.4s 快）。
+# resolve 会 302 到 cdn-lfs-cn-1.modelscope.cn，浏览器直接跟随；分支是 master（不是 main）。
+MODELSCOPE_BASE = os.environ.get(
+    "MODELSCOPE_BASE",
+    "https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master")
+
 fresh = json.loads((SITE / "fresh.json").read_text(encoding="utf-8"))
 lib_raw = json.loads((SITE / "data.json").read_text(encoding="utf-8"))
 bili = json.loads((SITE / "bili.json").read_text(encoding="utf-8"))
@@ -48,8 +54,11 @@ dropped = before - len(lib_raw)
 have_poster = lambda pid: (POSTER_DIR / f"{pid}.jpg").is_file()
 LIB = [{"id": a[0], "kind": "lib", "type": "S" if a[2] else "M", "name": a[1],
         "year": a[3] or None, "rating": a[4] or None,
-        "poster": f"{ASSET_BASE}/posters/{a[0]}.jpg" if a[5] and have_poster(a[0]) else "",
-        "pf": (f"{ASSET_PROXY}/posters/{a[0]}.jpg|/posters/{a[0]}.jpg"
+        "poster": f"{MODELSCOPE_BASE}/posters/{a[0]}.jpg" if a[5] and have_poster(a[0]) else "",
+        # 回退链（app.js 的 data-fb，按 | 从左到右）：jsDelivr → gh-proxy → 同源 Pages
+        "pf": (f"{ASSET_BASE}/posters/{a[0]}.jpg"
+               f"|{ASSET_PROXY}/posters/{a[0]}.jpg"
+               f"|/posters/{a[0]}.jpg"
                if a[5] and have_poster(a[0]) else ""),
         "episodes": a[6] or 0, "overview": ((a[7] if len(a) > 7 else "") or "")[:110]} for a in lib_raw]
 FA = [{"kind": "fresh", "type": "S", "key": x["k"], "name": x["n"],
