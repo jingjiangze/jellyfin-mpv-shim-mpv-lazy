@@ -160,6 +160,14 @@
     return Math.max(1, Math.floor(d / 60000)) + ' 分钟后更新';
   }
 
+  /* 评分：星级 + 数值双呈现（参照 Bangumi 条目页的 starsN + .number 约定）。
+     --p 是 0–10 的档位，CSS 里用 calc(var(--p) * 10%) 截出实心宽度。 */
+  function starsHTML(rating) {
+    if (!rating) return '';
+    var p = Math.max(0, Math.min(10, Math.round(Number(rating))));
+    return '<i class="stars" style="--p:' + p + '" title="' + Number(rating).toFixed(1) + ' 分"></i>';
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -230,24 +238,25 @@
     var bv = bvidOf(it);
     var mg = magnetOf(it);
     var html = '<div class="card" data-key="' + esc(it.key || it.id || it.name) + '">';
+    /* 封面只留「状态/来源」类角标；评分挪到封面下方信息行，和 Bangumi 一样用
+       星级+数值呈现，封面就不再被 ★8.5 占掉左上角。 */
     html += '<div class="pw">' + imgHTML(it)
-      + (it.rating ? '<span class="rate">★ ' + it.rating.toFixed(1) + '</span>' : '')
       + (it.episodes ? '<span class="ep">' + it.episodes + ' 集</span>' : '')
       + (bv ? '<span class="bili">B站</span>' : '')
       + (mg ? '<span class="mag">磁力</span>' : '')
       + (it.trailer ? '<span class="trailer-mark">预告</span>' : '')
-      + (it.st === 'RELEASING' ? '<span class="ep" style="left:8px;right:auto;bottom:auto;top:8px;background:rgba(240,145,153,.92);color:#181820">连载</span>' : '')
+      + (it.st === 'RELEASING' ? '<span class="badge-live">连载</span>' : '')
       + '</div>';
     var k = fkey(it), fv = isFollowed(k);
     html += '<span class="fav' + (fv ? ' on' : '') + '" data-fav="' + esc(k) + '" title="追番">'
       + (fv ? '★' : '☆') + '</span>';
     html += '<div class="t">' + esc(it.name) + '</div>';
-    var sub = [];
-    if (it.st === 'RELEASING' && it.next_at) sub.push(countdown(it.next_at));
-    else if (it.type === 'S' && it.wd && it.wd !== '-') sub.push(it.wd);
-    if (it.year) sub.push(it.year);
-    if (it.air) sub.push(it.air.slice(5));
-    html += '<div class="sub2">' + sub.filter(Boolean).map(esc).join(' · ') + '</div>';
+    var bits = [];
+    if (it.rating) bits.push(starsHTML(it.rating) + '<b class="num">' + Number(it.rating).toFixed(1) + '</b>');
+    if (it.st === 'RELEASING' && it.next_at) bits.push(esc(countdown(it.next_at)));
+    else if (it.type === 'S' && it.wd && it.wd !== '-') bits.push(esc(it.wd));
+    if (it.year) bits.push(esc(String(it.year)));
+    html += '<div class="sub2">' + bits.join('<em class="dot">·</em>') + '</div>';
     return html + '</div>';
   }
 
@@ -292,19 +301,34 @@
     var mg = magnetOf(it);
     var h = '<span class="x" onclick="closeM()">×</span><div class="mtop">'
       + '<div class="mp">' + imgHTML(it, '') + '</div><div class="mb">';
-    h += '<h3>' + esc(it.name) + '</h3><div class="meta">';
-    if (it.rating) h += '<span class="pill" style="color:var(--star)">★ ' + it.rating.toFixed(1) + '</span>';
-    if (it.year) h += '<span class="pill">' + esc(it.year) + '</span>';
-    if (it.episodes) h += '<span class="pill">' + it.episodes + ' 集</span>';
-    if (it.wd && it.wd !== '-') h += '<span class="pill">' + esc(it.wd) + '</span>';
-    if (it.air) h += '<span class="pill">' + esc(it.air) + '</span>';
-    if (it.st) h += '<span class="pill" style="color:var(--accent)">' + esc(ST[it.st] || it.st) + '</span>';
-    if (it.fm) h += '<span class="pill">' + esc(FMT[it.fm] || it.fm) + '</span>';
-    if (it.du) h += '<span class="pill">' + it.du + ' 分钟</span>';
-    if (it.studio) h += '<span class="pill">' + esc(it.studio) + '</span>';
-    if (it.st === 'RELEASING' && it.next_at) h += '<span class="pill" style="color:var(--star)">' + countdown(it.next_at) + '</span>';
-    (it.genres || []).slice(0, 4).forEach(function (g) { h += '<span class="pill">' + esc(g) + '</span>'; });
-    h += '</div>';
+    h += '<h3>' + esc(it.name) + '</h3>';
+    /* 评分行：星级 + 数值（Bangumi 条目页的双呈现），连载中顺带把倒计时放这行 */
+    if (it.rating || (it.st === 'RELEASING' && it.next_at)) {
+      h += '<div class="mrate">';
+      if (it.rating) h += starsHTML(it.rating) + '<b class="num">' + Number(it.rating).toFixed(1) + '</b>';
+      if (it.st === 'RELEASING' && it.next_at) {
+        h += '<span class="pill" style="color:var(--accent);margin-left:10px">' + esc(countdown(it.next_at)) + '</span>';
+      }
+      h += '</div>';
+    }
+    /* 信息表：参照 Bangumi 的 infobox（左标签右值），比一排胶囊更好扫读 */
+    var info = [];
+    if (it.wd && it.wd !== '-') info.push(['放送', it.wd]);
+    if (it.air) info.push(['首播', it.air]);
+    if (it.episodes) info.push(['话数', it.episodes + ' 集']);
+    if (it.du) info.push(['时长', it.du + ' 分钟']);
+    if (it.fm) info.push(['类型', FMT[it.fm] || it.fm]);
+    if (it.st) info.push(['状态', ST[it.st] || it.st]);
+    if (it.studio) info.push(['制作', it.studio]);
+    if (it.year) info.push(['年份', String(it.year)]);
+    if ((it.genres || []).length) info.push(['标签', (it.genres || []).join(' / ')]);
+    if (info.length) {
+      h += '<dl class="infobox">';
+      info.forEach(function (kv) {
+        h += '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(String(kv[1])) + '</dd>';
+      });
+      h += '</dl>';
+    }
     if (it.overview) h += '<p class="plot">' + esc(it.overview) + '</p>';
     if ((it.rel || []).length) {
       h += '<div class="relbox"><div class="relhead">关联作品</div>';
@@ -480,6 +504,15 @@
       }).join('') + '</div></section>';
     }
 
+    /* 近期更新：连载中且有下一集时间的，按「下一集越快更新越靠前」排。
+       这是番剧站最常用的入口（先看更新再看分类），所以放在 hero 之后第一块。 */
+    var recent = fa.filter(function (x) { return x.st === 'RELEASING' && x.next_at; })
+      .sort(function (a, b) { return a.next_at - b.next_at; }).slice(0, 12);
+    if (recent.length) {
+      out += '<section class="block" id="recent"><div class="bhead"><h2>近期更新</h2>'
+        + '<span>' + recent.length + ' 部连载中</span></div><div class="row" id="r-recent"></div></section>';
+    }
+
     var fl = follows();
     if (fl.length) {
       out += '<section class="block" id="myfollow"><div class="bhead"><h2>我的追番</h2><span>' + fl.length + ' 部</span>'
@@ -516,6 +549,7 @@
     /* 先画 hero + 番剧表；两条轨道用空闲时间补，避免首屏被 48 张远程海报堵住 */
     var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 60); };
     later(function () {
+      if (recent.length) fill($('#r-recent'), recent, 12);
       fill($('#r-anime'), bySort(fa).slice(0, ROW_CAP), ROW_CAP);
       fill($('#g-all'), bySort(byStatus(fa)), 80);
     });
