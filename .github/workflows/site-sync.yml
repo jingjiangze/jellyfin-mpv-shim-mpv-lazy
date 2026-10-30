@@ -79,14 +79,23 @@ jobs:
           POSTER_MAX: "150"
         run: python -u fill_posters.py
 
+      # 海报走 git 协议发布：CI 的 GITHUB_TOKEN 经常被
+      # "API rate limit exceeded for installation" 卡死在 Git Data API 上（实测整整挂 18 分钟）
       - name: Push new posters to asset repo
         timeout-minutes: 12
         continue-on-error: true
-        working-directory: site-src
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ASSET_MAX: "60"
-        run: python -u push_assets.py --posters-only
+        run: |
+          set -euo pipefail
+          [ -d site-src/site/posters ] || { echo "no new posters"; exit 0; }
+          mkdir -p media/posters
+          cp -f site-src/site/posters/*.jpg media/posters/ 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A media/posters
+          if git diff --cached --quiet; then echo "no poster change"; exit 0; fi
+          git commit -m "assets: new posters [skip ci]"
+          git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || { git rebase --abort || true; echo "rebase failed"; exit 0; }
+          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "poster push failed (non-fatal)"
 
       - name: Build pages
         timeout-minutes: 6
@@ -98,14 +107,20 @@ jobs:
 
       # 必须排在 Build pages 之后：build_site 每轮用内容哈希生成新的
       # index-<hash>.json / library-<hash>.json，HTML 里外链的就是这些名字。
-      # 以前推在 build 之前 ⇒ media/ 永远只有上一轮（甚至空），CDN 全 404。
-      - name: Push data JSON to CDN
+      # 发布走 git 协议（Git Data API 会被 installation 级限流打死）。
+      - name: Publish data JSON to media/
         timeout-minutes: 6
         continue-on-error: true
-        working-directory: site-src
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -u push_assets.py --data-only
+        run: |
+          set -euo pipefail
+          cp -f site-src/site/index-*.json site-src/site/library-*.json media/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A media/index-*.json media/library-*.json
+          if git diff --cached --quiet; then echo "no data change"; exit 0; fi
+          git commit -m "data: site payloads [skip ci]"
+          git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || { git rebase --abort || true; echo "rebase failed"; exit 0; }
+          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "data push failed (non-fatal)"
 
       # Deploy 必须排在 Persist state 之前：Persist 里的 git pull --rebase 一旦冲突，
       # git 会把工作树重置回「构建前」的旧提交，部署就会发上一轮的 HTML（已实测发生过）。
@@ -146,5 +161,5 @@ jobs:
             git commit -m "chore: sync site state [skip ci]"
             # 并发/排队时远端可能已前进；rebase 失败就放弃本轮回写（部署已经完成）
             git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || git rebase --abort || true
-            git push || echo "state push failed (non-fatal)"
+            git push origin "HEAD:${GITHUB_REF_NAME}" || echo "state push failed (non-fatal)"
           fi
