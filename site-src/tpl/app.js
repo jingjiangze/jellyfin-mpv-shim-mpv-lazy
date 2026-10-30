@@ -504,7 +504,7 @@
     $('#g-year').innerHTML = '<div class="loading">' + y + ' 年加载中…</div>';
     (function next() {
       if (i >= hosts.length) { $('#g-year').innerHTML = '<div class="empty">' + y + ' 年没有数据</div>'; return; }
-      fetch(hosts[i++]).then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      fetchJSON(hosts[i++], 8000)
         .then(function (list) {
           if (!list || !list.length) throw 0;
           list = list.map(nzYear);
@@ -637,6 +637,24 @@
   window.playTrailer = playTrailer;
   window.playBili = playBili;
 
+  /* 单档超时：任何一档 CDN 挂住都不能把后面的兜底档一起拖死（曾出现 gh-proxy 卡住、
+     页面一直停在「加载中」）。7 秒拿不到就换下一档。 */
+  function fetchJSON(url, ms) {
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, ms || 7000) : 0;
+    var opt = { cache: 'force-cache' };
+    if (ctl) opt.signal = ctl.signal;
+    return fetch(url, opt).then(function (r) {
+      if (!r.ok) throw 0;
+      return r.json();
+    }).then(function (d) {
+      if (timer) clearTimeout(timer);
+      return d;
+    }, function (e) {
+      if (timer) clearTimeout(timer);
+      throw e;
+    });
+  }
   function loadData(cb) {
     if (window.DATA) { cb(); return; }
     var urls = [window.DATA_URL, window.DATA_FB,
@@ -644,8 +662,7 @@
     var i = 0;
     function next() {
       if (i >= urls.length) { cb(); return; }
-      fetch(urls[i++], { cache: 'force-cache' })
-        .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      fetchJSON(urls[i++], 8000)
         .then(function (d) { window.DATA = d || {}; DATA = window.DATA; cb(); })
         .catch(next);
     }
