@@ -94,7 +94,7 @@ jobs:
           git add -A media/posters
           if git diff --cached --quiet; then echo "no poster change"; exit 0; fi
           git commit -m "assets: new posters [skip ci]"
-          git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || { git rebase --abort || true; echo "rebase failed"; exit 0; }
+          # 不做 pull --rebase：工作树有本轮构建产物，rebase 会因脏树失败并回滚文件
           git push origin "HEAD:${GITHUB_REF_NAME}" || echo "poster push failed (non-fatal)"
 
       - name: Build pages
@@ -104,6 +104,18 @@ jobs:
           # 海报以仓库 media/posters 为准（CI 工作区里没有 site/posters）
           POSTER_DIR: ../media/posters
         run: python -u build_site.py
+
+      # 构建产物立刻快照：后面的 git 提交/回滚都影响不到部署内容
+      - name: Snapshot build output
+        run: |
+          set -euo pipefail
+          rm -rf build-out && mkdir -p build-out
+          cp site-src/site/index.html site-src/site/library.html site-src/site/style.css site-src/site/app.js build-out/
+          cp site-src/tpl/_headers build-out/_headers
+          cp -r site-src/site/assets build-out/assets 2>/dev/null || true
+          cp site-src/site/index-*.json site-src/site/library-*.json build-out/ 2>/dev/null || true
+          cp -r site-src/site/years build-out/years 2>/dev/null || true
+          ls -la build-out
 
       # 必须排在 Build pages 之后：build_site 每轮用内容哈希生成新的
       # index-<hash>.json / library-<hash>.json，HTML 里外链的就是这些名字。
@@ -119,25 +131,17 @@ jobs:
           git add -A media/index-*.json media/library-*.json
           if git diff --cached --quiet; then echo "no data change"; exit 0; fi
           git commit -m "data: site payloads [skip ci]"
-          git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || { git rebase --abort || true; echo "rebase failed"; exit 0; }
+          # 不做 pull --rebase：工作树有本轮构建产物，rebase 会因脏树失败并回滚文件
           git push origin "HEAD:${GITHUB_REF_NAME}" || echo "data push failed (non-fatal)"
 
-      # Deploy 必须排在 Persist state 之前：Persist 里的 git pull --rebase 一旦冲突，
-      # git 会把工作树重置回「构建前」的旧提交，部署就会发上一轮的 HTML（已实测发生过）。
+      # 部署只认 build-out/ 快照；任何 git 操作都碰不到它。
       - name: Deploy to Cloudflare Pages
         timeout-minutes: 10
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
-          mkdir -p dist
-          cp site-src/site/index.html site-src/site/library.html \
-             site-src/site/style.css site-src/site/app.js dist/
-          cp site-src/tpl/_headers dist/_headers
-          cp -r site-src/site/assets dist/assets 2>/dev/null || true
-          # 同源第三档兜底：数据 JSON 也放一份到自己域名下
-          cp site-src/site/index-*.json site-src/site/library-*.json dist/ 2>/dev/null || true
-          cp -r site-src/site/years dist/years 2>/dev/null || true
+          cp -r build-out dist
           ls -la dist
           # --branch 必须显式给 main：checkout 后是 detached HEAD，wrangler 会把部署
           # 当成预览版（alias=head）而不更新生产环境
@@ -160,6 +164,6 @@ jobs:
           else
             git commit -m "chore: sync site state [skip ci]"
             # 并发/排队时远端可能已前进；rebase 失败就放弃本轮回写（部署已经完成）
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || git rebase --abort || true
+            # 不做 pull --rebase：工作树有本轮构建产物，rebase 会因脏树失败并回滚文件
             git push origin "HEAD:${GITHUB_REF_NAME}" || echo "state push failed (non-fatal)"
           fi
