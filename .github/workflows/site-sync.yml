@@ -135,9 +135,17 @@ jobs:
           git add -A media site-src/data site-src/site site-src/poster_cache.json
           if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
           git commit -m "data: site payloads + state [skip ci]"
-          # 提交后工作树是干净的，这时 rebase 才安全（脏树上 rebase 会中断并回滚文件）
+          # 提交之后工作树仍可能有未暂存改动（构建脚本会回写 site/ 下的副本，
+          # 而它们不在上面的 git add 路径里）。直接 rebase 会报
+          # "cannot rebase: You have unstaged changes" 然后走到 skip push，
+          # 结果 HTML 里引用的 index-<hash>.json 根本没进 media/ —— 线上 404 的根因。
+          # 用 autoStash 让 rebase 自己把改动收起来，成功后自动恢复。
           git fetch origin "${GITHUB_REF_NAME}"
-          git rebase FETCH_HEAD || { echo "rebase conflict, skip push"; git rebase --abort || true; exit 0; }
+          git status --short | head -20 || true
+          git -c rebase.autoStash=true rebase FETCH_HEAD || {
+            echo "rebase conflict, skip push"; git status --short | head -20 || true
+            git rebase --abort || true; exit 0
+          }
           git push origin "HEAD:${GITHUB_REF_NAME}" || echo "push failed (non-fatal)"
 
       # 部署只认 build-out/ 快照
