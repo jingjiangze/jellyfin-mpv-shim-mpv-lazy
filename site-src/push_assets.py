@@ -53,25 +53,30 @@ def remote_names():
 
 def main():
     dry = "--dry-run" in sys.argv
-    # CI 工作区里没有 site/posters（海报以仓库 media/posters 为准，POSTER_DIR 指过去），
-    # 所以这里不能因为没有本地海报目录就整体退出——数据 JSON 仍必须推。
-    have = remote_names() if POSTERS.is_dir() else set()
+    data_only = "--data-only" in sys.argv     # 只推站点数据 JSON（build 之后单独跑，必须快）
+    posters_only = "--posters-only" in sys.argv
     # 站点数据 JSON（build_site 生成的 index-*.json / library-*.json）也要进 CDN，
     # 否则 HTML 里的外链会 404
     data_files = sorted((HERE / "site").glob("index-*.json")) + sorted((HERE / "site").glob("library-*.json"))
     data_entries = []
-    for f in data_files:
-        try:
-            blob = gh([f"repos/{REPO}/git/blobs"],
-                      {"content": base64.b64encode(f.read_bytes()).decode(), "encoding": "base64"})
-            data_entries.append({"path": f"media/{f.name}", "mode": "100644", "type": "blob", "sha": blob["sha"]})
-            print(f"[data] {f.name}")
-        except Exception as exc:
-            print(f"[data] {f.name} failed: {exc}")
+    if not posters_only:
+        for f in data_files:
+            try:
+                blob = gh([f"repos/{REPO}/git/blobs"],
+                          {"content": base64.b64encode(f.read_bytes()).decode(), "encoding": "base64"})
+                data_entries.append({"path": f"media/{f.name}", "mode": "100644", "type": "blob", "sha": blob["sha"]})
+                print(f"[data] {f.name} {len(f.read_bytes())}B", flush=True)
+            except Exception as exc:
+                print(f"[data] {f.name} failed: {exc}", flush=True)
 
-    local = sorted(POSTERS.glob("*.jpg")) if POSTERS.is_dir() else []
-    todo = [p for p in local if p.name not in have][:LIMIT]
-    print(f"本地 {len(local)} 张 / 远端 {len(have)} 张 / 本次上传 {len(todo)} 张 / 数据 {len(data_entries)} 份")
+    todo = []
+    if not data_only and POSTERS.is_dir():
+        print("[posters] 列远端已有文件…", flush=True)
+        have = remote_names()
+        local = sorted(POSTERS.glob("*.jpg"))
+        todo = [p for p in local if p.name not in have][:LIMIT]
+        print(f"[posters] 本地 {len(local)} 张 / 远端 {len(have)} 张 / 本次上传 {len(todo)} 张", flush=True)
+    print(f"待写 entries: 数据 {len(data_entries)} 份 / 海报 {len(todo)} 张", flush=True)
     if (not todo and not data_entries) or dry:
         return 0
 

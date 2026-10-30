@@ -79,6 +79,15 @@ jobs:
           POSTER_MAX: "150"
         run: python -u fill_posters.py
 
+      - name: Push new posters to asset repo
+        timeout-minutes: 12
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_MAX: "60"
+        run: python -u push_assets.py --posters-only
+
       - name: Build pages
         timeout-minutes: 6
         working-directory: site-src
@@ -90,14 +99,35 @@ jobs:
       # 必须排在 Build pages 之后：build_site 每轮用内容哈希生成新的
       # index-<hash>.json / library-<hash>.json，HTML 里外链的就是这些名字。
       # 以前推在 build 之前 ⇒ media/ 永远只有上一轮（甚至空），CDN 全 404。
-      - name: Push data + new posters to asset repo
-        timeout-minutes: 18
+      - name: Push data JSON to CDN
+        timeout-minutes: 6
         continue-on-error: true
         working-directory: site-src
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ASSET_MAX: "60"
-        run: python -u push_assets.py
+        run: python -u push_assets.py --data-only
+
+      # Deploy 必须排在 Persist state 之前：Persist 里的 git pull --rebase 一旦冲突，
+      # git 会把工作树重置回「构建前」的旧提交，部署就会发上一轮的 HTML（已实测发生过）。
+      - name: Deploy to Cloudflare Pages
+        timeout-minutes: 10
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp site-src/site/index.html site-src/site/library.html \
+             site-src/site/style.css site-src/site/app.js dist/
+          cp site-src/tpl/_headers dist/_headers
+          cp -r site-src/site/assets dist/assets 2>/dev/null || true
+          # 同源第三档兜底：数据 JSON 也放一份到自己域名下
+          cp site-src/site/index-*.json site-src/site/library-*.json dist/ 2>/dev/null || true
+          cp -r site-src/site/years dist/years 2>/dev/null || true
+          ls -la dist
+          # --branch 必须显式给 main：checkout 后是 detached HEAD，wrangler 会把部署
+          # 当成预览版（alias=head）而不更新生产环境
+          npx -y wrangler@4 pages deploy dist --project-name=media-library \
+            --branch=main --commit-dirty=true
 
       - name: Persist state back to the repo
         timeout-minutes: 8
@@ -114,24 +144,7 @@ jobs:
             echo "no state change"
           else
             git commit -m "chore: sync site state [skip ci]"
-            # 并发/排队时远端可能已前进，先 rebase 再推
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            # 并发/排队时远端可能已前进；rebase 失败就放弃本轮回写（部署已经完成）
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || git rebase --abort || true
             git push || echo "state push failed (non-fatal)"
           fi
-
-      - name: Deploy to Cloudflare Pages
-        timeout-minutes: 10
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp site-src/site/index.html site-src/site/library.html \
-             site-src/site/style.css site-src/site/app.js dist/
-          cp site-src/tpl/_headers dist/_headers
-          cp -r site-src/site/assets dist/assets 2>/dev/null || true
-          # 同源第三档兜底：数据 JSON 也放一份到自己域名下
-          cp site-src/site/index-*.json site-src/site/library-*.json dist/ 2>/dev/null || true
-          cp -r site-src/site/years dist/years 2>/dev/null || true
-          ls -la dist
-          npx -y wrangler@4 pages deploy dist --project-name=media-library --commit-dirty=true
