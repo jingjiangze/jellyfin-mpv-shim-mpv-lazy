@@ -9,7 +9,7 @@
  * 只处理图片请求，不碰数据 JSON 与 HTML。
  */
 var CACHE = 'posters-v2';
-var PATTERNS = [/\/posters\//, /\/resolve\/master\/posters\//, /\/media\/posters\//];
+var PATTERNS = [/\/posters\//, /\/poster-img\//, /\/resolve\/master\/posters\//, /\/media\/posters\//];
 
 function isPoster(url) {
   if (!/\.(jpg|jpeg|png|webp)$/i.test(url.pathname)) return false;
