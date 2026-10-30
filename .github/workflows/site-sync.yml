@@ -110,7 +110,6 @@ jobs:
           cp -r site-src/site/assets build-out/assets 2>/dev/null || true
           cp site-src/site/index-*.json site-src/site/library-*.json build-out/ 2>/dev/null || true
           cp -r site-src/site/years build-out/years 2>/dev/null || true
-          cp -r media/posters build-out/posters 2>/dev/null || true
           ls -la build-out
 
       # 每轮只提交+推送一次：数据 JSON、海报、站点状态一起进仓库。
@@ -142,45 +141,19 @@ jobs:
           # 结果 HTML 里引用的 index-<hash>.json 根本没进 media/ —— 线上 404 的根因。
           # 用 autoStash 让 rebase 自己把改动收起来，成功后自动恢复。
           git fetch origin "${GITHUB_REF_NAME}"
-          # 仓库里有文件是以 CRLF 存的（历史 API 推送留下的），检出后 git 会认为
-          # 它们全都被改过，rebase 直接报 "You have unstaged changes" 然后跳过 push。
-          # 此刻该提交的都已经 commit 了，直接丢弃这些纯换行差异最稳。
-          git checkout -- . || true
+          # 仓库里部分文本文件是以 CRLF 提交的（历史 API 推送留下的），检出后
+          # git 会把它们判成「已修改」（换行归一化算出来的伪差异），rebase 于是
+          # 报 "You have unstaged changes" 并走到 skip push —— 这正是线上
+          # index-<hash>.json 一直 404 的根因。这里只对文本类文件做 CRLF→LF，
+          # 提交早已完成，不影响任何内容。
+          git ls-files -z -- '*.py' '*.js' '*.css' '*.json' '*.yml' '*.md' '*.html' \
+            | xargs -0 -r sed -i 's/\r$//' 2>/dev/null || true
           git status --short | head -20 || true
           git -c rebase.autoStash=true rebase FETCH_HEAD || {
             echo "rebase conflict, skip push"; git status --short | head -20 || true
             git rebase --abort || true; exit 0
           }
           git push origin "HEAD:${GITHUB_REF_NAME}" || echo "push failed (non-fatal)"
-
-      # 新海报增量同步到 ModelScope 数据集（海报主源）。没配 MODELSCOPE_TOKEN 自动跳过。
-      - name: Sync new posters to ModelScope
-        timeout-minutes: 10
-        continue-on-error: true
-        env:
-          MS_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${MS_TOKEN:-}" ]; then echo "no MODELSCOPE_TOKEN, skip"; exit 0; fi
-          MS_URL="https://oauth2:${MS_TOKEN}@www.modelscope.cn/datasets/jingjiangze/Anime-JPG.git"
-          rm -rf "$RUNNER_TEMP/ms" || true
-          # 只拉元数据不拉 LFS 实体（已有海报都在远端，只有新增的要上传）
-          GIT_LFS_SKIP_SMUDGE=1 git clone -q "$MS_URL" "$RUNNER_TEMP/ms" 2>&1 | sed -E 's#oauth2:[^@]*@#oauth2:***@#g'
-          mkdir -p "$RUNNER_TEMP/ms/posters"
-          added=0
-          for f in site-src/site/posters/*.jpg media/posters/*.jpg; do
-            [ -e "$f" ] || continue
-            b=$(basename "$f")
-            [ -e "$RUNNER_TEMP/ms/posters/$b" ] && continue
-            cp -f "$f" "$RUNNER_TEMP/ms/posters/$b"
-            added=$((added+1))
-          done
-          echo "new posters to sync: $added"
-          [ "$added" -eq 0 ] && exit 0
-          cd "$RUNNER_TEMP/ms"
-          git add -A posters
-          git -c commit.gpgsign=false -c user.name=github-actions               -c user.email=actions@users.noreply.github.com commit -qm "sync $added posters from CI"
-          git push "$MS_URL" HEAD:master 2>&1 | sed -E 's#oauth2:[^@]*@#oauth2:***@#g'
 
       # 部署只认 build-out/ 快照
       - name: Deploy to Cloudflare Pages
