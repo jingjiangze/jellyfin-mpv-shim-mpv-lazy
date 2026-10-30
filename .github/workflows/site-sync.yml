@@ -111,23 +111,36 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          cp -f site-src/site/index-*.json site-src/site/library-*.json media/
-          if [ -d site-src/site/posters ]; then
-            mkdir -p media/posters
-            cp -f site-src/site/posters/*.jpg media/posters/ 2>/dev/null || true
-          fi
-          cp -f site-src/site/data.json site-src/site/bili.json site-src/data/ || true
-          cp -f site-src/poster_cache.json site-src/data/ || true
-          cp -f site-src/site/years_state.json site-src/data/ || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A media site-src/data site-src/site site-src/poster_cache.json
-          if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
-          git commit -m "data: site payloads + state [skip ci]"
-          # 提交后工作树是干净的，这时 rebase 才安全（脏树上 rebase 会中断并回滚文件）
+          # 直接在「最新远端树」上重组一次提交，完全不碰工作树：
+          #   read-tree 只改索引、hash-object 只写对象库 ⇒ 不会有脏树、不会有 rebase 回滚。
           git fetch origin "${GITHUB_REF_NAME}"
-          git rebase FETCH_HEAD || { echo "rebase conflict, skip push"; git rebase --abort || true; exit 0; }
-          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "push failed (non-fatal)"
+          git read-tree FETCH_HEAD
+          put() {
+            [ -f "$1" ] || return 0
+            blob=$(git hash-object -w "$1")
+            git update-index --add --cacheinfo 100644,"$blob","$2"
+          }
+          for f in site-src/site/index-*.json site-src/site/library-*.json; do
+            [ -e "$f" ] || continue
+            put "$f" "media/$(basename "$f")"
+          done
+          for f in site-src/site/posters/*.jpg; do
+            [ -e "$f" ] || continue
+            put "$f" "media/posters/$(basename "$f")"
+          done
+          put site-src/site/fresh.json       site-src/data/fresh.json
+          put site-src/site/data.json        site-src/data/data.json
+          put site-src/site/bili.json        site-src/data/bili.json
+          put site-src/site/years_state.json site-src/data/years_state.json
+          put site-src/poster_cache.json     site-src/poster_cache.json
+          tree=$(git write-tree)
+          if [ "$tree" = "$(git rev-parse "FETCH_HEAD^{tree}")" ]; then
+            echo "nothing to publish"; exit 0
+          fi
+          commit=$(git -c commit.gpgsign=false commit-tree "$tree" -p FETCH_HEAD -m "data: site payloads + state [skip ci]")
+          git push origin "$commit:${GITHUB_REF_NAME}" || echo "push failed (non-fatal)"
 
       # 部署只认 build-out/ 快照
       - name: Deploy to Cloudflare Pages
