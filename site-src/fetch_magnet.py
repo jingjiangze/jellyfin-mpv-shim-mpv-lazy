@@ -21,6 +21,7 @@ import json
 import os
 import pathlib
 import re
+import subprocess
 import sys
 import urllib.parse
 import urllib.request
@@ -39,6 +40,43 @@ TIMEOUT = int(os.environ.get("MAGNET_TIMEOUT", "90"))
 ALT_MAX = 3
 
 CJK = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]")
+
+# 缓存回写走 Git Data API（和 push_assets.py 同一套路）。CI 里那步 git publish
+# 因为仓库历史 CRLF 问题会被跳过，所以缓存不能指望它。
+REPO = os.environ.get("TARGET_REPO", "jingjiangze/jellyfin-mpv-shim-mpv-lazy")
+BRANCH = os.environ.get("TARGET_BRANCH", "main")
+CACHE_PATH = "site-src/data/magnet.json"
+
+
+def _gh(args, payload=None):
+    cmd = ["gh", "api"] + args
+    if payload is not None:
+        cmd += ["--input", "-"]
+    p = subprocess.run(cmd, input=json.dumps(payload) if payload is not None else None,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if p.returncode != 0:
+        raise RuntimeError((p.stderr or p.stdout or "").strip()[:200])
+    return json.loads(p.stdout) if (p.stdout or "").strip() else {}
+
+
+def push_cache(cache):
+    """把缓存推回仓库，保证下一轮只补新增条目。"""
+    if not (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")):
+        print("· 无 GH_TOKEN，跳过缓存回写")
+        return
+    raw = json.dumps(cache, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    blob = _gh([f"repos/{REPO}/git/blobs"],
+               {"content": base64.b64encode(raw).decode(), "encoding": "base64"})
+    parent = _gh([f"repos/{REPO}/git/ref/heads/{BRANCH}"])["object"]["sha"]
+    base_tree = _gh([f"repos/{REPO}/git/commits/{parent}"])["tree"]["sha"]
+    tree = _gh([f"repos/{REPO}/git/trees"],
+               {"base_tree": base_tree,
+                "tree": [{"path": CACHE_PATH, "mode": "100644", "type": "blob", "sha": blob["sha"]}]})
+    commit = _gh([f"repos/{REPO}/git/commits"],
+                 {"message": f"magnet: cache {len(cache)}", "tree": tree["sha"], "parents": [parent]})
+    _gh([f"repos/{REPO}/git/refs/heads/{BRANCH}", "-X", "PATCH"],
+        {"sha": commit["sha"], "force": False})
+    print(f"✓ 缓存已回写 {CACHE_PATH}（{len(cache)} 条）")
 
 
 def norm(s):
@@ -168,6 +206,10 @@ def main():
         (SITE / "magnet.json").write_text(
             json.dumps(cache, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         print("无事可做")
+        try:
+            push_cache(cache)
+        except Exception as e:
+            print(f"! 缓存回写失败：{type(e).__name__}: {e}")
         return
 
     hit = miss = err = 0
@@ -196,6 +238,10 @@ def main():
     (SITE / "magnet.json").write_text(
         json.dumps(cache, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"完成：命中 {hit} / 无结果 {miss} / 出错 {err}；缓存总数 {len(cache)}")
+    try:
+        push_cache(cache)
+    except Exception as e:
+        print(f"! 缓存回写失败：{type(e).__name__}: {e}")
 
 
 if __name__ == "__main__":

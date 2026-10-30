@@ -68,6 +68,7 @@ jobs:
         env:
           NO_LOCAL_PROXY: "1"
           MAGNET_MAX: "150"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PAN_HUB_USER: ${{ secrets.PAN_HUB_USER }}
           PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
         run: python -u fetch_magnet.py
@@ -97,6 +98,17 @@ jobs:
           # 海报以仓库 media/posters 为准（CI 工作区里没有 site/posters）
           POSTER_DIR: ../media/posters
         run: python -u build_site.py
+
+      # 数据 JSON 单独走 Git Data API 推到 media/：HTML 里外链的就是这些带内容哈希的文件名，
+      # 下面的 git publish 因仓库历史 CRLF 问题会被跳过（rebase 冲突），不能作为唯一通道。
+      - name: Push data JSON to CDN
+        timeout-minutes: 10
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          NO_LOCAL_PROXY: "1"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -u push_assets.py --data-only
 
       # 构建产物立刻快照：后面的 git 提交/rebase 都碰不到部署内容。
       # （之前没有快照，一次失败的 pull --rebase 把工作树回滚成旧提交，
