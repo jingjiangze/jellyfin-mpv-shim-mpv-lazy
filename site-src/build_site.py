@@ -58,7 +58,7 @@ LIB = [{"id": a[0], "kind": "lib", "type": "S" if a[2] else "M", "name": a[1],
         # 回退链（app.js 的 data-fb，按 | 从左到右）：jsDelivr → gh-proxy → 同源 Pages
         "pf": (f"{ASSET_BASE}/posters/{a[0]}.jpg"
                f"|{ASSET_PROXY}/posters/{a[0]}.jpg"
-               f"|/posters/{a[0]}.jpg"
+               f"|/poster-img/{a[0]}.jpg"
                if a[5] and have_poster(a[0]) else ""),
         "episodes": a[6] or 0, "overview": ((a[7] if len(a) > 7 else "") or "")[:110]} for a in lib_raw]
 FA = [{"kind": "fresh", "type": "S", "key": x["k"], "name": x["n"],
