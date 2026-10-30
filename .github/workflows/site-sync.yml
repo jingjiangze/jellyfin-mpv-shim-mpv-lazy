@@ -79,24 +79,6 @@ jobs:
           POSTER_MAX: "150"
         run: python -u fill_posters.py
 
-      # 海报走 git 协议发布：CI 的 GITHUB_TOKEN 经常被
-      # "API rate limit exceeded for installation" 卡死在 Git Data API 上（实测整整挂 18 分钟）
-      - name: Push new posters to asset repo
-        timeout-minutes: 12
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          [ -d site-src/site/posters ] || { echo "no new posters"; exit 0; }
-          mkdir -p media/posters
-          cp -f site-src/site/posters/*.jpg media/posters/ 2>/dev/null || true
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A media/posters
-          if git diff --cached --quiet; then echo "no poster change"; exit 0; fi
-          git commit -m "assets: new posters [skip ci]"
-          # 不做 pull --rebase：工作树有本轮构建产物，rebase 会因脏树失败并回滚文件
-          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "poster push failed (non-fatal)"
-
       - name: Build pages
         timeout-minutes: 6
         working-directory: site-src
@@ -105,7 +87,9 @@ jobs:
           POSTER_DIR: ../media/posters
         run: python -u build_site.py
 
-      # 构建产物立刻快照：后面的 git 提交/回滚都影响不到部署内容
+      # 构建产物立刻快照：后面的 git 提交/rebase 都碰不到部署内容。
+      # （之前没有快照，一次失败的 pull --rebase 把工作树回滚成旧提交，
+      #   部署直接把上一轮的 HTML 发了出去——已实测踩过。）
       - name: Snapshot build output
         run: |
           set -euo pipefail
@@ -117,24 +101,35 @@ jobs:
           cp -r site-src/site/years build-out/years 2>/dev/null || true
           ls -la build-out
 
-      # 必须排在 Build pages 之后：build_site 每轮用内容哈希生成新的
+      # 每轮只提交+推送一次：数据 JSON、海报、站点状态一起进仓库。
+      # 必须排在 Build pages 之后 —— build_site 每轮用内容哈希生成新的
       # index-<hash>.json / library-<hash>.json，HTML 里外链的就是这些名字。
-      # 发布走 git 协议（Git Data API 会被 installation 级限流打死）。
-      - name: Publish data JSON to media/
-        timeout-minutes: 6
+      # 走 git 协议而不是 Git Data API：CI 的 GITHUB_TOKEN 经常被
+      # "API rate limit exceeded for installation" 卡死（实测整步挂满 18 分钟）。
+      - name: Publish data + posters + state
+        timeout-minutes: 8
         continue-on-error: true
         run: |
           set -euo pipefail
           cp -f site-src/site/index-*.json site-src/site/library-*.json media/
+          if [ -d site-src/site/posters ]; then
+            mkdir -p media/posters
+            cp -f site-src/site/posters/*.jpg media/posters/ 2>/dev/null || true
+          fi
+          cp -f site-src/site/data.json site-src/site/bili.json site-src/data/ || true
+          cp -f site-src/poster_cache.json site-src/data/ || true
+          cp -f site-src/site/years_state.json site-src/data/ || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A media/index-*.json media/library-*.json
-          if git diff --cached --quiet; then echo "no data change"; exit 0; fi
-          git commit -m "data: site payloads [skip ci]"
-          # 不做 pull --rebase：工作树有本轮构建产物，rebase 会因脏树失败并回滚文件
-          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "data push failed (non-fatal)"
+          git add -A media site-src/data site-src/site site-src/poster_cache.json
+          if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
+          git commit -m "data: site payloads + state [skip ci]"
+          # 提交后工作树是干净的，这时 rebase 才安全（脏树上 rebase 会中断并回滚文件）
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase FETCH_HEAD || { echo "rebase conflict, skip push"; git rebase --abort || true; exit 0; }
+          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "push failed (non-fatal)"
 
-      # 部署只认 build-out/ 快照；任何 git 操作都碰不到它。
+      # 部署只认 build-out/ 快照
       - name: Deploy to Cloudflare Pages
         timeout-minutes: 10
         env:
@@ -147,23 +142,3 @@ jobs:
           # 当成预览版（alias=head）而不更新生产环境
           npx -y wrangler@4 pages deploy dist --project-name=media-library \
             --branch=main --commit-dirty=true
-
-      - name: Persist state back to the repo
-        timeout-minutes: 8
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          cp -f site-src/site/data.json site-src/site/bili.json site-src/data/ || true
-          cp -f site-src/poster_cache.json site-src/data/ || true
-          cp -f site-src/site/years_state.json site-src/data/ || true
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A site-src/data site-src/site site-src/poster_cache.json || true
-          if git diff --cached --quiet; then
-            echo "no state change"
-          else
-            git commit -m "chore: sync site state [skip ci]"
-            # 并发/排队时远端可能已前进；rebase 失败就放弃本轮回写（部署已经完成）
-            # 不做 pull --rebase：工作树有本轮构建产物，rebase 会因脏树失败并回滚文件
-            git push origin "HEAD:${GITHUB_REF_NAME}" || echo "state push failed (non-fatal)"
-          fi
