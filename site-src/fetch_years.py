@@ -4,6 +4,10 @@
 策略：每年取 AniList 上人气 Top 50，写 site/years/<year>.json，并推到
 GitHub 仓库 media/years/（站点经 jsDelivr 懒加载）。
 
+字段名必须与前端卡片渲染一致（name/poster/year/rating/episodes/key）：
+2026-10-30 之前这里写的是短名 k/n/y/r/e/img，而 app.js 读长名，导致
+年份网格整片空卡片（只有日期和「预告」角标）——现已统一成长名。
+
 增量：site/years_state.json 记录已覆盖的年份与更新时间。
 每轮只处理 YEARS_PER_RUN 个年份（默认 6），全部覆盖后从最旧的开始刷新。
 """
@@ -79,22 +83,24 @@ def parse(m):
             rel.append({"n": ((r.get("title") or {}).get("native")) or ((r.get("title") or {}).get("romaji")),
                         "f": r.get("format"), "u": r.get("siteUrl"),
                         "i": ((r.get("coverImage") or {}).get("large"))})
+    fm = m.get("format")
     return {
-        "k": "a" + core.hashlib.md5(str(m["id"]).encode()).hexdigest()[:10],
-        "n": name,
-        "y": sd.get("year"),
-        "r": round(m["averageScore"] / 10, 1) if m.get("averageScore") else None,
-        "e": m.get("episodes"),
-        "g": (m.get("genres") or [])[:3],
-        "v": core.clean_desc(m.get("description"), 110),
-        "u": m.get("siteUrl"),
-        "img": (m.get("coverImage") or {}).get("large") or "",
+        "key": "a" + core.hashlib.md5(str(m["id"]).encode()).hexdigest()[:10],
+        "name": name,
+        "type": "M" if fm == "MOVIE" else "S",
+        "year": sd.get("year"),
+        "rating": round(m["averageScore"] / 10, 1) if m.get("averageScore") else None,
+        "episodes": m.get("episodes") or 0,
+        "genres": (m.get("genres") or [])[:3],
+        "overview": core.clean_desc(m.get("description"), 110),
+        "url": m.get("siteUrl"),
+        "poster": (m.get("coverImage") or {}).get("large") or "",
         "banner": m.get("bannerImage") or "",
         "trailer": tr.get("id") if tr.get("site") == "youtube" else None,
         "wd": wd, "next_ep": na.get("episode") or 0, "next_at": na.get("airingAt") or 0,
         "air": ymd, "pop": m.get("popularity"), "st": m.get("status"),
-        "fm": m.get("format"), "du": m.get("duration"),
-        "sd": (((m.get("studios") or {}).get("nodes")) or [{}])[0].get("name"),
+        "fm": fm, "duration": m.get("duration"),
+        "studio": (((m.get("studios") or {}).get("nodes")) or [{}])[0].get("name"),
         "rel": rel[:6],
     }
 
@@ -144,6 +150,11 @@ def main():
     for y in batch:
         raw = fetch_year(y)
         items = [x for x in (parse(m) for m in raw) if x]
+        # 一轮全失败（限流/超时）时不要写空文件、更不要推到 CDN：
+        # 空目录会让前端显示「没有数据」，而且 state 会把它记成已完成
+        if not items:
+            print(f"year {y}: 抓取为空，跳过本轮（下轮重试）")
+            continue
         items.sort(key=lambda x: x.get("pop") or 0, reverse=True)
         fp = YEARS_DIR / f"{y}.json"
         fp.write_text(json.dumps(items, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

@@ -53,10 +53,9 @@ def remote_names():
 
 def main():
     dry = "--dry-run" in sys.argv
-    if not POSTERS.is_dir():
-        print("没有 site/posters 目录")
-        return 0
-    have = remote_names()
+    # CI 工作区里没有 site/posters（海报以仓库 media/posters 为准，POSTER_DIR 指过去），
+    # 所以这里不能因为没有本地海报目录就整体退出——数据 JSON 仍必须推。
+    have = remote_names() if POSTERS.is_dir() else set()
     # 站点数据 JSON（build_site 生成的 index-*.json / library-*.json）也要进 CDN，
     # 否则 HTML 里的外链会 404
     data_files = sorted((HERE / "site").glob("index-*.json")) + sorted((HERE / "site").glob("library-*.json"))
@@ -70,9 +69,9 @@ def main():
         except Exception as exc:
             print(f"[data] {f.name} failed: {exc}")
 
-    local = sorted(p for p in POSTERS.glob("*.jpg"))
+    local = sorted(POSTERS.glob("*.jpg")) if POSTERS.is_dir() else []
     todo = [p for p in local if p.name not in have][:LIMIT]
-    print(f"本地 {len(local)} 张 / 远端 {len(have)} 张 / 本次上传 {len(todo)} 张")
+    print(f"本地 {len(local)} 张 / 远端 {len(have)} 张 / 本次上传 {len(todo)} 张 / 数据 {len(data_entries)} 份")
     if (not todo and not data_entries) or dry:
         return 0
 

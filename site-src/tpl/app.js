@@ -431,7 +431,12 @@
     if (yd) {
       var years = (DATA.years || []).slice().reverse();
       yd.onchange = function () { loadYear(+yd.value); };
-      setTimeout(function () { if (years.length) loadYear(years[years.length - 1]); }, 400);
+      /* 下拉是倒序（最新年份在最前），默认加载的年份必须和下拉显示的一致 */
+      setTimeout(function () {
+        if (!years.length) return;
+        yd.value = String(years[0]);
+        loadYear(years[0]);
+      }, 400);
     }
     renderFilterBar();
     /* 先画 hero + 番剧表；两条轨道用空闲时间补，避免首屏被 48 张远程海报堵住 */
@@ -477,6 +482,22 @@
   var YEARS_BASE = [window.DATA_URL ? window.DATA_URL.split('/media/')[0] + '/media/years/' : '',
                     window.DATA_FB ? window.DATA_FB.split('/media/')[0] + '/media/years/' : '',
                     './years/'].filter(Boolean);
+  /* 年份目录（media/years/*.json）早期用短字段名 k/n/y/r/e/img，卡片渲染读的是长字段名
+     name/poster/year/rating/episodes —— 在这里做一次别名归一，两套数据都能渲染 */
+  function nzYear(x) {
+    if (!x || typeof x !== 'object') return x;
+    if (x.name !== undefined && x.poster !== undefined) return x;
+    return {key: x.key || x.k, name: x.name || x.n || '',
+            poster: x.poster || x.img || '', year: x.year || x.y,
+            rating: x.rating !== undefined ? x.rating : x.r,
+            episodes: x.episodes || x.e || 0, air: x.air || '', wd: x.wd || '',
+            trailer: x.trailer || null, st: x.st, fm: x.fm,
+            type: x.type || (x.fm === 'MOVIE' ? 'M' : 'S'),
+            next_at: x.next_at || 0, next_ep: x.next_ep || 0,
+            overview: x.overview || x.v || '', genres: x.genres || x.g || [],
+            url: x.url || x.u || '', banner: x.banner || '', studio: x.sd || '',
+            duration: x.du || x.duration || 0, pop: x.pop || 0, rel: x.rel || []};
+  }
   function loadYear(y) {
     var hosts = YEARS_BASE.map(function (b) { return b + y + '.json'; });
     var i = 0;
@@ -484,7 +505,12 @@
     (function next() {
       if (i >= hosts.length) { $('#g-year').innerHTML = '<div class="empty">' + y + ' 年没有数据</div>'; return; }
       fetch(hosts[i++]).then(function (r) { if (!r.ok) throw 0; return r.json(); })
-        .then(function (list) { ALL = ALL.concat(list); fill($('#g-year'), bySort(list), 60); }).catch(next);
+        .then(function (list) {
+          if (!list || !list.length) throw 0;
+          list = list.map(nzYear);
+          ALL = ALL.concat(list);
+          fill($('#g-year'), bySort(list), 60);
+        }).catch(next);
     })();
   }
 

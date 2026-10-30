@@ -63,7 +63,11 @@ FM = [{"kind": "fresh", "type": "M", "key": x["k"], "name": x["n"],
 
 keep_ids = {a[0] for a in lib_raw}
 import datetime as _dt2
-YEARS = list(range(2000, _dt2.date.today().year + 1))
+# 年份下拉只列「真有目录文件」的年份（media/years/<y>.json）。以前写死 2000..今年，
+# 结果 2012 之后的年份选得到但文件不存在，默认年份又指向它 ⇒ 网格空着。
+_years_dir = BASE.parent / "media" / "years"
+_avail = sorted(int(p.stem) for p in _years_dir.glob("*.json") if p.stem.isdigit()) if _years_dir.is_dir() else []
+YEARS = _avail or list(range(2000, _dt2.date.today().year + 1))
 DATA_HOME = {"fresh": {"anime": FA, "season": fresh.get("season")},
              "years": YEARS,
              "bili_fresh": bili.get("__fresh__") or {}}
@@ -115,8 +119,10 @@ PAGES = [
     ("index.html", "home.html", DATA_HOME),
     ("library.html", "library.html", DATA_LIB),
 ]
+emitted = set()
 for out, tpl_name, data in PAGES:
     jname, jsize = _emit_json(out.replace(".html", ""), data)
+    emitted.add(jname)
     data_url = "https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/" + jname
     data_fb = "https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/" + jname
     data_local = jname
@@ -130,6 +136,14 @@ for out, tpl_name, data in PAGES:
     print(f"  data {jname} {jsize/1024:.0f} KB")
     (SITE / out).write_text(html, encoding="utf-8")
     print(f"{out}: {len(html.encode('utf-8'))/1024:.0f} KB")
+
+# 只保留本轮生成的两份数据 JSON：否则每轮换个内容哈希就多一份，仓库与 dist 无限膨胀
+for _p in list(SITE.glob("index-*.json")) + list(SITE.glob("library-*.json")):
+    if _p.name not in emitted:
+        try:
+            _p.unlink()
+        except OSError:
+            pass
 
 print(f"首页 FA={len(FA)} FM={len(FM)} | 媒体库 LIB={len(LIB)} BILI={len(DATA_LIB['bili'])}"
       f" | 黑名单剔除 {dropped} 条")
