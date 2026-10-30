@@ -121,13 +121,15 @@ main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 
   width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
   font-size: 26px; color: #3c3c48; background: linear-gradient(160deg, #1d1d26, #14141b);
 }
-.rate, .ep, .bili, .trailer-mark {
+.rate, .ep, .bili, .mag, .trailer-mark {
   position: absolute; font-size: 11.5px; font-weight: 600; line-height: 1;
   padding: 5px 7px; border-radius: 6px; backdrop-filter: blur(4px);
 }
 .rate { top: 8px; left: 8px; color: var(--star); background: rgba(8, 8, 12, .74); }
 .ep { bottom: 8px; right: 8px; color: #e6e6ee; background: rgba(8, 8, 12, .74); }
 .bili { bottom: 8px; left: 8px; color: #fff; background: rgba(251, 114, 153, .92); }
+/* 磁力角标：放在左下 B 站角标上方，避开右下「集数」和右上「预告」 */
+.mag { bottom: 34px; left: 8px; color: #08170d; background: rgba(126, 231, 135, .92); }
 .trailer-mark { top: 8px; right: 8px; color: #fff; background: rgba(8, 8, 12, .74); }
 .t {
   margin: 9px 0 3px; font-size: 13.5px; font-weight: 560; line-height: 1.42;

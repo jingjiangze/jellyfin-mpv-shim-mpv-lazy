@@ -31,6 +31,14 @@ fresh = json.loads((SITE / "fresh.json").read_text(encoding="utf-8"))
 lib_raw = json.loads((SITE / "data.json").read_text(encoding="utf-8"))
 bili = json.loads((SITE / "bili.json").read_text(encoding="utf-8"))
 
+# 磁力映射：fetch_magnet.py 产出，key 是新番的 k 或媒体库的 id。
+# 独立成一张表而不是塞进每条记录，理由同 bili —— 每条记录多 7 个字段会把
+# 首屏 JSON 撑大 30%+，而绝大多数条目本来就查不到磁力。
+try:
+    MAG = json.loads((SITE / "magnet.json").read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    MAG = {}
+
 blocklist = json.loads((BASE / "library_blocklist.json").read_text(encoding="utf-8"))
 blocked = {e["id"] for e in blocklist.get("entries") or []}
 before = len(lib_raw)
@@ -68,10 +76,13 @@ import datetime as _dt2
 _years_dir = BASE.parent / "media" / "years"
 _avail = sorted(int(p.stem) for p in _years_dir.glob("*.json") if p.stem.isdigit()) if _years_dir.is_dir() else []
 YEARS = _avail or list(range(2000, _dt2.date.today().year + 1))
-DATA_HOME = {"fresh": {"anime": FA, "season": fresh.get("season")},
+DATA_HOME = {"fresh": {"anime": FA, "movies": FM, "season": fresh.get("season")},
              "years": YEARS,
+             "mag": {k: v for k, v in MAG.items() if k in {x["key"] for x in FA}},
              "bili_fresh": bili.get("__fresh__") or {}}
-DATA_LIB = {"lib": LIB, "bili": {k: v for k, v in bili.items() if k in keep_ids and v}}
+DATA_LIB = {"lib": LIB,
+            "mag": {k: v for k, v in MAG.items() if k in keep_ids},
+            "bili": {k: v for k, v in bili.items() if k in keep_ids and v}}
 
 # 看板娘等静态素材
 ASSETS_SRC = BASE / "assets"
@@ -146,4 +157,5 @@ for _p in list(SITE.glob("index-*.json")) + list(SITE.glob("library-*.json")):
             pass
 
 print(f"首页 FA={len(FA)} FM={len(FM)} | 媒体库 LIB={len(LIB)} BILI={len(DATA_LIB['bili'])}"
+      f" | 磁力 {len(DATA_HOME['mag'])}/{len(DATA_LIB['mag'])}（首页/媒体库）"
       f" | 黑名单剔除 {dropped} 条")

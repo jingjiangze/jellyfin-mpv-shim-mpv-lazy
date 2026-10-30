@@ -12,9 +12,24 @@
   var STATUS_F = '';   // '' | RELEASING | FINISHED
   function bySort(list) {
     var a = list.slice();
-    if (SORT === 'rating') a.sort(function (x, y) { return (y.rating || 0) - (x.rating || 0); });
-    else if (SORT === 'new') a.sort(function (x, y) { return String(y.air || '').localeCompare(String(x.air || '')); });
-    else if (SORT === 'name') a.sort(function (x, y) { return String(x.name).localeCompare(String(y.name), 'zh'); });
+    var cmp = null;
+    if (SORT === 'rating') cmp = function (x, y) { return (y.rating || 0) - (x.rating || 0); };
+    else if (SORT === 'new') cmp = function (x, y) { return String(y.air || '').localeCompare(String(x.air || '')); };
+    else if (SORT === 'name') cmp = function (x, y) { return String(x.name).localeCompare(String(y.name), 'zh'); };
+    /* 播放源优先级：磁力(3) > B 站(2) > 奈飞(1) > 无(0)。
+       有磁力的排前面，其次才是能直接播的；同档内沿用原来的评分/时间/名称排序。
+       Array.sort 在现代浏览器是稳定排序，同档同值会保持原有相对顺序。 */
+    var rank = function (x) {
+      if (magnetOf(x)) return 3;
+      if (bvidOf(x)) return 2;
+      if (x.netflix) return 1;
+      return 0;
+    };
+    a.sort(function (x, y) {
+      var d = rank(y) - rank(x);
+      if (d) return d;
+      return cmp ? cmp(x, y) : 0;
+    });
     return a;
   }
   function byStatus(list) {
@@ -167,18 +182,59 @@
   };
 
   function bvidOf(it) {
-    if (it.id && DATA.bili && DATA.bili[it.id]) return DATA.bili[it.id];
-    if (it.key && DATA.bili_fresh && DATA.bili_fresh[it.key]) return DATA.bili_fresh[it.key];
-    return '';
+    var v = '';
+    if (it.id && DATA.bili && DATA.bili[it.id]) v = DATA.bili[it.id];
+    else if (it.key && DATA.bili_fresh && DATA.bili_fresh[it.key]) v = DATA.bili_fresh[it.key];
+    /* 媒体库里 bili 有两种形态：纯 bvid 字符串，或 {bvid,title,play,duration,score} 对象。
+       以前直接把对象塞进 encodeURIComponent，会变成 %5Bobject%20Object%5D，
+   	   导致那 156 条的「B站播放」实际是坏的。 */
+    if (v && typeof v === 'object') v = v.bvid || '';
+    return typeof v === 'string' ? v : '';
   }
+
+  function magnetOf(it) {
+    var m = DATA.mag || {};
+    if (it.id && m[it.id]) return m[it.id];
+    if (it.key && m[it.key]) return m[it.key];
+    return null;
+  }
+
+  /* 磁力 → 网页播放地址（第三方 KeepShare，纯 URL 拼接，不上传任何东西） */
+  function magnetPlay(mg) {
+    if (!mg) return '';
+    return 'https://keepshare.cc/gv78k1oi/' + encodeURIComponent(String(mg).split('&')[0]);
+  }
+
+  function fmtSize(n) {
+    n = Number(n) || 0;
+    if (n <= 0) return '';
+    var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (n >= 100 ? n.toFixed(0) : n.toFixed(n >= 10 ? 1 : 2)) + u[i];
+  }
+
+  window.__magnet = function (mg, el) {
+    var done = function (okTxt) { if (el) { el.textContent = okTxt; setTimeout(function () { el.textContent = '磁力'; }, 1600); } };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(mg).then(function () { done('已复制'); }, function () { done('复制失败'); });
+      } else {
+        var t = document.createElement('textarea');
+        t.value = mg; document.body.appendChild(t); t.select();
+        document.execCommand('copy'); document.body.removeChild(t); done('已复制');
+      }
+    } catch (e) { done('复制失败'); }
+  };
 
   function cardHTML(it) {
     var bv = bvidOf(it);
+    var mg = magnetOf(it);
     var html = '<div class="card" data-key="' + esc(it.key || it.id || it.name) + '">';
     html += '<div class="pw">' + imgHTML(it)
       + (it.rating ? '<span class="rate">★ ' + it.rating.toFixed(1) + '</span>' : '')
       + (it.episodes ? '<span class="ep">' + it.episodes + ' 集</span>' : '')
       + (bv ? '<span class="bili">B站</span>' : '')
+      + (mg ? '<span class="mag">磁力</span>' : '')
       + (it.trailer ? '<span class="trailer-mark">预告</span>' : '')
       + (it.st === 'RELEASING' ? '<span class="ep" style="left:8px;right:auto;bottom:auto;top:8px;background:rgba(240,145,153,.92);color:#181820">连载</span>' : '')
       + '</div>';
@@ -233,6 +289,7 @@
   function openModal(it) {
     var isFresh = it.kind === 'fresh';
     var bv = bvidOf(it);
+    var mg = magnetOf(it);
     var h = '<span class="x" onclick="closeM()">×</span><div class="mtop">'
       + '<div class="mp">' + imgHTML(it, '') + '</div><div class="mb">';
     h += '<h3>' + esc(it.name) + '</h3><div class="meta">';
@@ -260,17 +317,34 @@
     }
     h += '<div class="acts">';
     var cn = useCN();
+    /* 磁力优先：有磁力时它就是主按钮，B 站/预告降为次要 */
+    if (mg) {
+      h += '<span class="btn pri" onclick="__magnet(&#39;' + esc(mg.m) + '&#39;,this)">磁力</span>';
+      h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(magnetPlay(mg.m)) + '">在线播放</a>';
+    }
     if (bv) {
-      h += '<span class="btn' + (cn ? ' pri' : '') + '" onclick="playBili(&#39;' + esc(bv) + '&#39;,' + (cn ? 'true' : 'false') + ')">▶ B站播放</span>';
+      h += '<span class="btn' + (!mg && cn ? ' pri' : '') + '" onclick="playBili(&#39;' + esc(bv) + '&#39;,' + (cn ? 'true' : 'false') + ')">▶ B站播放</span>';
     }
     if (it.trailer) {
-      h += '<span class="btn' + (bv && cn ? '' : ' pri') + '" onclick="playTrailer(&#39;' + esc(it.trailer) + '&#39;)">▶ 预告</span>';
+      h += '<span class="btn' + (!mg && !(bv && cn) ? ' pri' : '') + '" onclick="playTrailer(&#39;' + esc(it.trailer) + '&#39;)">▶ 预告</span>';
     }
-    h += '<span class="pill" style="align-self:center;color:var(--dim)">' + (cn ? '国内线路 · 优先 B 站' : '海外线路 · 优先预告') + '</span>';
+    h += '<span class="pill" style="align-self:center;color:var(--dim)">'
+      + (mg ? '磁力优先' : (cn ? '国内线路 · 优先 B 站' : '海外线路 · 优先预告')) + '</span>';
     if (!isFresh && it.id) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc((window.JF || 'http://127.0.0.1:8100')) + '/web/#/details?id=' + esc(it.id) + '">Jellyfin</a>';
     if (it.url) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(it.url) + '">来源页</a>';
     if (it.name) h += '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name) + '">B站搜索</a>';
-    h += '</div></div></div><div class="trailer" id="trailer"></div>';
+    h += '</div>';
+    /* 备选版本：同一个片子的其他压制/字幕版本，点一下复制对应磁力 */
+    if (mg && (mg.alt || []).length) {
+      h += '<div class="relbox"><div class="relhead">其他磁力版本</div>';
+      (mg.alt || []).forEach(function (a) {
+        h += '<span class="relchip" title="' + esc(a.t || '') + '" onclick="__magnet(&#39;' + esc(a.m) + '&#39;,this)">'
+          + esc((a.t || '').slice(0, 46))
+          + '<em>' + [fmtSize(a.s), a.sd ? a.sd + ' 种' : '', a.sub || ''].filter(Boolean).join(' · ') + '</em></span>';
+      });
+      h += '</div>';
+    }
+    h += '</div></div><div class="trailer" id="trailer"></div>';
     $('#modal').innerHTML = h;
     $('#mask').classList.add('on');
     document.body.style.overflow = 'hidden';
@@ -446,6 +520,9 @@
       fill($('#g-all'), bySort(byStatus(fa)), 80);
     });
     if (follows().length) {
+      /* fm 以前没定义（只有 fa），只要本地有追番记录这里就抛 ReferenceError，
+         后面的 [data-open] 绑定和追番轨道全挂。数据里本来就有 movies。 */
+      var fm = (DATA.fresh && DATA.fresh.movies) || [];
       var pool = fa.concat(fm);
       fill($('#r-follow'), pool.filter(function (x) { return isFollowed(fkey(x)); }), 24);
     }
