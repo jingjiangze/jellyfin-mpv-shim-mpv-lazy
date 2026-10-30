@@ -114,7 +114,7 @@ def _min_js(text):
 CSS = _min_css((TPL / "style.css").read_text(encoding="utf-8"))
 JS = _min_js((TPL / "app.js").read_text(encoding="utf-8"))
 # 同时留一份独立文件（老链接/缓存不会 404）
-for name in ("style.css", "app.js"):
+for name in ("style.css", "app.js", "sw.js"):
     (SITE / name).write_bytes((TPL / name).read_bytes())
 
 

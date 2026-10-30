@@ -793,6 +793,11 @@
     document.querySelector('.tw').appendChild(sw);
     renderRegionSwitch();
     bindSearch();
+    /* 海报缓存层：ModelScope 的 302 与最终响应都没有 Cache-Control、签名 URL 每次还变，
+       不缓存的话每次开页都要重下全部可见海报。sw.js 按请求 URL 缓存图片字节一年。 */
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      navigator.serviceWorker.register('/sw.js').catch(function () {});
+    }
     loadData(function () {
       if (!window.DATA) { $('#main').innerHTML = '<div class="empty">数据加载失败，请刷新重试</div>'; return; }
       if (PAGE === 'home') renderHome(); else renderLibrary();

@@ -117,11 +117,13 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf build-out && mkdir -p build-out
-          cp site-src/site/index.html site-src/site/library.html site-src/site/style.css site-src/site/app.js build-out/
+          cp site-src/site/index.html site-src/site/library.html site-src/site/style.css site-src/site/app.js site-src/site/sw.js build-out/
           cp site-src/tpl/_headers build-out/_headers
           cp -r site-src/site/assets build-out/assets 2>/dev/null || true
           cp site-src/site/index-*.json site-src/site/library-*.json build-out/ 2>/dev/null || true
           cp -r site-src/site/years build-out/years 2>/dev/null || true
+          # 同源海报兜底（_headers 给 /posters/* 配了 1 年 immutable）
+          cp -r media/posters build-out/posters 2>/dev/null || true
           ls -la build-out
 
       # 每轮只提交+推送一次：数据 JSON、海报、站点状态一起进仓库。

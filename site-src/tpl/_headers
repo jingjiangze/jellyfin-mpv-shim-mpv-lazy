@@ -19,5 +19,9 @@
 /library.html
   Cache-Control: no-store, must-revalidate
 
+/sw.js
+  Cache-Control: no-cache
+  Service-Worker-Allowed: /
+
 /*
   X-Content-Type-Options: nosniff
