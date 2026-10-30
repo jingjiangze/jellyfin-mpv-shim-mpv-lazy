@@ -134,7 +134,9 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          cp -f site-src/site/index-*.json site-src/site/library-*.json media/
+          # index-*.json / library-*.json 已由上面的 `Push data JSON to CDN`
+          # （push_assets.py --data-only，走 Git Data API）推到 media/；
+          # 这里再 cp 一遍等于两边改同一批文件，是非快进冲突的来源，故删掉。
           if [ -d site-src/site/posters ]; then
             mkdir -p media/posters
             cp -f site-src/site/posters/*.jpg media/posters/ 2>/dev/null || true
