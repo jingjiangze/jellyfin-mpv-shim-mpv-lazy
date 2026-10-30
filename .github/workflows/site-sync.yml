@@ -135,19 +135,14 @@ jobs:
           git add -A media site-src/data site-src/site site-src/poster_cache.json
           if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
           git commit -m "data: site payloads + state [skip ci]"
-          # 提交之后工作树仍可能有未暂存改动（构建脚本会回写 site/ 下的副本，
-          # 而它们不在上面的 git add 路径里）。直接 rebase 会报
-          # "cannot rebase: You have unstaged changes" 然后走到 skip push，
-          # 结果 HTML 里引用的 index-<hash>.json 根本没进 media/ —— 线上 404 的根因。
-          # 用 autoStash 让 rebase 自己把改动收起来，成功后自动恢复。
+          # 仓库里部分文本文件是以 CRLF 提交的（历史 API 推送留下），检出后 git 的
+          # 换行归一化会把它们算成「已修改」，rebase 于是报 "You have unstaged
+          # changes" 并 skip push —— 线上 index-<hash>.json 一直 404 就是这么来的。
+          # checkout / sed 都治不了（差异是索引侧算出来的），最稳的办法是
+          # 把这些改动直接并进本次提交，让索引和工作树彻底一致。
+          git add -u || true
+          git commit --amend --no-edit -q || true
           git fetch origin "${GITHUB_REF_NAME}"
-          # 仓库里部分文本文件是以 CRLF 提交的（历史 API 推送留下的），检出后
-          # git 会把它们判成「已修改」（换行归一化算出来的伪差异），rebase 于是
-          # 报 "You have unstaged changes" 并走到 skip push —— 这正是线上
-          # index-<hash>.json 一直 404 的根因。这里只对文本类文件做 CRLF→LF，
-          # 提交早已完成，不影响任何内容。
-          git ls-files -z -- '*.py' '*.js' '*.css' '*.json' '*.yml' '*.md' '*.html' \
-            | xargs -0 -r sed -i 's/\r$//' 2>/dev/null || true
           git status --short | head -20 || true
           git -c rebase.autoStash=true rebase FETCH_HEAD || {
             echo "rebase conflict, skip push"; git status --short | head -20 || true
