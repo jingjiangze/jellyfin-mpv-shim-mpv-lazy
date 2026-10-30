@@ -12,9 +12,24 @@
   var STATUS_F = '';   // '' | RELEASING | FINISHED
   function bySort(list) {
     var a = list.slice();
-    if (SORT === 'rating') a.sort(function (x, y) { return (y.rating || 0) - (x.rating || 0); });
-    else if (SORT === 'new') a.sort(function (x, y) { return String(y.air || '').localeCompare(String(x.air || '')); });
-    else if (SORT === 'name') a.sort(function (x, y) { return String(x.name).localeCompare(String(y.name), 'zh'); });
+    var cmp = null;
+    if (SORT === 'rating') cmp = function (x, y) { return (y.rating || 0) - (x.rating || 0); };
+    else if (SORT === 'new') cmp = function (x, y) { return String(y.air || '').localeCompare(String(x.air || '')); };
+    else if (SORT === 'name') cmp = function (x, y) { return String(x.name).localeCompare(String(y.name), 'zh'); };
+    /* 播放源优先级：磁力(3) > B 站(2) > 奈飞(1) > 无(0)。
+       有磁力的排前面，其次才是能直接播的；同档内沿用原来的评分/时间/名称排序。
+       Array.sort 在现代浏览器是稳定排序，同档同值会保持原有相对顺序。 */
+    var rank = function (x) {
+      if (magnetOf(x)) return 3;
+      if (bvidOf(x)) return 2;
+      if (x.netflix) return 1;
+      return 0;
+    };
+    a.sort(function (x, y) {
+      var d = rank(y) - rank(x);
+      if (d) return d;
+      return cmp ? cmp(x, y) : 0;
+    });
     return a;
   }
   function byStatus(list) {
@@ -145,6 +160,14 @@
     return Math.max(1, Math.floor(d / 60000)) + ' 分钟后更新';
   }
 
+  /* 评分：星级 + 数值双呈现（参照 Bangumi 条目页的 starsN + .number 约定）。
+     --p 是 0–10 的档位，CSS 里用 calc(var(--p) * 10%) 截出实心宽度。 */
+  function starsHTML(rating) {
+    if (!rating) return '';
+    var p = Math.max(0, Math.min(10, Math.round(Number(rating))));
+    return '<i class="stars" style="--p:' + p + '" title="' + Number(rating).toFixed(1) + ' 分"></i>';
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -167,31 +190,73 @@
   };
 
   function bvidOf(it) {
-    if (it.id && DATA.bili && DATA.bili[it.id]) return DATA.bili[it.id];
-    if (it.key && DATA.bili_fresh && DATA.bili_fresh[it.key]) return DATA.bili_fresh[it.key];
-    return '';
+    var v = '';
+    if (it.id && DATA.bili && DATA.bili[it.id]) v = DATA.bili[it.id];
+    else if (it.key && DATA.bili_fresh && DATA.bili_fresh[it.key]) v = DATA.bili_fresh[it.key];
+    /* 媒体库里 bili 有两种形态：纯 bvid 字符串，或 {bvid,title,play,duration,score} 对象。
+       以前直接把对象塞进 encodeURIComponent，会变成 %5Bobject%20Object%5D，
+   	   导致那 156 条的「B站播放」实际是坏的。 */
+    if (v && typeof v === 'object') v = v.bvid || '';
+    return typeof v === 'string' ? v : '';
   }
+
+  function magnetOf(it) {
+    var m = DATA.mag || {};
+    if (it.id && m[it.id]) return m[it.id];
+    if (it.key && m[it.key]) return m[it.key];
+    return null;
+  }
+
+  /* 磁力 → 网页播放地址（第三方 KeepShare，纯 URL 拼接，不上传任何东西） */
+  function magnetPlay(mg) {
+    if (!mg) return '';
+    return 'https://keepshare.cc/gv78k1oi/' + encodeURIComponent(String(mg).split('&')[0]);
+  }
+
+  function fmtSize(n) {
+    n = Number(n) || 0;
+    if (n <= 0) return '';
+    var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (n >= 100 ? n.toFixed(0) : n.toFixed(n >= 10 ? 1 : 2)) + u[i];
+  }
+
+  window.__magnet = function (mg, el) {
+    var done = function (okTxt) { if (el) { el.textContent = okTxt; setTimeout(function () { el.textContent = '磁力'; }, 1600); } };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(mg).then(function () { done('已复制'); }, function () { done('复制失败'); });
+      } else {
+        var t = document.createElement('textarea');
+        t.value = mg; document.body.appendChild(t); t.select();
+        document.execCommand('copy'); document.body.removeChild(t); done('已复制');
+      }
+    } catch (e) { done('复制失败'); }
+  };
 
   function cardHTML(it) {
     var bv = bvidOf(it);
+    var mg = magnetOf(it);
     var html = '<div class="card" data-key="' + esc(it.key || it.id || it.name) + '">';
+    /* 封面只留「状态/来源」类角标；评分挪到封面下方信息行，和 Bangumi 一样用
+       星级+数值呈现，封面就不再被 ★8.5 占掉左上角。 */
     html += '<div class="pw">' + imgHTML(it)
-      + (it.rating ? '<span class="rate">★ ' + it.rating.toFixed(1) + '</span>' : '')
       + (it.episodes ? '<span class="ep">' + it.episodes + ' 集</span>' : '')
       + (bv ? '<span class="bili">B站</span>' : '')
+      + (mg ? '<span class="mag">磁力</span>' : '')
       + (it.trailer ? '<span class="trailer-mark">预告</span>' : '')
-      + (it.st === 'RELEASING' ? '<span class="ep" style="left:8px;right:auto;bottom:auto;top:8px;background:rgba(240,145,153,.92);color:#181820">连载</span>' : '')
+      + (it.st === 'RELEASING' ? '<span class="badge-live">连载</span>' : '')
       + '</div>';
     var k = fkey(it), fv = isFollowed(k);
     html += '<span class="fav' + (fv ? ' on' : '') + '" data-fav="' + esc(k) + '" title="追番">'
       + (fv ? '★' : '☆') + '</span>';
     html += '<div class="t">' + esc(it.name) + '</div>';
-    var sub = [];
-    if (it.st === 'RELEASING' && it.next_at) sub.push(countdown(it.next_at));
-    else if (it.type === 'S' && it.wd && it.wd !== '-') sub.push(it.wd);
-    if (it.year) sub.push(it.year);
-    if (it.air) sub.push(it.air.slice(5));
-    html += '<div class="sub2">' + sub.filter(Boolean).map(esc).join(' · ') + '</div>';
+    var bits = [];
+    if (it.rating) bits.push(starsHTML(it.rating) + '<b class="num">' + Number(it.rating).toFixed(1) + '</b>');
+    if (it.st === 'RELEASING' && it.next_at) bits.push(esc(countdown(it.next_at)));
+    else if (it.type === 'S' && it.wd && it.wd !== '-') bits.push(esc(it.wd));
+    if (it.year) bits.push(esc(String(it.year)));
+    html += '<div class="sub2">' + bits.join('<em class="dot">·</em>') + '</div>';
     return html + '</div>';
   }
 
@@ -233,21 +298,37 @@
   function openModal(it) {
     var isFresh = it.kind === 'fresh';
     var bv = bvidOf(it);
+    var mg = magnetOf(it);
     var h = '<span class="x" onclick="closeM()">×</span><div class="mtop">'
       + '<div class="mp">' + imgHTML(it, '') + '</div><div class="mb">';
-    h += '<h3>' + esc(it.name) + '</h3><div class="meta">';
-    if (it.rating) h += '<span class="pill" style="color:var(--star)">★ ' + it.rating.toFixed(1) + '</span>';
-    if (it.year) h += '<span class="pill">' + esc(it.year) + '</span>';
-    if (it.episodes) h += '<span class="pill">' + it.episodes + ' 集</span>';
-    if (it.wd && it.wd !== '-') h += '<span class="pill">' + esc(it.wd) + '</span>';
-    if (it.air) h += '<span class="pill">' + esc(it.air) + '</span>';
-    if (it.st) h += '<span class="pill" style="color:var(--accent)">' + esc(ST[it.st] || it.st) + '</span>';
-    if (it.fm) h += '<span class="pill">' + esc(FMT[it.fm] || it.fm) + '</span>';
-    if (it.du) h += '<span class="pill">' + it.du + ' 分钟</span>';
-    if (it.studio) h += '<span class="pill">' + esc(it.studio) + '</span>';
-    if (it.st === 'RELEASING' && it.next_at) h += '<span class="pill" style="color:var(--star)">' + countdown(it.next_at) + '</span>';
-    (it.genres || []).slice(0, 4).forEach(function (g) { h += '<span class="pill">' + esc(g) + '</span>'; });
-    h += '</div>';
+    h += '<h3>' + esc(it.name) + '</h3>';
+    /* 评分行：星级 + 数值（Bangumi 条目页的双呈现），连载中顺带把倒计时放这行 */
+    if (it.rating || (it.st === 'RELEASING' && it.next_at)) {
+      h += '<div class="mrate">';
+      if (it.rating) h += starsHTML(it.rating) + '<b class="num">' + Number(it.rating).toFixed(1) + '</b>';
+      if (it.st === 'RELEASING' && it.next_at) {
+        h += '<span class="pill" style="color:var(--accent);margin-left:10px">' + esc(countdown(it.next_at)) + '</span>';
+      }
+      h += '</div>';
+    }
+    /* 信息表：参照 Bangumi 的 infobox（左标签右值），比一排胶囊更好扫读 */
+    var info = [];
+    if (it.wd && it.wd !== '-') info.push(['放送', it.wd]);
+    if (it.air) info.push(['首播', it.air]);
+    if (it.episodes) info.push(['话数', it.episodes + ' 集']);
+    if (it.du) info.push(['时长', it.du + ' 分钟']);
+    if (it.fm) info.push(['类型', FMT[it.fm] || it.fm]);
+    if (it.st) info.push(['状态', ST[it.st] || it.st]);
+    if (it.studio) info.push(['制作', it.studio]);
+    if (it.year) info.push(['年份', String(it.year)]);
+    if ((it.genres || []).length) info.push(['标签', (it.genres || []).join(' / ')]);
+    if (info.length) {
+      h += '<dl class="infobox">';
+      info.forEach(function (kv) {
+        h += '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(String(kv[1])) + '</dd>';
+      });
+      h += '</dl>';
+    }
     if (it.overview) h += '<p class="plot">' + esc(it.overview) + '</p>';
     if ((it.rel || []).length) {
       h += '<div class="relbox"><div class="relhead">关联作品</div>';
@@ -260,17 +341,34 @@
     }
     h += '<div class="acts">';
     var cn = useCN();
+    /* 磁力优先：有磁力时它就是主按钮，B 站/预告降为次要 */
+    if (mg) {
+      h += '<span class="btn pri" onclick="__magnet(&#39;' + esc(mg.m) + '&#39;,this)">磁力</span>';
+      h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(magnetPlay(mg.m)) + '">在线播放</a>';
+    }
     if (bv) {
-      h += '<span class="btn' + (cn ? ' pri' : '') + '" onclick="playBili(&#39;' + esc(bv) + '&#39;,' + (cn ? 'true' : 'false') + ')">▶ B站播放</span>';
+      h += '<span class="btn' + (!mg && cn ? ' pri' : '') + '" onclick="playBili(&#39;' + esc(bv) + '&#39;,' + (cn ? 'true' : 'false') + ')">▶ B站播放</span>';
     }
     if (it.trailer) {
-      h += '<span class="btn' + (bv && cn ? '' : ' pri') + '" onclick="playTrailer(&#39;' + esc(it.trailer) + '&#39;)">▶ 预告</span>';
+      h += '<span class="btn' + (!mg && !(bv && cn) ? ' pri' : '') + '" onclick="playTrailer(&#39;' + esc(it.trailer) + '&#39;)">▶ 预告</span>';
     }
-    h += '<span class="pill" style="align-self:center;color:var(--dim)">' + (cn ? '国内线路 · 优先 B 站' : '海外线路 · 优先预告') + '</span>';
+    h += '<span class="pill" style="align-self:center;color:var(--dim)">'
+      + (mg ? '磁力优先' : (cn ? '国内线路 · 优先 B 站' : '海外线路 · 优先预告')) + '</span>';
     if (!isFresh && it.id) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc((window.JF || 'http://127.0.0.1:8100')) + '/web/#/details?id=' + esc(it.id) + '">Jellyfin</a>';
     if (it.url) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(it.url) + '">来源页</a>';
     if (it.name) h += '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name) + '">B站搜索</a>';
-    h += '</div></div></div><div class="trailer" id="trailer"></div>';
+    h += '</div>';
+    /* 备选版本：同一个片子的其他压制/字幕版本，点一下复制对应磁力 */
+    if (mg && (mg.alt || []).length) {
+      h += '<div class="relbox"><div class="relhead">其他磁力版本</div>';
+      (mg.alt || []).forEach(function (a) {
+        h += '<span class="relchip" title="' + esc(a.t || '') + '" onclick="__magnet(&#39;' + esc(a.m) + '&#39;,this)">'
+          + esc((a.t || '').slice(0, 46))
+          + '<em>' + [fmtSize(a.s), a.sd ? a.sd + ' 种' : '', a.sub || ''].filter(Boolean).join(' · ') + '</em></span>';
+      });
+      h += '</div>';
+    }
+    h += '</div></div><div class="trailer" id="trailer"></div>';
     $('#modal').innerHTML = h;
     $('#mask').classList.add('on');
     document.body.style.overflow = 'hidden';
@@ -406,6 +504,15 @@
       }).join('') + '</div></section>';
     }
 
+    /* 近期更新：连载中且有下一集时间的，按「下一集越快更新越靠前」排。
+       这是番剧站最常用的入口（先看更新再看分类），所以放在 hero 之后第一块。 */
+    var recent = fa.filter(function (x) { return x.st === 'RELEASING' && x.next_at; })
+      .sort(function (a, b) { return a.next_at - b.next_at; }).slice(0, 12);
+    if (recent.length) {
+      out += '<section class="block" id="recent"><div class="bhead"><h2>近期更新</h2>'
+        + '<span>' + recent.length + ' 部连载中</span></div><div class="row" id="r-recent"></div></section>';
+    }
+
     var fl = follows();
     if (fl.length) {
       out += '<section class="block" id="myfollow"><div class="bhead"><h2>我的追番</h2><span>' + fl.length + ' 部</span>'
@@ -417,20 +524,39 @@
     out += '<div class="filterbar" id="fbar"></div>';
     out += '<section class="block" id="sched"><div class="bhead"><h2>番剧表</h2><span>按放送日筛选</span></div>'
       + '<div class="wdbar" id="wdbar"></div><div class="grid" id="g-sched"></div></section>';
-    out += '<section class="block"><div class="bhead"><h2>本季新番</h2><span>' + fa.length + ' 部</span></div><div class="row" id="r-anime"></div></section>';
+    var ysel = (DATA.years || []).slice().reverse();
+    out += '<section class="block" id="yearsel"><div class="bhead"><h2>按年份</h2><span>每年人气 Top 50</span>'
+      + '<select class="yselect" id="ysel">' + ysel.map(function (y) { return '<option>' + y + '</option>'; }).join('') + '</select></div>'
+      + '<div class="grid" id="g-year"></div></section>';
+    out += '<section class="block"><div class="bhead"><h2>热门动漫</h2><span>Top ' + Math.min(ROW_CAP, fa.length) + '</span></div><div class="row" id="r-anime"></div></section>';
     out += '<section class="block" id="allanime"><div class="bhead"><h2>全部动漫</h2><span>' + fa.length + ' 部</span></div><div class="grid" id="g-all"></div></section>';
 
     $('#main').innerHTML = out;
     ALL = [];
     initHero();
+    var yd = $('#ysel');
+    if (yd) {
+      var years = (DATA.years || []).slice().reverse();
+      yd.onchange = function () { loadYear(+yd.value); };
+      /* 下拉是倒序（最新年份在最前），默认加载的年份必须和下拉显示的一致 */
+      setTimeout(function () {
+        if (!years.length) return;
+        yd.value = String(years[0]);
+        loadYear(years[0]);
+      }, 400);
+    }
     renderFilterBar();
     /* 先画 hero + 番剧表；两条轨道用空闲时间补，避免首屏被 48 张远程海报堵住 */
     var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 60); };
     later(function () {
+      if (recent.length) fill($('#r-recent'), recent, 12);
       fill($('#r-anime'), bySort(fa).slice(0, ROW_CAP), ROW_CAP);
       fill($('#g-all'), bySort(byStatus(fa)), 80);
     });
     if (follows().length) {
+      /* fm 以前没定义（只有 fa），只要本地有追番记录这里就抛 ReferenceError，
+         后面的 [data-open] 绑定和追番轨道全挂。数据里本来就有 movies。 */
+      var fm = (DATA.fresh && DATA.fresh.movies) || [];
       var pool = fa.concat(fm);
       fill($('#r-follow'), pool.filter(function (x) { return isFollowed(fkey(x)); }), 24);
     }
@@ -462,6 +588,41 @@
     });
     renderSched(fa);
     setCnt(fa.length);
+  }
+
+  var YEARS_BASE = [window.DATA_URL ? window.DATA_URL.split('/media/')[0] + '/media/years/' : '',
+                    window.DATA_FB ? window.DATA_FB.split('/media/')[0] + '/media/years/' : '',
+                    './years/'].filter(Boolean);
+  /* 年份目录（media/years/*.json）早期用短字段名 k/n/y/r/e/img，卡片渲染读的是长字段名
+     name/poster/year/rating/episodes —— 在这里做一次别名归一，两套数据都能渲染 */
+  function nzYear(x) {
+    if (!x || typeof x !== 'object') return x;
+    if (x.name !== undefined && x.poster !== undefined) return x;
+    return {key: x.key || x.k, name: x.name || x.n || '',
+            poster: x.poster || x.img || '', year: x.year || x.y,
+            rating: x.rating !== undefined ? x.rating : x.r,
+            episodes: x.episodes || x.e || 0, air: x.air || '', wd: x.wd || '',
+            trailer: x.trailer || null, st: x.st, fm: x.fm,
+            type: x.type || (x.fm === 'MOVIE' ? 'M' : 'S'),
+            next_at: x.next_at || 0, next_ep: x.next_ep || 0,
+            overview: x.overview || x.v || '', genres: x.genres || x.g || [],
+            url: x.url || x.u || '', banner: x.banner || '', studio: x.sd || '',
+            duration: x.du || x.duration || 0, pop: x.pop || 0, rel: x.rel || []};
+  }
+  function loadYear(y) {
+    var hosts = YEARS_BASE.map(function (b) { return b + y + '.json'; });
+    var i = 0;
+    $('#g-year').innerHTML = '<div class="loading">' + y + ' 年加载中…</div>';
+    (function next() {
+      if (i >= hosts.length) { $('#g-year').innerHTML = '<div class="empty">' + y + ' 年没有数据</div>'; return; }
+      fetchJSON(hosts[i++], 8000)
+        .then(function (list) {
+          if (!list || !list.length) throw 0;
+          list = list.map(nzYear);
+          ALL = ALL.concat(list);
+          fill($('#g-year'), bySort(list), 60);
+        }).catch(next);
+    })();
   }
 
   function renderFilterBar() {
@@ -587,6 +748,24 @@
   window.playTrailer = playTrailer;
   window.playBili = playBili;
 
+  /* 单档超时：任何一档 CDN 挂住都不能把后面的兜底档一起拖死（曾出现 gh-proxy 卡住、
+     页面一直停在「加载中」）。7 秒拿不到就换下一档。 */
+  function fetchJSON(url, ms) {
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, ms || 7000) : 0;
+    var opt = { cache: 'force-cache' };
+    if (ctl) opt.signal = ctl.signal;
+    return fetch(url, opt).then(function (r) {
+      if (!r.ok) throw 0;
+      return r.json();
+    }).then(function (d) {
+      if (timer) clearTimeout(timer);
+      return d;
+    }, function (e) {
+      if (timer) clearTimeout(timer);
+      throw e;
+    });
+  }
   function loadData(cb) {
     if (window.DATA) { cb(); return; }
     var urls = [window.DATA_URL, window.DATA_FB,
@@ -594,8 +773,7 @@
     var i = 0;
     function next() {
       if (i >= urls.length) { cb(); return; }
-      fetch(urls[i++], { cache: 'force-cache' })
-        .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      fetchJSON(urls[i++], 8000)
         .then(function (d) { window.DATA = d || {}; DATA = window.DATA; cb(); })
         .catch(next);
     }

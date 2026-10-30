@@ -8,9 +8,9 @@
 <link rel="preconnect" href="https://gh-proxy.com" crossorigin>
 <link rel="dns-prefetch" href="https://s4.anilist.co">
 <link rel="dns-prefetch" href="https://image.tmdb.org">
-<link rel="preload" as="fetch" href="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/index-6200faec48.json" crossorigin>
+<link rel="preload" as="fetch" href="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/index-e726b72e77.json" crossorigin>
 <title>番组计划 · 新番与新片</title>
-<style>:root { --bg: #0b0b0f; --bg2: #14141b; --card: #181820; --card2: #22222c; --line: #2a2a36; --fg: #ececf1; --dim: #8a8a96; --accent: #f09199; --accent-dim: #b8656c; --star: #f5c451; --r: 12px; --r-sm: 8px; --shadow: 0 18px 48px rgba(0, 0, 0, .55); --header-h: 58px; } * { box-sizing: border-box; } html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); } body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; } a { color: inherit; text-decoration: none; } img { display: block; } .top { position: fixed; inset: 0 0 auto 0; height: var(--header-h); z-index: 50; background: linear-gradient(180deg, rgba(11, 11, 15, .96), rgba(11, 11, 15, .72) 70%, transparent); transition: background .25s, backdrop-filter .25s; } .top.solid { background: rgba(11, 11, 15, .97); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); } .tw { max-width: 1520px; height: 100%; margin: 0 auto; padding: 0 34px; display: flex; align-items: center; gap: 26px; } .logo { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 700; letter-spacing: .5px; white-space: nowrap; } .logo i { width: 10px; height: 18px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 12px rgba(240, 145, 153, .5); } .logo b { color: var(--accent); } .nav { display: flex; gap: 4px; } .nav a { padding: 7px 15px; border-radius: 999px; font-size: 14.5px; color: var(--dim); cursor: pointer; transition: color .18s, background .18s; white-space: nowrap; } .nav a:hover { color: var(--fg); } .nav a.on { color: var(--bg); background: var(--accent); font-weight: 600; } .searchbox { margin-left: auto; position: relative; } .searchbox input { width: 210px; padding: 8px 13px; border-radius: 999px; font-size: 13.5px; color: var(--fg); background: var(--card2); border: 1px solid transparent; outline: none; transition: border-color .2s, width .2s; } .searchbox input:focus { border-color: var(--accent-dim); width: 250px; } .cnt { font-size: 12.5px; color: var(--dim); white-space: nowrap; } main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 34px 70px; } .block { margin: 34px 0 0; } .bhead { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; } .bhead h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: .3px; } .bhead span { font-size: 12.5px; color: var(--dim); } .hero { position: relative; border-radius: 18px; overflow: hidden; margin-top: 6px; height: 420px; background: var(--bg2); } .hero-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center 30%; } .hero::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, rgba(11, 11, 15, .96) 8%, rgba(11, 11, 15, .72) 42%, rgba(11, 11, 15, .2) 72%, rgba(11, 11, 15, .6)), linear-gradient(0deg, var(--bg) 2%, transparent 46%); } .hero-info { position: absolute; left: 0; bottom: 0; padding: 40px 44px; max-width: 680px; z-index: 3; } .hero-tag { font-size: 12px; letter-spacing: 2px; color: var(--accent); font-weight: 600; margin-bottom: 12px; } .hero h1 { margin: 0 0 12px; font-size: 40px; line-height: 1.16; font-weight: 720; letter-spacing: -.5px; } .hero-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13.5px; color: var(--dim); margin-bottom: 14px; } .hero-meta b { color: var(--star); font-weight: 600; } .hero p { margin: 0 0 22px; font-size: 14.5px; line-height: 1.75; color: #c8c8d2; } .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; } .hbtn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 999px; font-size: 14.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: transform .16s, background .18s, border-color .18s; } .hbtn:hover { transform: translateY(-1px); } .hbtn.primary { background: var(--accent); color: #17171d; } .hbtn.ghost { background: rgba(255, 255, 255, .1); color: var(--fg); border-color: rgba(255, 255, 255, .18); } .hbtn.ghost:hover { background: rgba(255, 255, 255, .17); } .row { display: grid; grid-auto-flow: column; grid-auto-columns: 168px; gap: 14px; overflow-x: auto; padding: 4px 2px 12px; scroll-snap-type: x proximity; scrollbar-width: none; } .row::-webkit-scrollbar { display: none; } .row .card { scroll-snap-align: start; } .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); } .card { cursor: pointer; position: relative; } .pw { position: relative; aspect-ratio: 2 / 3; border-radius: var(--r); overflow: hidden; background: var(--card); border: 1px solid rgba(255, 255, 255, .04); transition: transform .2s ease, box-shadow .2s ease, border-color .2s; } .card:hover .pw { transform: translateY(-4px); box-shadow: var(--shadow); border-color: rgba(240, 145, 153, .35); } .pw img { width: 100%; height: 100%; object-fit: cover; } .ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #3c3c48; background: linear-gradient(160deg, #1d1d26, #14141b); } .rate, .ep, .bili, .trailer-mark { position: absolute; font-size: 11.5px; font-weight: 600; line-height: 1; padding: 5px 7px; border-radius: 6px; backdrop-filter: blur(4px); } .rate { top: 8px; left: 8px; color: var(--star); background: rgba(8, 8, 12, .74); } .ep { bottom: 8px; right: 8px; color: #e6e6ee; background: rgba(8, 8, 12, .74); } .bili { bottom: 8px; left: 8px; color: #fff; background: rgba(251, 114, 153, .92); } .trailer-mark { top: 8px; right: 8px; color: #fff; background: rgba(8, 8, 12, .74); } .t { margin: 9px 0 3px; font-size: 13.5px; font-weight: 560; line-height: 1.42; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } .sub2 { font-size: 12px; color: var(--dim); display: flex; gap: 8px; } .wdbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; } .wd-tab { padding: 7px 15px; border-radius: 999px; font-size: 13.5px; cursor: pointer; background: var(--card2); color: var(--dim); border: 1px solid transparent; transition: color .18s, background .18s, border-color .18s; } .wd-tab:hover { color: var(--fg); } .wd-tab.on { background: rgba(240, 145, 153, .16); color: var(--accent); border-color: var(--accent-dim); font-weight: 600; } .tabs { display: flex; gap: 8px; margin: 0 0 18px; } .mask { position: fixed; inset: 0; z-index: 90; background: rgba(4, 4, 7, .82); backdrop-filter: blur(6px); display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 4vh 20px; } .mask.on { display: flex; } .modal { width: min(920px, 100%); background: var(--card); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--line); } .mtop { display: flex; gap: 18px; padding: 24px 26px; } .mp { width: 150px; flex: 0 0 150px; aspect-ratio: 2 / 3; border-radius: var(--r-sm); overflow: hidden; background: var(--card2); } .mp img { width: 100%; height: 100%; object-fit: cover; } .mb { flex: 1; min-width: 0; } .mb h3 { margin: 2px 0 10px; font-size: 22px; line-height: 1.3; } .meta { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 12px; } .pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--card2); color: var(--dim); } .plot { font-size: 13.8px; line-height: 1.8; color: #c2c2cc; margin: 0 0 16px; max-height: 168px; overflow-y: auto; } .acts { display: flex; gap: 9px; flex-wrap: wrap; } .btn { font-size: 13px; padding: 9px 15px; border-radius: var(--r-sm); cursor: pointer; background: var(--card2); color: var(--fg); border: 1px solid var(--line); transition: background .18s, border-color .18s; } .btn:hover { background: #2c2c38; border-color: var(--accent-dim); } .btn.pri { background: var(--accent); color: #17171d; border-color: transparent; font-weight: 600; } .x { position: absolute; top: 14px; right: 18px; font-size: 24px; color: var(--dim); cursor: pointer; line-height: 1; } .x:hover { color: var(--fg); } .trailer { position: relative; aspect-ratio: 16 / 9; background: #000; border-top: 1px solid var(--line); } .trailer iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; } .nt { padding: 10px 26px 18px; font-size: 12.5px; color: var(--dim); } .empty, .loading { padding: 60px 0; text-align: center; color: var(--dim); font-size: 14px; } .sk { border-radius: var(--r); aspect-ratio: 2 / 3; background: linear-gradient(100deg, #16161d 30%, #1e1e28 50%, #16161d 70%); background-size: 220% 100%; animation: sk 1.4s infinite linear; } @keyframes sk { to { background-position: -220% 0; } } @media (max-width: 760px) { .tw { padding: 0 16px; gap: 12px; } .searchbox input { width: 130px; } .searchbox input:focus { width: 160px; } .cnt { display: none; } main { padding: calc(var(--header-h) + 12px) 16px 60px; } .hero { min-height: 320px; } .hero-info { padding: 24px 20px; } .hero h1 { font-size: 26px; } .hero p { display: none; } .row { grid-auto-columns: 132px; } .grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 12px; } .mtop { flex-direction: column; padding: 18px; } .mp { width: 110px; flex-basis: 110px; } } .relbox { margin: 0 0 16px; } .relhead { font-size: 12px; color: var(--dim); letter-spacing: 1px; margin-bottom: 8px; } .relchip { display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 8px 0; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; background: var(--card2); color: var(--fg); border: 1px solid var(--line); transition: border-color .18s, color .18s; } .relchip:hover { border-color: var(--accent-dim); color: var(--accent); } .relchip em { font-style: normal; font-size: 11px; color: var(--dim); } .hero { cursor: grab; touch-action: pan-y; } .hero.grab { cursor: grabbing; } .hero .slide { position: absolute; inset: 0; opacity: 0; transition: opacity .55s ease; pointer-events: none; z-index: 0; } .hero .slide.on { opacity: 1; pointer-events: auto; z-index: 2; } .hero .slide .hero-bg { z-index: 0; } .hero .slide .hero-info { position: relative; z-index: 3; } .hero .slide .hero-bg { position: absolute; inset: 0; z-index: -2; } .hero .slide .hero-info { position: relative; z-index: 1; } .hero { position: relative; } .hero .dots { position: absolute; left: 44px; bottom: 22px; z-index: 3; display: flex; gap: 8px; } .hero .dots i { width: 22px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.28); cursor: pointer; transition: background .2s, width .2s; } .hero .dots i.on { background: var(--accent); width: 34px; } .card .fav { position: absolute; top: 6px; right: 6px; z-index: 4; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 15px; color: #d8d8e2; background: rgba(8,8,12,.66); opacity: 0; transition: opacity .18s, color .18s, transform .12s; } .card:hover .fav, .card .fav.on { opacity: 1; } .card .fav:hover { transform: scale(1.12); } .card .fav.on { color: var(--star); } .syncbar { margin-left: auto; display: flex; gap: 10px; } .syncbar a { font-size: 12px; color: var(--dim); cursor: pointer; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); transition: color .18s, border-color .18s; } .syncbar a:hover { color: var(--accent); border-color: var(--accent-dim); } @keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-7px) } } @media (max-width: 760px) { .hero { height: 300px; } .hero-info { padding: 20px 18px; } .hero .dots { left: 20px; bottom: 14px; } } #lightbox { position: fixed; inset: 0; z-index: 120; display: none; align-items: center; justify-content: center; background: rgba(4,4,7,.9); backdrop-filter: blur(4px); } #lightbox.on { display: flex; } #lightbox .lb-inner { width: min(1100px, 92vw); aspect-ratio: 16 / 9; position: relative; } #lightbox iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 12px; } #lightbox .lb-x { position: absolute; top: -38px; right: 0; font-size: 26px; color: #ddd; cursor: pointer; } .regionsw { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; font-size: 12px; color: var(--dim); } .regionsw b { color: var(--accent); font-weight: 600; } .regionsw span.r { cursor: pointer; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); transition: all .18s; } .regionsw span.r.on { background: rgba(240,145,153,.16); color: var(--accent); border-color: var(--accent-dim); } .filterbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 -6px; align-items: center; } .filterbar .chip { font-size: 12.5px; padding: 5px 12px; border-radius: 999px; cursor: pointer; color: var(--dim); border: 1px solid var(--line); background: var(--card); transition: all .16s; } .filterbar .chip:hover { color: var(--fg); border-color: var(--accent-dim); } .filterbar .chip.on { background: rgba(240,145,153,.16); color: var(--accent); border-color: var(--accent-dim); font-weight: 600; } .filterbar .sep { width: 1px; height: 16px; background: var(--line); margin: 0 4px; } .build { font-size: 10.5px; color: var(--dim); opacity: .55; margin-left: 10px; white-space: nowrap; } @media (max-width: 760px) { .build { display: none; } } .tph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; color: var(--dim); background: #0d0d12; text-align: center; padding: 20px; }</style>
+<style>:root { --bg: #0b0b0f; --bg2: #14141b; --card: #181820; --card2: #22222c; --line: #2a2a36; --fg: #ececf1; --dim: #8a8a96; --accent: #f09199; --accent-dim: #b8656c; --star: #f5c451; --r: 12px; --r-sm: 8px; --shadow: 0 18px 48px rgba(0, 0, 0, .55); --header-h: 58px; } * { box-sizing: border-box; } html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); } body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; } a { color: inherit; text-decoration: none; } img { display: block; } .top { position: fixed; inset: 0 0 auto 0; height: var(--header-h); z-index: 50; background: linear-gradient(180deg, rgba(11, 11, 15, .96), rgba(11, 11, 15, .72) 70%, transparent); transition: background .25s, backdrop-filter .25s; } .top.solid { background: rgba(11, 11, 15, .97); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); } .tw { max-width: 1520px; height: 100%; margin: 0 auto; padding: 0 34px; display: flex; align-items: center; gap: 26px; } .logo { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 700; letter-spacing: .5px; white-space: nowrap; } .logo i { width: 10px; height: 18px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 12px rgba(240, 145, 153, .5); } .logo b { color: var(--accent); } .nav { display: flex; gap: 4px; } .nav a { padding: 7px 15px; border-radius: 999px; font-size: 14.5px; color: var(--dim); cursor: pointer; transition: color .18s, background .18s; white-space: nowrap; } .nav a:hover { color: var(--fg); } .nav a.on { color: var(--bg); background: var(--accent); font-weight: 600; } .searchbox { margin-left: auto; position: relative; } .searchbox input { width: 210px; padding: 8px 13px; border-radius: 999px; font-size: 13.5px; color: var(--fg); background: var(--card2); border: 1px solid transparent; outline: none; transition: border-color .2s, width .2s; } .searchbox input:focus { border-color: var(--accent-dim); width: 250px; } .cnt { font-size: 12.5px; color: var(--dim); white-space: nowrap; } main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 34px 70px; } .block { margin: 34px 0 0; } .bhead { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; } .bhead h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: .3px; } .bhead span { font-size: 12.5px; color: var(--dim); } .hero { position: relative; border-radius: 18px; overflow: hidden; margin-top: 6px; height: 420px; background: var(--bg2); } .hero-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center 30%; } .hero::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, rgba(11, 11, 15, .96) 8%, rgba(11, 11, 15, .72) 42%, rgba(11, 11, 15, .2) 72%, rgba(11, 11, 15, .6)), linear-gradient(0deg, var(--bg) 2%, transparent 46%); } .hero-info { position: absolute; left: 0; bottom: 0; padding: 40px 44px; max-width: 680px; z-index: 3; } .hero-tag { font-size: 12px; letter-spacing: 2px; color: var(--accent); font-weight: 600; margin-bottom: 12px; } .hero h1 { margin: 0 0 12px; font-size: 40px; line-height: 1.16; font-weight: 720; letter-spacing: -.5px; } .hero-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13.5px; color: var(--dim); margin-bottom: 14px; } .hero-meta b { color: var(--star); font-weight: 600; } .hero p { margin: 0 0 22px; font-size: 14.5px; line-height: 1.75; color: #c8c8d2; } .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; } .hbtn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 999px; font-size: 14.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: transform .16s, background .18s, border-color .18s; } .hbtn:hover { transform: translateY(-1px); } .hbtn.primary { background: var(--accent); color: #17171d; } .hbtn.ghost { background: rgba(255, 255, 255, .1); color: var(--fg); border-color: rgba(255, 255, 255, .18); } .hbtn.ghost:hover { background: rgba(255, 255, 255, .17); } .row { display: grid; grid-auto-flow: column; grid-auto-columns: 182px; gap: 14px; overflow-x: auto; padding: 4px 2px 12px; scroll-snap-type: x proximity; scrollbar-width: none; } .row::-webkit-scrollbar { display: none; } .row .card { scroll-snap-align: start; } .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); } .card { cursor: pointer; position: relative; } .pw { position: relative; aspect-ratio: 2 / 3; border-radius: var(--r); overflow: hidden; background: var(--card); border: 1px solid rgba(255, 255, 255, .04); transition: transform .2s ease, box-shadow .2s ease, border-color .2s; } .card:hover .pw { transform: translateY(-4px); box-shadow: var(--shadow); border-color: rgba(240, 145, 153, .35); } .pw img { width: 100%; height: 100%; object-fit: cover; } .ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #3c3c48; background: linear-gradient(160deg, #1d1d26, #14141b); } .rate, .ep, .bili, .mag, .badge-live, .trailer-mark { position: absolute; font-size: 11.5px; font-weight: 600; line-height: 1; padding: 5px 7px; border-radius: 6px; backdrop-filter: blur(4px); } .rate { top: 8px; left: 8px; color: var(--star); background: rgba(8, 8, 12, .74); } .ep { bottom: 8px; right: 8px; color: #e6e6ee; background: rgba(8, 8, 12, .74); } .bili { bottom: 8px; left: 8px; color: #fff; background: rgba(251, 114, 153, .92); } .mag { bottom: 34px; left: 8px; color: #08170d; background: rgba(126, 231, 135, .92); } .badge-live { top: 8px; left: 8px; color: #181820; background: rgba(240, 145, 153, .92); } .stars { position: relative; display: inline-block; font-style: normal; font-size: 11px; line-height: 1; letter-spacing: 1px; color: rgba(255, 255, 255, .16); vertical-align: -1px; } .stars::before { content: "★★★★★★★★★★"; } .stars::after { content: "★★★★★★★★★★"; position: absolute; left: 0; top: 0; color: var(--star); white-space: nowrap; overflow: hidden; width: calc(var(--p, 0) * 10%); } .sub2 { align-items: center; } .sub2 .num { color: var(--star); font-weight: 700; } .sub2 .dot { color: var(--line); font-style: normal; } .mrate { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; font-size: 13px; } .mrate .stars { font-size: 13px; } .mrate .num { color: var(--star); font-size: 16px; font-weight: 700; } .infobox { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 10px 0 14px; font-size: 12.5px; } .infobox dt { color: var(--dim); white-space: nowrap; } .infobox dd { margin: 0; color: var(--fg); word-break: break-word; } .trailer-mark { top: 8px; right: 8px; color: #fff; background: rgba(8, 8, 12, .74); } .t { margin: 9px 0 3px; font-size: 13.5px; font-weight: 560; line-height: 1.42; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } .sub2 { font-size: 12px; color: var(--dim); display: flex; gap: 8px; } .wdbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; } .wd-tab { padding: 7px 15px; border-radius: 999px; font-size: 13.5px; cursor: pointer; background: var(--card2); color: var(--dim); border: 1px solid transparent; transition: color .18s, background .18s, border-color .18s; } .wd-tab:hover { color: var(--fg); } .wd-tab.on { background: rgba(240, 145, 153, .16); color: var(--accent); border-color: var(--accent-dim); font-weight: 600; } .tabs { display: flex; gap: 8px; margin: 0 0 18px; } .mask { position: fixed; inset: 0; z-index: 90; background: rgba(4, 4, 7, .82); backdrop-filter: blur(6px); display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 4vh 20px; } .mask.on { display: flex; } .modal { width: min(920px, 100%); background: var(--card); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--line); } .mtop { display: flex; gap: 18px; padding: 24px 26px; } .mp { width: 150px; flex: 0 0 150px; aspect-ratio: 2 / 3; border-radius: var(--r-sm); overflow: hidden; background: var(--card2); } .mp img { width: 100%; height: 100%; object-fit: cover; } .mb { flex: 1; min-width: 0; } .mb h3 { margin: 2px 0 10px; font-size: 22px; line-height: 1.3; } .meta { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 12px; } .pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--card2); color: var(--dim); } .plot { font-size: 13.8px; line-height: 1.8; color: #c2c2cc; margin: 0 0 16px; max-height: 168px; overflow-y: auto; } .acts { display: flex; gap: 9px; flex-wrap: wrap; } .btn { font-size: 13px; padding: 9px 15px; border-radius: var(--r-sm); cursor: pointer; background: var(--card2); color: var(--fg); border: 1px solid var(--line); transition: background .18s, border-color .18s; } .btn:hover { background: #2c2c38; border-color: var(--accent-dim); } .btn.pri { background: var(--accent); color: #17171d; border-color: transparent; font-weight: 600; } .x { position: absolute; top: 14px; right: 18px; font-size: 24px; color: var(--dim); cursor: pointer; line-height: 1; } .x:hover { color: var(--fg); } .trailer { position: relative; aspect-ratio: 16 / 9; background: #000; border-top: 1px solid var(--line); } .trailer iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; } .nt { padding: 10px 26px 18px; font-size: 12.5px; color: var(--dim); } .empty, .loading { padding: 60px 0; text-align: center; color: var(--dim); font-size: 14px; } .sk { border-radius: var(--r); aspect-ratio: 2 / 3; background: linear-gradient(100deg, #16161d 30%, #1e1e28 50%, #16161d 70%); background-size: 220% 100%; animation: sk 1.4s infinite linear; } @keyframes sk { to { background-position: -220% 0; } } @media (max-width: 760px) { .tw { padding: 0 16px; gap: 12px; } .searchbox input { width: 130px; } .searchbox input:focus { width: 160px; } .cnt { display: none; } main { padding: calc(var(--header-h) + 12px) 16px 60px; } .hero { min-height: 320px; } .hero-info { padding: 24px 20px; } .hero h1 { font-size: 26px; } .hero p { display: none; } .row { grid-auto-columns: 132px; } .grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 12px; } .mtop { flex-direction: column; padding: 18px; } .mp { width: 110px; flex-basis: 110px; } } .relbox { margin: 0 0 16px; } .relhead { font-size: 12px; color: var(--dim); letter-spacing: 1px; margin-bottom: 8px; } .relchip { display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 8px 0; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; background: var(--card2); color: var(--fg); border: 1px solid var(--line); transition: border-color .18s, color .18s; } .relchip:hover { border-color: var(--accent-dim); color: var(--accent); } .relchip em { font-style: normal; font-size: 11px; color: var(--dim); } .hero { cursor: grab; touch-action: pan-y; } .hero.grab { cursor: grabbing; } .hero .slide { position: absolute; inset: 0; opacity: 0; transition: opacity .55s ease; pointer-events: none; z-index: 0; } .hero .slide.on { opacity: 1; pointer-events: auto; z-index: 2; } .hero .slide .hero-bg { z-index: 0; } .hero .slide .hero-info { position: relative; z-index: 3; } .hero .slide .hero-bg { position: absolute; inset: 0; z-index: -2; } .hero .slide .hero-info { position: relative; z-index: 1; } .hero { position: relative; } .hero .dots { position: absolute; left: 44px; bottom: 22px; z-index: 3; display: flex; gap: 8px; } .hero .dots i { width: 22px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.28); cursor: pointer; transition: background .2s, width .2s; } .hero .dots i.on { background: var(--accent); width: 34px; } .card .fav { position: absolute; top: 6px; right: 6px; z-index: 4; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 15px; color: #d8d8e2; background: rgba(8,8,12,.66); opacity: 0; transition: opacity .18s, color .18s, transform .12s; } .card:hover .fav, .card .fav.on { opacity: 1; } .card .fav:hover { transform: scale(1.12); } .card .fav.on { color: var(--star); } .syncbar { margin-left: auto; display: flex; gap: 10px; } .syncbar a { font-size: 12px; color: var(--dim); cursor: pointer; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); transition: color .18s, border-color .18s; } .syncbar a:hover { color: var(--accent); border-color: var(--accent-dim); } @keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-7px) } } @media (max-width: 760px) { .hero { height: 300px; } .hero-info { padding: 20px 18px; } .hero .dots { left: 20px; bottom: 14px; } } #lightbox { position: fixed; inset: 0; z-index: 120; display: none; align-items: center; justify-content: center; background: rgba(4,4,7,.9); backdrop-filter: blur(4px); } #lightbox.on { display: flex; } #lightbox .lb-inner { width: min(1100px, 92vw); aspect-ratio: 16 / 9; position: relative; } #lightbox iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 12px; } #lightbox .lb-x { position: absolute; top: -38px; right: 0; font-size: 26px; color: #ddd; cursor: pointer; } .regionsw { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; font-size: 12px; color: var(--dim); } .regionsw b { color: var(--accent); font-weight: 600; } .regionsw span.r { cursor: pointer; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); transition: all .18s; } .regionsw span.r.on { background: rgba(240,145,153,.16); color: var(--accent); border-color: var(--accent-dim); } .filterbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 -6px; align-items: center; } .filterbar .chip { font-size: 12.5px; padding: 5px 12px; border-radius: 999px; cursor: pointer; color: var(--dim); border: 1px solid var(--line); background: var(--card); transition: all .16s; } .filterbar .chip:hover { color: var(--fg); border-color: var(--accent-dim); } .filterbar .chip.on { background: rgba(240,145,153,.16); color: var(--accent); border-color: var(--accent-dim); font-weight: 600; } .filterbar .sep { width: 1px; height: 16px; background: var(--line); margin: 0 4px; } .build { font-size: 10.5px; color: var(--dim); opacity: .55; margin-left: 10px; white-space: nowrap; } @media (max-width: 760px) { .build { display: none; } } .tph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; color: var(--dim); background: #0d0d12; text-align: center; padding: 20px; }</style>
 </head>
 <body data-page="home">
 <header class="top" id="topbar"><div class="tw">
@@ -21,14 +21,14 @@
   </nav>
   <div class="searchbox"><input id="q" placeholder="搜索新番 / 新片…" autocomplete="off"></div>
   <div class="cnt" id="cnt"></div>
-  <div class="build" id="build">10-28 16:10</div>
+  <div class="build" id="build">10-30 17:44</div>
 </div></header>
 
 <main id="main"><div class="loading">加载中…</div></main>
 
 <div class="mask" id="mask"><div class="modal" id="modal"></div></div>
 
-<script>window.DATA_URL="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/index-6200faec48.json";window.DATA_FB="https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/index-6200faec48.json";window.DATA_LOCAL="index-6200faec48.json";window.DATA=null;</script>
+<script>window.DATA_URL="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/index-e726b72e77.json";window.DATA_FB="https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/index-e726b72e77.json";window.DATA_LOCAL="index-e726b72e77.json";window.DATA=null;</script>
 <script>/* 共用交互：首页与媒体库页都加载这一份（由 _headers 长缓存） */
 (function () {
 'use strict';
@@ -43,9 +43,24 @@ var SORT = (function(){ try { return localStorage.getItem('bgm_sort') || 'rating
 var STATUS_F = '';   // '' | RELEASING | FINISHED
 function bySort(list) {
 var a = list.slice();
-if (SORT === 'rating') a.sort(function (x, y) { return (y.rating || 0) - (x.rating || 0); });
-else if (SORT === 'new') a.sort(function (x, y) { return String(y.air || '').localeCompare(String(x.air || '')); });
-else if (SORT === 'name') a.sort(function (x, y) { return String(x.name).localeCompare(String(y.name), 'zh'); });
+var cmp = null;
+if (SORT === 'rating') cmp = function (x, y) { return (y.rating || 0) - (x.rating || 0); };
+else if (SORT === 'new') cmp = function (x, y) { return String(y.air || '').localeCompare(String(x.air || '')); };
+else if (SORT === 'name') cmp = function (x, y) { return String(x.name).localeCompare(String(y.name), 'zh'); };
+/* 播放源优先级：磁力(3) > B 站(2) > 奈飞(1) > 无(0)。
+有磁力的排前面，其次才是能直接播的；同档内沿用原来的评分/时间/名称排序。
+Array.sort 在现代浏览器是稳定排序，同档同值会保持原有相对顺序。 */
+var rank = function (x) {
+if (magnetOf(x)) return 3;
+if (bvidOf(x)) return 2;
+if (x.netflix) return 1;
+return 0;
+};
+a.sort(function (x, y) {
+var d = rank(y) - rank(x);
+if (d) return d;
+return cmp ? cmp(x, y) : 0;
+});
 return a;
 }
 function byStatus(list) {
@@ -170,6 +185,13 @@ if (h >= 24) return Math.floor(h / 24) + ' 天后更新';
 if (h >= 1) return h + ' 小时后更新';
 return Math.max(1, Math.floor(d / 60000)) + ' 分钟后更新';
 }
+/* 评分：星级 + 数值双呈现（参照 Bangumi 条目页的 starsN + .number 约定）。
+--p 是 0–10 的档位，CSS 里用 calc(var(--p) * 10%) 截出实心宽度。 */
+function starsHTML(rating) {
+if (!rating) return '';
+var p = Math.max(0, Math.min(10, Math.round(Number(rating))));
+return '<i class="stars" style="--p:' + p + '" title="' + Number(rating).toFixed(1) + ' 分"></i>';
+}
 function esc(s) {
 return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
 return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -189,30 +211,68 @@ img.src = q.shift();
 img.dataset.fb = q.join('|');
 };
 function bvidOf(it) {
-if (it.id && DATA.bili && DATA.bili[it.id]) return DATA.bili[it.id];
-if (it.key && DATA.bili_fresh && DATA.bili_fresh[it.key]) return DATA.bili_fresh[it.key];
-return '';
+var v = '';
+if (it.id && DATA.bili && DATA.bili[it.id]) v = DATA.bili[it.id];
+else if (it.key && DATA.bili_fresh && DATA.bili_fresh[it.key]) v = DATA.bili_fresh[it.key];
+/* 媒体库里 bili 有两种形态：纯 bvid 字符串，或 {bvid,title,play,duration,score} 对象。
+以前直接把对象塞进 encodeURIComponent，会变成 %5Bobject%20Object%5D，
+导致那 156 条的「B站播放」实际是坏的。 */
+if (v && typeof v === 'object') v = v.bvid || '';
+return typeof v === 'string' ? v : '';
 }
+function magnetOf(it) {
+var m = DATA.mag || {};
+if (it.id && m[it.id]) return m[it.id];
+if (it.key && m[it.key]) return m[it.key];
+return null;
+}
+/* 磁力 → 网页播放地址（第三方 KeepShare，纯 URL 拼接，不上传任何东西） */
+function magnetPlay(mg) {
+if (!mg) return '';
+return 'https://keepshare.cc/gv78k1oi/' + encodeURIComponent(String(mg).split('&')[0]);
+}
+function fmtSize(n) {
+n = Number(n) || 0;
+if (n <= 0) return '';
+var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+return (n >= 100 ? n.toFixed(0) : n.toFixed(n >= 10 ? 1 : 2)) + u[i];
+}
+window.__magnet = function (mg, el) {
+var done = function (okTxt) { if (el) { el.textContent = okTxt; setTimeout(function () { el.textContent = '磁力'; }, 1600); } };
+try {
+if (navigator.clipboard && navigator.clipboard.writeText) {
+navigator.clipboard.writeText(mg).then(function () { done('已复制'); }, function () { done('复制失败'); });
+} else {
+var t = document.createElement('textarea');
+t.value = mg; document.body.appendChild(t); t.select();
+document.execCommand('copy'); document.body.removeChild(t); done('已复制');
+}
+} catch (e) { done('复制失败'); }
+};
 function cardHTML(it) {
 var bv = bvidOf(it);
+var mg = magnetOf(it);
 var html = '<div class="card" data-key="' + esc(it.key || it.id || it.name) + '">';
+/* 封面只留「状态/来源」类角标；评分挪到封面下方信息行，和 Bangumi 一样用
+星级+数值呈现，封面就不再被 ★8.5 占掉左上角。 */
 html += '<div class="pw">' + imgHTML(it)
-+ (it.rating ? '<span class="rate">★ ' + it.rating.toFixed(1) + '</span>' : '')
 + (it.episodes ? '<span class="ep">' + it.episodes + ' 集</span>' : '')
 + (bv ? '<span class="bili">B站</span>' : '')
++ (mg ? '<span class="mag">磁力</span>' : '')
 + (it.trailer ? '<span class="trailer-mark">预告</span>' : '')
-+ (it.st === 'RELEASING' ? '<span class="ep" style="left:8px;right:auto;bottom:auto;top:8px;background:rgba(240,145,153,.92);color:#181820">连载</span>' : '')
++ (it.st === 'RELEASING' ? '<span class="badge-live">连载</span>' : '')
 + '</div>';
 var k = fkey(it), fv = isFollowed(k);
 html += '<span class="fav' + (fv ? ' on' : '') + '" data-fav="' + esc(k) + '" title="追番">'
 + (fv ? '★' : '☆') + '</span>';
 html += '<div class="t">' + esc(it.name) + '</div>';
-var sub = [];
-if (it.st === 'RELEASING' && it.next_at) sub.push(countdown(it.next_at));
-else if (it.type === 'S' && it.wd && it.wd !== '-') sub.push(it.wd);
-if (it.year) sub.push(it.year);
-if (it.air) sub.push(it.air.slice(5));
-html += '<div class="sub2">' + sub.filter(Boolean).map(esc).join(' · ') + '</div>';
+var bits = [];
+if (it.rating) bits.push(starsHTML(it.rating) + '<b class="num">' + Number(it.rating).toFixed(1) + '</b>');
+if (it.st === 'RELEASING' && it.next_at) bits.push(esc(countdown(it.next_at)));
+else if (it.type === 'S' && it.wd && it.wd !== '-') bits.push(esc(it.wd));
+if (it.year) bits.push(esc(String(it.year)));
+html += '<div class="sub2">' + bits.join('<em class="dot">·</em>') + '</div>';
 return html + '</div>';
 }
 function bindCards(root) {
@@ -251,21 +311,37 @@ if (i < items.length) requestAnimationFrame(step);
 function openModal(it) {
 var isFresh = it.kind === 'fresh';
 var bv = bvidOf(it);
+var mg = magnetOf(it);
 var h = '<span class="x" onclick="closeM()">×</span><div class="mtop">'
 + '<div class="mp">' + imgHTML(it, '') + '</div><div class="mb">';
-h += '<h3>' + esc(it.name) + '</h3><div class="meta">';
-if (it.rating) h += '<span class="pill" style="color:var(--star)">★ ' + it.rating.toFixed(1) + '</span>';
-if (it.year) h += '<span class="pill">' + esc(it.year) + '</span>';
-if (it.episodes) h += '<span class="pill">' + it.episodes + ' 集</span>';
-if (it.wd && it.wd !== '-') h += '<span class="pill">' + esc(it.wd) + '</span>';
-if (it.air) h += '<span class="pill">' + esc(it.air) + '</span>';
-if (it.st) h += '<span class="pill" style="color:var(--accent)">' + esc(ST[it.st] || it.st) + '</span>';
-if (it.fm) h += '<span class="pill">' + esc(FMT[it.fm] || it.fm) + '</span>';
-if (it.du) h += '<span class="pill">' + it.du + ' 分钟</span>';
-if (it.studio) h += '<span class="pill">' + esc(it.studio) + '</span>';
-if (it.st === 'RELEASING' && it.next_at) h += '<span class="pill" style="color:var(--star)">' + countdown(it.next_at) + '</span>';
-(it.genres || []).slice(0, 4).forEach(function (g) { h += '<span class="pill">' + esc(g) + '</span>'; });
+h += '<h3>' + esc(it.name) + '</h3>';
+/* 评分行：星级 + 数值（Bangumi 条目页的双呈现），连载中顺带把倒计时放这行 */
+if (it.rating || (it.st === 'RELEASING' && it.next_at)) {
+h += '<div class="mrate">';
+if (it.rating) h += starsHTML(it.rating) + '<b class="num">' + Number(it.rating).toFixed(1) + '</b>';
+if (it.st === 'RELEASING' && it.next_at) {
+h += '<span class="pill" style="color:var(--accent);margin-left:10px">' + esc(countdown(it.next_at)) + '</span>';
+}
 h += '</div>';
+}
+/* 信息表：参照 Bangumi 的 infobox（左标签右值），比一排胶囊更好扫读 */
+var info = [];
+if (it.wd && it.wd !== '-') info.push(['放送', it.wd]);
+if (it.air) info.push(['首播', it.air]);
+if (it.episodes) info.push(['话数', it.episodes + ' 集']);
+if (it.du) info.push(['时长', it.du + ' 分钟']);
+if (it.fm) info.push(['类型', FMT[it.fm] || it.fm]);
+if (it.st) info.push(['状态', ST[it.st] || it.st]);
+if (it.studio) info.push(['制作', it.studio]);
+if (it.year) info.push(['年份', String(it.year)]);
+if ((it.genres || []).length) info.push(['标签', (it.genres || []).join(' / ')]);
+if (info.length) {
+h += '<dl class="infobox">';
+info.forEach(function (kv) {
+h += '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(String(kv[1])) + '</dd>';
+});
+h += '</dl>';
+}
 if (it.overview) h += '<p class="plot">' + esc(it.overview) + '</p>';
 if ((it.rel || []).length) {
 h += '<div class="relbox"><div class="relhead">关联作品</div>';
@@ -278,17 +354,34 @@ h += '</div>';
 }
 h += '<div class="acts">';
 var cn = useCN();
+/* 磁力优先：有磁力时它就是主按钮，B 站/预告降为次要 */
+if (mg) {
+h += '<span class="btn pri" onclick="__magnet(&#39;' + esc(mg.m) + '&#39;,this)">磁力</span>';
+h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(magnetPlay(mg.m)) + '">在线播放</a>';
+}
 if (bv) {
-h += '<span class="btn' + (cn ? ' pri' : '') + '" onclick="playBili(&#39;' + esc(bv) + '&#39;,' + (cn ? 'true' : 'false') + ')">▶ B站播放</span>';
+h += '<span class="btn' + (!mg && cn ? ' pri' : '') + '" onclick="playBili(&#39;' + esc(bv) + '&#39;,' + (cn ? 'true' : 'false') + ')">▶ B站播放</span>';
 }
 if (it.trailer) {
-h += '<span class="btn' + (bv && cn ? '' : ' pri') + '" onclick="playTrailer(&#39;' + esc(it.trailer) + '&#39;)">▶ 预告</span>';
+h += '<span class="btn' + (!mg && !(bv && cn) ? ' pri' : '') + '" onclick="playTrailer(&#39;' + esc(it.trailer) + '&#39;)">▶ 预告</span>';
 }
-h += '<span class="pill" style="align-self:center;color:var(--dim)">' + (cn ? '国内线路 · 优先 B 站' : '海外线路 · 优先预告') + '</span>';
+h += '<span class="pill" style="align-self:center;color:var(--dim)">'
++ (mg ? '磁力优先' : (cn ? '国内线路 · 优先 B 站' : '海外线路 · 优先预告')) + '</span>';
 if (!isFresh && it.id) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc((window.JF || 'http://127.0.0.1:8100')) + '/web/#/details?id=' + esc(it.id) + '">Jellyfin</a>';
 if (it.url) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(it.url) + '">来源页</a>';
 if (it.name) h += '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name) + '">B站搜索</a>';
-h += '</div></div></div><div class="trailer" id="trailer"></div>';
+h += '</div>';
+/* 备选版本：同一个片子的其他压制/字幕版本，点一下复制对应磁力 */
+if (mg && (mg.alt || []).length) {
+h += '<div class="relbox"><div class="relhead">其他磁力版本</div>';
+(mg.alt || []).forEach(function (a) {
+h += '<span class="relchip" title="' + esc(a.t || '') + '" onclick="__magnet(&#39;' + esc(a.m) + '&#39;,this)">'
++ esc((a.t || '').slice(0, 46))
++ '<em>' + [fmtSize(a.s), a.sd ? a.sd + ' 种' : '', a.sub || ''].filter(Boolean).join(' · ') + '</em></span>';
+});
+h += '</div>';
+}
+h += '</div></div><div class="trailer" id="trailer"></div>';
 $('#modal').innerHTML = h;
 $('#mask').classList.add('on');
 document.body.style.overflow = 'hidden';
@@ -417,6 +510,14 @@ out += '<div class="dots">' + slides.map(function (_, i) {
 return '<i class="' + (i === 0 ? ' on' : '') + '" data-dot="' + i + '"></i>';
 }).join('') + '</div></section>';
 }
+/* 近期更新：连载中且有下一集时间的，按「下一集越快更新越靠前」排。
+这是番剧站最常用的入口（先看更新再看分类），所以放在 hero 之后第一块。 */
+var recent = fa.filter(function (x) { return x.st === 'RELEASING' && x.next_at; })
+.sort(function (a, b) { return a.next_at - b.next_at; }).slice(0, 12);
+if (recent.length) {
+out += '<section class="block" id="recent"><div class="bhead"><h2>近期更新</h2>'
++ '<span>' + recent.length + ' 部连载中</span></div><div class="row" id="r-recent"></div></section>';
+}
 var fl = follows();
 if (fl.length) {
 out += '<section class="block" id="myfollow"><div class="bhead"><h2>我的追番</h2><span>' + fl.length + ' 部</span>'
@@ -427,19 +528,38 @@ out += '<section class="block" id="myfollow"><div class="bhead"><h2>我的追番
 out += '<div class="filterbar" id="fbar"></div>';
 out += '<section class="block" id="sched"><div class="bhead"><h2>番剧表</h2><span>按放送日筛选</span></div>'
 + '<div class="wdbar" id="wdbar"></div><div class="grid" id="g-sched"></div></section>';
-out += '<section class="block"><div class="bhead"><h2>本季新番</h2><span>' + fa.length + ' 部</span></div><div class="row" id="r-anime"></div></section>';
+var ysel = (DATA.years || []).slice().reverse();
+out += '<section class="block" id="yearsel"><div class="bhead"><h2>按年份</h2><span>每年人气 Top 50</span>'
++ '<select class="yselect" id="ysel">' + ysel.map(function (y) { return '<option>' + y + '</option>'; }).join('') + '</select></div>'
++ '<div class="grid" id="g-year"></div></section>';
+out += '<section class="block"><div class="bhead"><h2>热门动漫</h2><span>Top ' + Math.min(ROW_CAP, fa.length) + '</span></div><div class="row" id="r-anime"></div></section>';
 out += '<section class="block" id="allanime"><div class="bhead"><h2>全部动漫</h2><span>' + fa.length + ' 部</span></div><div class="grid" id="g-all"></div></section>';
 $('#main').innerHTML = out;
 ALL = [];
 initHero();
+var yd = $('#ysel');
+if (yd) {
+var years = (DATA.years || []).slice().reverse();
+yd.onchange = function () { loadYear(+yd.value); };
+/* 下拉是倒序（最新年份在最前），默认加载的年份必须和下拉显示的一致 */
+setTimeout(function () {
+if (!years.length) return;
+yd.value = String(years[0]);
+loadYear(years[0]);
+}, 400);
+}
 renderFilterBar();
 /* 先画 hero + 番剧表；两条轨道用空闲时间补，避免首屏被 48 张远程海报堵住 */
 var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 60); };
 later(function () {
+if (recent.length) fill($('#r-recent'), recent, 12);
 fill($('#r-anime'), bySort(fa).slice(0, ROW_CAP), ROW_CAP);
 fill($('#g-all'), bySort(byStatus(fa)), 80);
 });
 if (follows().length) {
+/* fm 以前没定义（只有 fa），只要本地有追番记录这里就抛 ReferenceError，
+后面的 [data-open] 绑定和追番轨道全挂。数据里本来就有 movies。 */
+var fm = (DATA.fresh && DATA.fresh.movies) || [];
 var pool = fa.concat(fm);
 fill($('#r-follow'), pool.filter(function (x) { return isFollowed(fkey(x)); }), 24);
 }
@@ -470,6 +590,40 @@ bar.appendChild(el);
 });
 renderSched(fa);
 setCnt(fa.length);
+}
+var YEARS_BASE = [window.DATA_URL ? window.DATA_URL.split('/media/')[0] + '/media/years/' : '',
+window.DATA_FB ? window.DATA_FB.split('/media/')[0] + '/media/years/' : '',
+'./years/'].filter(Boolean);
+/* 年份目录（media/years/*.json）早期用短字段名 k/n/y/r/e/img，卡片渲染读的是长字段名
+name/poster/year/rating/episodes —— 在这里做一次别名归一，两套数据都能渲染 */
+function nzYear(x) {
+if (!x || typeof x !== 'object') return x;
+if (x.name !== undefined && x.poster !== undefined) return x;
+return {key: x.key || x.k, name: x.name || x.n || '',
+poster: x.poster || x.img || '', year: x.year || x.y,
+rating: x.rating !== undefined ? x.rating : x.r,
+episodes: x.episodes || x.e || 0, air: x.air || '', wd: x.wd || '',
+trailer: x.trailer || null, st: x.st, fm: x.fm,
+type: x.type || (x.fm === 'MOVIE' ? 'M' : 'S'),
+next_at: x.next_at || 0, next_ep: x.next_ep || 0,
+overview: x.overview || x.v || '', genres: x.genres || x.g || [],
+url: x.url || x.u || '', banner: x.banner || '', studio: x.sd || '',
+duration: x.du || x.duration || 0, pop: x.pop || 0, rel: x.rel || []};
+}
+function loadYear(y) {
+var hosts = YEARS_BASE.map(function (b) { return b + y + '.json'; });
+var i = 0;
+$('#g-year').innerHTML = '<div class="loading">' + y + ' 年加载中…</div>';
+(function next() {
+if (i >= hosts.length) { $('#g-year').innerHTML = '<div class="empty">' + y + ' 年没有数据</div>'; return; }
+fetchJSON(hosts[i++], 8000)
+.then(function (list) {
+if (!list || !list.length) throw 0;
+list = list.map(nzYear);
+ALL = ALL.concat(list);
+fill($('#g-year'), bySort(list), 60);
+}).catch(next);
+})();
 }
 function renderFilterBar() {
 var bar = $('#fbar'); if (!bar) return;
@@ -586,6 +740,24 @@ window.openModal = openModal;
 window.closeM = closeM;
 window.playTrailer = playTrailer;
 window.playBili = playBili;
+/* 单档超时：任何一档 CDN 挂住都不能把后面的兜底档一起拖死（曾出现 gh-proxy 卡住、
+页面一直停在「加载中」）。7 秒拿不到就换下一档。 */
+function fetchJSON(url, ms) {
+var ctl = window.AbortController ? new AbortController() : null;
+var timer = ctl ? setTimeout(function () { ctl.abort(); }, ms || 7000) : 0;
+var opt = { cache: 'force-cache' };
+if (ctl) opt.signal = ctl.signal;
+return fetch(url, opt).then(function (r) {
+if (!r.ok) throw 0;
+return r.json();
+}).then(function (d) {
+if (timer) clearTimeout(timer);
+return d;
+}, function (e) {
+if (timer) clearTimeout(timer);
+throw e;
+});
+}
 function loadData(cb) {
 if (window.DATA) { cb(); return; }
 var urls = [window.DATA_URL, window.DATA_FB,
@@ -593,8 +765,7 @@ window.DATA_LOCAL ? './' + window.DATA_LOCAL : null].filter(Boolean);
 var i = 0;
 function next() {
 if (i >= urls.length) { cb(); return; }
-fetch(urls[i++], { cache: 'force-cache' })
-.then(function (r) { if (!r.ok) throw 0; return r.json(); })
+fetchJSON(urls[i++], 8000)
 .then(function (d) { window.DATA = d || {}; DATA = window.DATA; cb(); })
 .catch(next);
 }

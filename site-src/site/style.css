@@ -95,7 +95,7 @@ main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 
 
 /* ---------- 横滑轨道 ---------- */
 .row {
-  display: grid; grid-auto-flow: column; grid-auto-columns: 168px; gap: 14px;
+  display: grid; grid-auto-flow: column; grid-auto-columns: 182px; gap: 14px;
   overflow-x: auto; padding: 4px 2px 12px; scroll-snap-type: x proximity;
   scrollbar-width: none;
 }
@@ -105,7 +105,7 @@ main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 
 /* ---------- 网格 ---------- */
 .grid {
   display: grid; gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
 }
 
 /* ---------- 卡片 ---------- */
@@ -121,13 +121,36 @@ main { max-width: 1520px; margin: 0 auto; padding: calc(var(--header-h) + 18px) 
   width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
   font-size: 26px; color: #3c3c48; background: linear-gradient(160deg, #1d1d26, #14141b);
 }
-.rate, .ep, .bili, .trailer-mark {
+.rate, .ep, .bili, .mag, .badge-live, .trailer-mark {
   position: absolute; font-size: 11.5px; font-weight: 600; line-height: 1;
   padding: 5px 7px; border-radius: 6px; backdrop-filter: blur(4px);
 }
 .rate { top: 8px; left: 8px; color: var(--star); background: rgba(8, 8, 12, .74); }
 .ep { bottom: 8px; right: 8px; color: #e6e6ee; background: rgba(8, 8, 12, .74); }
 .bili { bottom: 8px; left: 8px; color: #fff; background: rgba(251, 114, 153, .92); }
+/* 磁力角标：放在左下 B 站角标上方，避开右下「集数」和右上「预告」 */
+.mag { bottom: 34px; left: 8px; color: #08170d; background: rgba(126, 231, 135, .92); }
+/* 连载角标：挪到左上，和右上「预告」对称 */
+.badge-live { top: 8px; left: 8px; color: #181820; background: rgba(240, 145, 153, .92); }
+
+/* 星级：10 档实心宽度由 --p 控制，纯 CSS，不用雪碧图（对照 Bangumi 的 starsN 约定） */
+.stars { position: relative; display: inline-block; font-style: normal; font-size: 11px; line-height: 1;
+  letter-spacing: 1px; color: rgba(255, 255, 255, .16); vertical-align: -1px; }
+.stars::before { content: "★★★★★★★★★★"; }
+.stars::after { content: "★★★★★★★★★★"; position: absolute; left: 0; top: 0; color: var(--star);
+  white-space: nowrap; overflow: hidden; width: calc(var(--p, 0) * 10%); }
+
+.sub2 { align-items: center; }
+.sub2 .num { color: var(--star); font-weight: 700; }
+.sub2 .dot { color: var(--line); font-style: normal; }
+
+/* 详情页评分行与信息表 */
+.mrate { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; font-size: 13px; }
+.mrate .stars { font-size: 13px; }
+.mrate .num { color: var(--star); font-size: 16px; font-weight: 700; }
+.infobox { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 10px 0 14px; font-size: 12.5px; }
+.infobox dt { color: var(--dim); white-space: nowrap; }
+.infobox dd { margin: 0; color: var(--fg); word-break: break-word; }
 .trailer-mark { top: 8px; right: 8px; color: #fff; background: rgba(8, 8, 12, .74); }
 .t {
   margin: 9px 0 3px; font-size: 13.5px; font-weight: 560; line-height: 1.42;
