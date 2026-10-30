@@ -1,0 +1,4 @@
+# 这些海报在 ModelScope 数据集里会被内容审核自动撤销（远端留下 revert 记录），
+# 重传仍会被抹掉并累积审核记录，因此同步步骤直接跳过；站点由回退链（jsDelivr/gh-proxy/同源）兜底。
+# 一行一个文件名（posters/ 下的 basename）。
+89e1b1dc6d.jpg

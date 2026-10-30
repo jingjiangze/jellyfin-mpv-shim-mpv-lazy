@@ -162,6 +162,58 @@ jobs:
           }
           git push origin "HEAD:${GITHUB_REF_NAME}" || echo "push failed (non-fatal)"
 
+      # 新增/变更的海报自动同步到 ModelScope 数据集（站点海报主源）。
+      # 历史教训：这步曾在 6a4cae6 加过，7 分钟后被 a0434128（CRLF 归一化那次）连带冲掉，
+      # 之后所有运行都不再有它 —— 数据集从此停更。这里保留并加固：
+      #   ① 按「文件大小」比对而不是只看存在，同名但内容变了也会重传；
+      #   ② 不再用 `2>&1 | sed` 包住 git push（管道会吞掉退出码，失败也被判成功）；
+      #   ③ 跳过 ms-revert-blocklist.txt 里的文件（ModelScope 审核会撤销，重传无意义）。
+      - name: Sync posters to ModelScope
+        timeout-minutes: 12
+        continue-on-error: true
+        env:
+          MS_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MS_TOKEN:-}" ]; then echo "no MODELSCOPE_TOKEN, skip"; exit 0; fi
+          MS_URL="https://oauth2:${MS_TOKEN}@www.modelscope.cn/datasets/jingjiangze/Anime-JPG.git"
+          BLOCK="site-src/ms-revert-blocklist.txt"
+          rm -rf "$RUNNER_TEMP/ms"
+          if ! GIT_LFS_SKIP_SMUDGE=1 git clone -q "$MS_URL" "$RUNNER_TEMP/ms" 2>"$RUNNER_TEMP/ms-clone.err"; then
+            sed -E 's#oauth2:[^@]*@#oauth2:***@#g' "$RUNNER_TEMP/ms-clone.err"
+            echo "::error::clone ModelScope dataset failed"; exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/ms/posters"
+          added=0; updated=0; skipped=0; blocked=0
+          for f in site-src/site/posters/*.jpg media/posters/*.jpg; do
+            [ -e "$f" ] || continue
+            b=$(basename "$f")
+            if [ -f "$BLOCK" ] && grep -qxF "$b" "$BLOCK"; then blocked=$((blocked+1)); continue; fi
+            dst="$RUNNER_TEMP/ms/posters/$b"
+            want=$(stat -c%s "$f")
+            if [ -e "$dst" ]; then
+              # SKIP_SMUDGE 检出的是 LFS 指针文本，里面有 "size N"；真实文件则读不到，按一致处理
+              have=$(grep -o 'size [0-9]\+' "$dst" 2>/dev/null | awk '{print $2}' | head -1 || true)
+              if [ -n "${have:-}" ] && [ "$have" != "$want" ]; then
+                cp -f "$f" "$dst"; updated=$((updated+1))
+              else
+                skipped=$((skipped+1))
+              fi
+            else
+              cp -f "$f" "$dst"; added=$((added+1))
+            fi
+          done
+          echo "posters: added=$added updated=$updated unchanged=$skipped blocklisted=$blocked"
+          if [ $((added+updated)) -eq 0 ]; then echo "dataset already in sync"; exit 0; fi
+          cd "$RUNNER_TEMP/ms"
+          git add -A posters
+          git -c commit.gpgsign=false -c user.name=github-actions               -c user.email=actions@users.noreply.github.com commit -qm "sync posters from site repo (+$added ~$updated)"
+          if ! git push "$MS_URL" HEAD:master 2>"$RUNNER_TEMP/ms-push.err"; then
+            sed -E 's#oauth2:[^@]*@#oauth2:***@#g' "$RUNNER_TEMP/ms-push.err"
+            echo "::error::push to ModelScope failed"; exit 1
+          fi
+          echo "pushed: +$added ~$updated posters"
+
       # 部署只认 build-out/ 快照
       - name: Deploy to Cloudflare Pages
         timeout-minutes: 10
