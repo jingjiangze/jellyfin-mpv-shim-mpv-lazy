@@ -133,6 +133,10 @@ jobs:
           # 交互脚本走内容哈希文件名（HTML 引用的是 app-<hash>.js，不是 app.js）——
           # 漏拷会被 CF Pages 的 SPA 回退用 text/html 兜底，浏览器拒执行（线上实测踩过）
           cp site-src/site/app-*.js build-out/ 2>/dev/null || true
+          # 关键：提供 404.html 后 CF Pages 退出 SPA 模式，缺失文件返回真 404 ——
+          # 否则 SPA 会用 index.html 以 text/html 兜底任何缺失 JS/JSON，且 _headers 的
+          # immutable 会把这条错误响应在边缘缓存一年（app-<hash>.js 与 /posters/* 都中过招）
+          cp site-src/site/404.html build-out/404.html 2>/dev/null || true
           cp site-src/tpl/_headers build-out/_headers
           cp -r site-src/site/assets build-out/assets 2>/dev/null || true
           cp site-src/site/index-*.json site-src/site/library-*.json build-out/ 2>/dev/null || true

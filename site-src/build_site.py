@@ -534,6 +534,15 @@ for out, tpl_name, content, data, cnt in PAGES:
     (SITE / out).write_text(html, encoding="utf-8")
     print(f"  data {jname} {jsize/1024:.0f} KB -> {out}: {len(html.encode('utf-8'))/1024:.0f} KB")
 
+# 404 页：有了它 CF Pages 退出 SPA 模式，缺失文件返回真 404，
+# 否则任何缺失的 JS/JSON 都会被 index.html 以 text/html 兜底 + immutable 缓存死
+if (TPL / "404.html").is_file():
+    html404 = ((TPL / "404.html").read_text(encoding="utf-8")
+               .replace("__CSS__", CSS)
+               .replace("__BUILD__", BUILD_TAG))
+    (SITE / "404.html").write_text(html404, encoding="utf-8")
+    print(f"  404.html: {len(html404.encode('utf-8'))/1024:.0f} KB")
+
 for _p in list(SITE.glob("index-*.json")) + list(SITE.glob("library-*.json")):
     if _p.name not in emitted:
         try:
