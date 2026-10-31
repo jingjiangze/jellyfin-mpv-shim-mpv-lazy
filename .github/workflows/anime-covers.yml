@@ -1,0 +1,93 @@
+name: anime-covers
+
+# Bangumi 封面 → ModelScope 数据集（站点海报主源）。
+# 8 个 job 并行下载，collect job 统一提交到数据集仓库（并发 push 同一个 LFS 仓库会冲突，所以必须收口）。
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "50 19 * * *"   # 每天 03:50（北京时间）
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anime-covers
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download covers
+        working-directory: site-src
+        env:
+          SHARD_TOTAL: "64"
+          COVER_WORKERS: "8"
+        run: |
+          set -euo pipefail
+          P=${{ matrix.part }}
+          export SHARD_LIST="$((P*8)),$((P*8+1)),$((P*8+2)),$((P*8+3)),$((P*8+4)),$((P*8+5)),$((P*8+6)),$((P*8+7))"
+          echo "shard list = $SHARD_LIST"
+          python -u fetch_bgm_covers.py
+
+      - name: Upload covers
+        uses: actions/upload-artifact@v4
+        with:
+          name: covers-${{ matrix.part }}
+          path: site-src/site/posters/bgm-*.jpg
+          if-no-files-found: warn
+          retention-days: 3
+
+  publish:
+    needs: fetch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: covers-*
+          path: covers
+          merge-multiple: true
+
+      - name: Report
+        run: |
+          ls covers | wc -l | xargs echo "本次封面数:"
+          du -sh covers || true
+
+      - name: Push to ModelScope dataset
+        env:
+          MS_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MS_TOKEN:-}" ]; then echo "no MODELSCOPE_TOKEN, skip"; exit 0; fi
+          MS_URL="https://oauth2:${MS_TOKEN}@www.modelscope.cn/datasets/jingjiangze/Anime-JPG.git"
+          rm -rf ms
+          GIT_LFS_SKIP_SMUDGE=1 git clone -q "$MS_URL" ms 2>/dev/null
+          mkdir -p ms/posters
+          added=0; skipped=0
+          for f in covers/*.jpg; do
+            [ -e "$f" ] || continue
+            b=$(basename "$f")
+            if [ -e "ms/posters/$b" ]; then skipped=$((skipped+1)); continue; fi
+            cp -f "$f" "ms/posters/$b"; added=$((added+1))
+          done
+          echo "added=$added skipped=$skipped"
+          if [ "$added" -eq 0 ]; then echo "no new covers"; exit 0; fi
+          cd ms
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add posters
+          git commit -q -m "covers: add $added"
+          for i in 1 2 3; do
+            if git push -q origin HEAD:master 2>/dev/null; then echo "pushed"; exit 0; fi
+            echo "push retry $i"; sleep 5; git pull --rebase -q || true
+          done
+          echo "::warning::push to ModelScope failed"
