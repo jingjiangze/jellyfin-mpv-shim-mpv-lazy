@@ -1,464 +1,41 @@
 #!/usr/bin/env python3
-"""构建期直出静态 HTML（重构版 · 阶段一：无交互）
+"""站点构建器（全面替换版）：数据源换成 Bangumi 全量目录，AniList 退为补充/回退。
 
-和旧版的区别：
-  旧版只产出「空壳 + 内联 JS」，所有内容由 app.js 在浏览器里拼字符串注入
-  `#main`。首屏因此要等：下载 HTML → 拉 173KB JSON → 拼 DOM，期间只有
-  「加载中…」；布局也由运行时拼接的 class 决定，CSS 一改就可能错位。
+三张页面：
+  index.html    首页 —— 今年新番，按「本周 / 本月」两种排列
+  anime.html    番剧 —— 全量目录（8.8k），年份/类型/排序 + 搜索 + 加载更多
+  library.html  媒体库 —— 你夸克/Jellyfin 里已有的那 243 部
 
-  本版把同一批数据在**构建期**渲染成完整 DOM（hero / 近期更新 / 番剧表 /
-  按年份 / 热门 / 全部 / 媒体库），页面不依赖任何脚本即可正确显示。后续阶段
-  再接回交互（弹窗、筛选、轮播、追番、磁力），脚本只做增强、不再负责首屏。
+前后端分离：页面只是壳，数据全部走 site/data/*.json，前端按需拉。
 
-输出：
-  site/index.html      首页
-  site/library.html    媒体库
-  site/style.css       样式（独立文件，_headers 长缓存）
-  site/index-<hash>.json / library-<hash>.json   交互阶段用的数据（保持旧契约）
+数据来源：
+  catalog.json          bangumi-data 索引（id / 原名 / 中文名 / 类型 / 年份）
+  site/anime/*.json     64 个分片（评分 / 话数 / 简介 / 标签 / 封面原图）
+  data/fresh.json       AniList 当季（banner / 预告 / 倒计时）—— 只做补充与回退
+  data/data.json        媒体库（243 条数组）
+  data/bili.json        媒体库的 B 站 bvid
 """
-import datetime
-import hashlib
-import html as _html
+import datetime as dt
 import json
 import os
 import pathlib
+import re
 import shutil
 
 BASE = pathlib.Path(__file__).resolve().parent
 SITE = BASE / "site"
 TPL = BASE / "tpl"
+DATA = BASE / "data"
 
-# 海报源：ModelScope（国内 CDN）→ jsDelivr → gh-proxy → 同源 Pages
-REPO_PATH = "jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media"
-ASSET_BASE = os.environ.get("ASSET_BASE", f"https://gcore.jsdelivr.net/gh/{REPO_PATH}")
-ASSET_PROXY = os.environ.get(
-    "ASSET_PROXY",
-    "https://gh-proxy.com/https://raw.githubusercontent.com/"
-    "jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media",
-)
-MODELSCOPE_BASE = os.environ.get(
+MODELSCOPE = os.environ.get(
     "MODELSCOPE_BASE",
-    "https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master",
-)
-# 本地预览可置空 → 用同源 /posters/<id>.jpg
-POSTER_BASE = os.environ.get("POSTER_BASE", MODELSCOPE_BASE).rstrip("/")
-POSTER_DIR = pathlib.Path(os.environ.get("POSTER_DIR", str(SITE / "posters")))
-
-# SSR 网格截断：首屏静态 DOM 只出 hero+近期更新（首屏优先，弱网先看到内容），
-# 首屏以下的网格只出 SSR_BELOWFOLD 张占位（JS 数据到达后重渲全量）
-SSR_GRID_CAP = int(os.environ.get("SSR_GRID_CAP", "48"))
-SSR_YEAR_CAP = int(os.environ.get("SSR_YEAR_CAP", "8"))
-SSR_BELOWFOLD = int(os.environ.get("SSR_BELOWFOLD", "8"))
-
-# ---------------------------------------------------------------- 数据
-fresh = json.loads((SITE / "fresh.json").read_text(encoding="utf-8"))
-lib_raw = json.loads((SITE / "data.json").read_text(encoding="utf-8"))
-try:
-    bili = json.loads((SITE / "bili.json").read_text(encoding="utf-8"))
-except (OSError, ValueError):
-    bili = {}
-try:
-    MAG = json.loads((SITE / "magnet.json").read_text(encoding="utf-8"))
-except (OSError, ValueError):
-    MAG = {}
-
-blocklist = json.loads((BASE / "library_blocklist.json").read_text(encoding="utf-8"))
-blocked = {e["id"] for e in blocklist.get("entries") or []}
-before = len(lib_raw)
-lib_raw = [a for a in lib_raw if a[0] not in blocked]
-dropped = before - len(lib_raw)
-
-have_poster = lambda pid: (POSTER_DIR / f"{pid}.jpg").is_file()
-
-# ---------------------------------------------------------------- 新番封面镜像（e1d76409）# fetch_covers.py 把 AniList 的图下到 site/posters/<key>.jpg（大图带 -b 后缀），
-# 随后由 "Sync posters to ModelScope" 上云。有镜像 ⇒ 主源换 ModelScope（国内 0.35s），
-# 没有就还回 AniList 原图。大图（hero）不镜像：首屏只加载第 1 张，换源收益不抵复杂度。
-COVERS = SITE / "posters"
+    "https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master")
+BUILD_TAG = dt.datetime.now().strftime("%m-%d %H:%M")
+TODAY = dt.date.today()
+WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 
-def have_cover(k, suffix=""):
-    name = f"{k}{suffix}.jpg"
-    return (COVERS / name).is_file() or (POSTER_DIR / name).is_file()
-
-
-def fresh_img(k, orig, suffix=""):
-    if orig and have_cover(k, suffix):
-        return f"{POSTER_BASE}/posters/{k}{suffix}.jpg"
-    return orig or ""
-
-
-def fresh_pf(k, orig, suffix=""):
-    """回退链：AniList 原图 → jsDelivr 镜像 → gh-proxy 镜像 → 同源 /poster-img。"""
-    if not orig or not have_cover(k, suffix):
-        return orig or ""
-    return "|".join([
-        orig,
-        f"{ASSET_BASE}/posters/{k}{suffix}.jpg",
-        f"{ASSET_PROXY}/posters/{k}{suffix}.jpg",
-        f"/poster-img/{k}{suffix}.jpg",
-    ])
-
-# 海报三级回退：data-fb 里按 | 分隔，图挂了就换下一个源，全部失败再移除 <img>
-# （纯属性内联，不依赖 app.js，静态页也能兜底）
-IMG_FALLBACK = ("var q=(this.dataset.fb||'').split('|').filter(function(s){return s});"
-                "if(q.length){this.dataset.fb=q.slice(1).join('|');this.src=q[0]}"
-                "else{this.remove()}")
-
-LIB = []
-for a in lib_raw:
-    pid = a[0]
-    ok = bool(a[5]) and have_poster(pid)
-    LIB.append({
-        "id": pid, "key": pid, "kind": "lib",
-        "type": "S" if a[2] else "M",
-        "name": a[1], "year": a[3] or None, "rating": a[4] or None,
-        "poster": f"{POSTER_BASE}/posters/{pid}.jpg" if ok else "",
-        # 回退链：jsDelivr → gh-proxy → 同源 /poster-img（4c17a2c0：/posters/* 会被
-        # 边缘按 immutable 缓存死，同源兜底换到 poster-img 目录）
-        "pf": (f"{ASSET_BASE}/posters/{pid}.jpg"
-               f"|{ASSET_PROXY}/posters/{pid}.jpg"
-               f"|/poster-img/{pid}.jpg" if ok and POSTER_BASE else ""),
-        "episodes": a[6] or 0,
-        "overview": ((a[7] if len(a) > 7 else "") or "")[:180],
-        "st": "FINISHED",
-        "bili": bool(bili.get(pid)),
-        "mag": pid in MAG,
-    })
-
-FA = []
-for x in fresh.get("anime") or []:
-    k = x["k"]
-    FA.append({
-        "kind": "fresh", "type": "S", "key": k, "name": x["n"],
-        "rating": x.get("r"), "poster": fresh_img(k, x.get("img")),
-        "pf": fresh_pf(k, x.get("img")),
-        "banner": x.get("banner"), "trailer": x.get("trailer"),
-        "air": x.get("air") or "", "episodes": x.get("e") or 0,
-        "overview": (x.get("v") or "")[:180], "url": x.get("u") or "",
-        "next_ep": x.get("next_ep"), "next_at": x.get("next_at"),
-        "wd": x.get("wd"), "genres": x.get("g") or [], "pop": x.get("pop"),
-        "st": x.get("st"), "fm": x.get("fm"), "du": x.get("du"),
-        "studio": x.get("sd"), "rel": x.get("rel") or [],
-        "year": x.get("y"),
-        "bili": bool(bili.get("__fresh__", {}).get(k)),
-        "mag": k in MAG,
-        "netflix": bool(x.get("netflix")),
-    })
-
-FM = []
-for x in fresh.get("movies") or []:
-    k = x["k"]
-    FM.append({
-        "kind": "fresh", "type": "M", "key": k, "name": x["n"],
-        "rating": x.get("r"), "poster": fresh_img(k, x.get("img")),
-        "pf": fresh_pf(k, x.get("img")),
-        "banner": x.get("banner") or "", "trailer": x.get("trailer"),
-        "overview": (x.get("v") or "")[:180], "url": x.get("u") or "",
-        "year": x.get("y"), "genres": x.get("g") or [], "st": x.get("st"),
-        "bili": bool(bili.get("__fresh__", {}).get(k)),
-        "mag": k in MAG,
-    })
-
-# ---------------------------------------------------------------- 排序
-DAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
-FMT = {"TV": "TV", "TV_SHORT": "短片", "ONA": "网络放送", "OVA": "OVA",
-       "MOVIE": "剧场版", "SPECIAL": "特别篇", "MUSIC": "音乐"}
-ST = {"RELEASING": "连载中", "FINISHED": "已完结",
-      "NOT_YET_RELEASED": "未播出", "CANCELLED": "已取消"}
-
-
-def src_rank(it):
-    """播放源优先级：磁力 > B站 > 奈飞 > 无（与原 app.js 的 bySort 一致）"""
-    if it.get("mag"):
-        return 3
-    if it.get("bili"):
-        return 2
-    if it.get("netflix"):
-        return 1
-    return 0
-
-
-def sort_items(items, mode="rating"):
-    def cmp(it):
-        if mode == "new":
-            return str(it.get("air") or "")
-        if mode == "name":
-            return str(it.get("name") or "")
-        return it.get("rating") or 0
-    if mode == "new":
-        return sorted(items, key=lambda x: (-src_rank(x), -_ord(cmp(x)), str(x.get("name"))))
-    if mode == "name":
-        return sorted(items, key=lambda x: (-src_rank(x), cmp(x)))
-    return sorted(items, key=lambda x: (-src_rank(x), -float(cmp(x) or 0)))
-
-
-def _ord(s):
-    """给任意字符串一个可比较的数值（「最新」排序用）"""
-    return sum(ord(c) for c in s) if s else 0
-
-
-# ---------------------------------------------------------------- 片段
-def esc(s):
-    return _html.escape("" if s is None else str(s), quote=True)
-
-
-CST = datetime.timezone(datetime.timedelta(hours=8))   # 站点主要访问者在 UTC+8
-
-
-def fmt_ts_date(ts):
-    """next_at 是 unix 秒；按北京时间给一个静态可读的日期"""
-    try:
-        d = datetime.datetime.fromtimestamp(int(ts), CST)
-        return d.strftime("%m-%d") + " 更新"
-    except (TypeError, ValueError, OSError, OverflowError):
-        return ""
-
-
-def stars(rating):
-    try:
-        r = float(rating)
-    except (TypeError, ValueError):
-        return ""
-    p = max(0, min(10, round(r)))
-    return (f'<i class="stars" style="--p:{p}" '
-            f'title="{r:.1f} 分" aria-label="{r:.1f} 分"></i>')
-
-
-def card(it):
-    key = esc(it.get("key") or it.get("name"))
-    poster = it.get("poster") or ""
-    if poster:
-        # 只有媒体库海报配了多级回退链；没有回退的直接移除，露出卡片底色
-        onerr = IMG_FALLBACK if it.get("pf") else "this.remove()"
-        fb = f' data-fb="{esc(it["pf"])}"' if it.get("pf") else ""
-        img = (f'<img src="{esc(poster)}" alt="" loading="lazy" decoding="async"{fb} '
-               f'onerror="{onerr}">')
-    else:
-        img = '<div class="ph">🎬</div>'
-
-    tags = []
-    if it.get("st") == "RELEASING":
-        tags.append('<span class="tag tag-live">连载</span>')
-    if it.get("trailer"):
-        tags.append('<span class="tag tag-trailer">预告</span>')
-    if it.get("episodes"):
-        tags.append(f'<span class="tag tag-ep">{int(it["episodes"])} 集</span>')
-    sources = []
-    # B 站角标已按用户要求移除（2026-10-31）；bili 字段保留，仍参与播放源优先级排序
-    if it.get("mag"):
-        sources.append('<span class="tag tag-mag">磁力</span>')
-    src_line = f'<div class="tag-line">{"".join(sources)}</div>' if sources else ""
-
-    bits = []
-    if it.get("rating"):
-        bits.append(stars(it["rating"]) + f'<b class="num">{float(it["rating"]):.1f}</b>')
-    if it.get("st") == "RELEASING" and it.get("next_at"):
-        d = fmt_ts_date(it["next_at"])
-        if d:
-            bits.append(f"<span>{esc(d)}</span>")
-    elif it.get("wd") and it["wd"] != "-":
-        bits.append(f"<span>{esc(it['wd'])}</span>")
-    if it.get("year"):
-        bits.append(f"<span>{esc(it['year'])}</span>")
-    sub = '<em class="dot">·</em>'.join(bits)
-
-    return (
-        f'<article class="card" data-key="{key}" data-name="{esc(it.get("name"))}" '
-        f'data-r="{it.get("rating") or 0}" data-st="{esc(it.get("st") or "")}" '
-        f'data-wd="{esc(it.get("wd") or "")}" data-type="{esc(it.get("type") or "")}">'
-        f'<div class="poster">{img}{"".join(tags)}{src_line}</div>'
-        f'<div class="card-head"><h3 class="card-title">{esc(it.get("name"))}</h3>'
-        f'<button class="fav" type="button" data-fav="{key}" aria-label="追番">☆</button></div>'
-        f'<div class="sub">{sub}</div>'
-        f'</article>'
-    )
-
-
-def hero_block(slides, total):
-    if not slides:
-        return ""
-    out = ['<section class="hero" id="hero">']
-    for i, it in enumerate(slides):
-        on = " is-on" if i == 0 else ""
-        bg = it.get("banner") or it.get("poster") or ""
-        meta = []
-        if it.get("rating"):
-            meta.append(f'<span><b>★ {float(it["rating"]):.1f}</b></span>')
-        if it.get("episodes"):
-            meta.append(f'<span>{int(it["episodes"])} 集</span>')
-        if it.get("fm"):
-            meta.append(f'<span>{esc(FMT.get(it["fm"], it["fm"]))}</span>')
-        if it.get("st") and ST.get(it["st"]):
-            meta.append(f'<span>{esc(ST[it["st"]])}</span>')
-        btns = ""
-        # 内嵌播放已移除（2026-10-31）：hero 只留「详情」，预告走弹窗里的外链
-        btns += f'<span class="hbtn is-ghost" data-open="{esc(it.get("key"))}">详情</span>'
-        # 只有第一张预载背景图；其余留给 JS 在切换时再挂（6 张 banner 全预载太重）
-        bg_attr = (f'style="background-image:url(&quot;{esc(bg)}&quot;)"' if i == 0
-                   else f'data-bg="{esc(bg)}"')
-        out.append(
-            f'<div class="slide{on}" data-i="{i}">'
-            f'<div class="hero-bg" {bg_attr}></div>'
-            f'<div class="hero-shade"></div>'
-            f'<div class="hero-info">'
-            f'<div class="hero-tag">动漫库 · {total} 部</div>'
-            f'<h1>{esc(it.get("name"))}</h1>'
-            f'<div class="hero-meta">{"".join(meta)}</div>'
-            f'<p>{esc((it.get("overview") or "")[:160])}</p>'
-            f'<div class="hero-btns">{btns}</div>'
-            f'</div></div>'
-        )
-    dots = "".join(
-        f'<i class="{"is-on" if i == 0 else ""}" data-dot="{i}"></i>'
-        for i in range(len(slides))
-    )
-    out.append(f'<div class="dots">{dots}</div></section>')
-    return "".join(out)
-
-
-def sect_head(title, hint="", extra=""):
-    h = f'<span class="hint">{esc(hint)}</span>' if hint else ""
-    sp = f'<span class="spacer">{extra}</span>' if extra else ""
-    return f'<div class="sect-head"><h2>{esc(title)}</h2>{h}{sp}</div>'
-
-
-# ---------------------------------------------------------------- 首页
-def render_home():
-    slides = [x for x in FA if x.get("banner")][:6]
-    parts = []
-
-    hb = hero_block(slides, len(FA))
-    if hb:
-        parts.append(f'<div class="sect is-first">{hb}</div>')
-
-    recent = sorted([x for x in FA if x.get("st") == "RELEASING" and x.get("next_at")],
-                    key=lambda x: x["next_at"])[:12]
-    if recent:
-        cards = "".join(card(x) for x in recent)
-        parts.append(
-            f'<section class="sect" id="recent">{sect_head("近期更新", f"{len(recent)} 部连载中")}'
-            f'<div class="row" id="r-recent">{cards}</div></section>'
-        )
-
-    # 筛选条（静态态：评分 / 全部状态）
-    parts.append(
-        '<div class="chipbar" id="fbar">'
-        '<span class="chip is-on">评分</span><span class="chip">最新</span><span class="chip">名称</span>'
-        '<i class="sep"></i>'
-        '<span class="chip is-on">全部状态</span><span class="chip">连载中</span><span class="chip">已完结</span>'
-        '</div>'
-    )
-
-    # 番剧表：构建期按北京时间取当天，静态页直接呈现当天表
-    today = DAYS[(datetime.datetime.now(CST).isoweekday()) % 7]
-    by_day = [x for x in FA if x.get("wd") == today]
-    tabs = []
-    for d in ["全部"] + DAYS[1:] + DAYS[:1]:
-        n = len(FA) if d == "全部" else sum(1 for x in FA if x.get("wd") == d)
-        on = " is-on" if d == today else ""
-        tabs.append(f'<span class="tab{on}">{esc(d)} <b>{n}</b></span>')
-    sched_cards = "".join(card(x) for x in sort_items(by_day)[:SSR_BELOWFOLD])
-    if sched_cards:
-        sched_cards += '<div class="loading">更多加载中…</div>'
-    parts.append(
-        f'<section class="sect" id="sched">'
-        f'{sect_head("番剧表", f"今日 {today} · 共 {len(by_day)} 部")}'
-        f'<div class="tabbar" id="wdbar">{"".join(tabs)}</div>'
-        f'<div class="grid" id="g-sched">{sched_cards or "<div class=\"empty\">这一天没有放送</div>"}</div>'
-        f'</section>'
-    )
-
-    # 按年份
-    years = available_years()
-    ysel = ""
-    ycards = ""
-    yhint = "按年份浏览"
-    if years:
-        opts = "".join(f'<option value="{y}">{y}</option>' for y in sorted(years, reverse=True))
-        ysel = f'<span class="select-wrap"><select class="yselect" id="ysel">{opts}</select></span>'
-        ycards, ytotal = year_cards(max(years), SSR_YEAR_CAP)
-        if ytotal:
-            yhint = f"{max(years)} 年 · {ytotal} 部"
-        ycards += '<div class="loading">更多加载中…</div>'
-    parts.append(
-        f'<section class="sect" id="yearsel">'
-        f'{sect_head("按年份", yhint, ysel)}'
-        f'<div class="grid" id="g-year">{ycards or "<div class=\"empty\">年份目录尚未生成</div>"}</div>'
-        f'</section>'
-    )
-
-    hot = sort_items(FA)[:SSR_BELOWFOLD]
-    parts.append(
-        f'<section class="sect">{sect_head("热门动漫", f"Top {len(FA)}")}'
-        f'<div class="row" id="r-anime">{"".join(card(x) for x in hot)}'
-        f'<div class="loading">更多加载中…</div></div></section>'
-    )
-
-    all_cards = "".join(card(x) for x in sort_items(FA)[:SSR_BELOWFOLD])
-    parts.append(
-        f'<section class="sect" id="allanime">'
-        f'{sect_head("全部动漫", f"{len(FA)} 部")}'
-        f'<div class="grid" id="g-all">{all_cards}<div class="loading">更多加载中…</div></div></section>'
-    )
-    return "".join(parts)
-
-
-def available_years():
-    d = BASE.parent / "media" / "years"
-    if not d.is_dir():
-        return []
-    return sorted(int(p.stem) for p in d.glob("*.json") if p.stem.isdigit())
-
-
-def year_cards(y, limit=100):
-    p = BASE.parent / "media" / "years" / f"{y}.json"
-    if not p.is_file():
-        return "", 0
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return "", 0
-    items = []
-    for x in raw[:limit]:
-        if not isinstance(x, dict):
-            continue
-        items.append({
-            "key": x.get("key") or x.get("k"),
-            "name": x.get("name") or x.get("n") or "",
-            "poster": x.get("poster") or x.get("img") or "",
-            "year": x.get("year") or x.get("y"),
-            "rating": x.get("rating") if x.get("rating") is not None else x.get("r"),
-            "episodes": x.get("episodes") or x.get("e") or 0,
-            "type": x.get("type") or ("M" if x.get("fm") == "MOVIE" else "S"),
-            "st": x.get("st"),
-            "wd": x.get("wd"),
-            "next_at": x.get("next_at"),
-            "trailer": x.get("trailer"),
-            "bili": bool(x.get("bili")),
-            "mag": False,
-            "pf": "",
-        })
-    return "".join(card(x) for x in items), len(items)
-
-
-# ---------------------------------------------------------------- 媒体库
-def render_library():
-    series = [x for x in LIB if x["type"] == "S"]
-    movies = [x for x in LIB if x["type"] != "S"]
-    tabs = (f'<span class="tab is-on">全部 <b>{len(LIB)}</b></span>'
-            f'<span class="tab">番剧 <b>{len(series)}</b></span>'
-            f'<span class="tab">电影 <b>{len(movies)}</b></span>')
-    cards = "".join(card(x) for x in sort_items(LIB))
-    return (
-        f'<section class="sect is-first">'
-        f'{sect_head("我的媒体库", f"番剧 {len(series)} · 电影 {len(movies)}")}'
-        f'<div class="tabbar" id="typebar">{tabs}</div>'
-        f'<div class="grid" id="g">{cards}</div></section>'
-    )
-
-
-# ---------------------------------------------------------------- 输出
-def _min_css(text):
+def min_css(text):
     while "/*" in text:
         a = text.index("/*")
         b = text.index("*/", a) + 2
@@ -466,118 +43,190 @@ def _min_css(text):
     return " ".join(text.split())
 
 
-def dump(obj):
-    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+def norm(s):
+    s = str(s or "").lower()
+    s = re.sub(r"[\s\-_.·・:：!！?？,，。'\"()\[\]【】（）]", "", s)
+    return s
 
 
-def emit_json(name, obj):
-    raw = dump(obj).encode("utf-8")
-    tag = hashlib.sha256(raw).hexdigest()[:10]
-    fn = f"{name}-{tag}.json"
-    (SITE / fn).write_bytes(raw)
-    return fn, len(raw)
-
-
-CSS = _min_css((TPL / "style.css").read_text(encoding="utf-8"))
-BUILD_TAG = datetime.datetime.now().strftime("%m-%d %H:%M")
-
-# 独立样式文件（老链接不会 404；_headers 给它长缓存）
-(SITE / "style.css").write_bytes((TPL / "style.css").read_bytes())
-
-# 交互脚本：内容哈希命名，避免 _headers 的 immutable 让浏览器一直用旧 JS
-JS_URL = ""
-if (TPL / "app.js").is_file():
-    _js = (TPL / "app.js").read_bytes()
-    _jsh = hashlib.sha256(_js).hexdigest()[:10]
-    JS_URL = f"app-{_jsh}.js"
-    (SITE / JS_URL).write_bytes(_js)
-    # 兼容旧路径：CI 的 Snapshot 步骤仍会 cp site/app.js；也给老链接留个落点
-    (SITE / "app.js").write_bytes(_js)
-    for _old in SITE.glob("app-*.js"):
-        if _old.name != JS_URL:
-            _old.unlink(missing_ok=True)
-
-# Service Worker（海报缓存层）：CI Snapshot 会 cp site/sw.js
-if (TPL / "sw.js").is_file():
-    shutil.copyfile(TPL / "sw.js", SITE / "sw.js")
-
-if (BASE / "assets").is_dir():
-    shutil.copytree(BASE / "assets", SITE / "assets", dirs_exist_ok=True)
-
-DATA_HOME = {
-    "fresh": {"anime": FA, "movies": FM, "season": fresh.get("season")},
-    "years": available_years(),
-    "mag": {k: v for k, v in MAG.items() if k in {x["key"] for x in FA}},
-    "bili_fresh": bili.get("__fresh__") or {},
-}
-DATA_LIB = {
-    "lib": LIB,
-    "mag": {k: v for k, v in MAG.items() if k in {x["key"] for x in LIB}},
-    "bili": {k: v for k, v in bili.items() if k in {x["key"] for x in LIB} and v},
-}
-
-PAGES = [
-    ("index.html", "home.html", render_home(), DATA_HOME, len(FA)),
-    ("library.html", "library.html", render_library(), DATA_LIB, len(LIB)),
-]
-emitted = set()
-# JS 预载：head 解析阶段就开始下载交互脚本（与 HTML 流并行），不再等 DOM 解析完。
-# 注意不能带 crossorigin —— 经典 <script> 是 no-cors 拉取，preload 模式必须一致才能复用缓存
-js_preload = (f'<link rel="preload" as="script" '
-              f'href="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/{JS_URL}" '
-              f'fetchpriority="high">') if JS_URL else ""
-for out, tpl_name, content, data, cnt in PAGES:
-    jname, jsize = emit_json(out.replace(".html", ""), data)
-    emitted.add(jname)
-    data_url = "https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/" + jname
-    data_fb = "https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/" + jname
-    script = ""
-    if JS_URL:
-        # JS 走 4 源级联：CF Pages 服务路径劣化时（实测 70-146B/s），由
-        # gcore jsDelivr（国内优化边缘，实测 7423 B/s 约 7 倍）优先供体；
-        # 哈希文件名 immutable，永不中毒。同源排在最后只当兜底。
-        _gh_raw = ("https://gh-proxy.com/https://raw.githubusercontent.com/"
-                   "jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/")
-        _ms = "https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/"
-        script = (
-            '<script>window.DATA_URL="' + data_url + '";'
-            'window.DATA_FB="' + data_fb + '";'
-            'window.DATA_LOCAL="' + jname + '";</script>\n'
-            '<script>(function(){var u=['
-            '"https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/' + JS_URL + '",'
-            '"' + _gh_raw + JS_URL + '",'
-            '"' + _ms + JS_URL + '",'
-            '"' + JS_URL + '"];'
-            'var i=0;(function n(){if(i>=u.length)return;'
-            'var s=document.createElement("script");s.defer=true;s.src=u[i++];'
-            's.setAttribute("fetchpriority","high");s.onerror=n;'
-            'document.head.appendChild(s)})()})();</script>'
-        )
-    html = ((TPL / tpl_name).read_text(encoding="utf-8")
-            .replace("__CSS__", CSS)
-            .replace("__CONTENT__", content)
-            .replace("__CNT__", f"{cnt} 部")
-            .replace("__JS_PRELOAD__", js_preload)
-            .replace("__SCRIPT__", script)
-            .replace("__BUILD__", BUILD_TAG))
-    (SITE / out).write_text(html, encoding="utf-8")
-    print(f"  data {jname} {jsize/1024:.0f} KB -> {out}: {len(html.encode('utf-8'))/1024:.0f} KB")
-
-# 404 页：有了它 CF Pages 退出 SPA 模式，缺失文件返回真 404，
-# 否则任何缺失的 JS/JSON 都会被 index.html 以 text/html 兜底 + immutable 缓存死
-if (TPL / "404.html").is_file():
-    html404 = ((TPL / "404.html").read_text(encoding="utf-8")
-               .replace("__CSS__", CSS)
-               .replace("__BUILD__", BUILD_TAG))
-    (SITE / "404.html").write_text(html404, encoding="utf-8")
-    print(f"  404.html: {len(html404.encode('utf-8'))/1024:.0f} KB")
-
-for _p in list(SITE.glob("index-*.json")) + list(SITE.glob("library-*.json")):
-    if _p.name not in emitted:
+def load_shards():
+    out = {}
+    d = SITE / "anime"
+    if not d.is_dir():
+        return out
+    for p in sorted(d.glob("*.json")):
         try:
-            _p.unlink()
-        except OSError:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if not isinstance(data, list):
+            continue          # data.json 之类的非分片文件，跳过
+        for rec in data:
+            if isinstance(rec, dict) and rec.get("id"):
+                out[rec["id"]] = rec
+    return out
+
+
+def build_anime():
+    cat = json.loads((DATA / "catalog.json").read_text(encoding="utf-8"))
+    shards = load_shards()
+
+    # AniList 补充/回退：按标题归一化对齐到 Bangumi 条目
+    al = {}
+    fp = SITE / "fresh.json"
+    if fp.is_file():
+        try:
+            fresh = json.loads(fp.read_text(encoding="utf-8"))
+            for x in (fresh.get("anime") or []):
+                for key in (x.get("n"), x.get("o")):
+                    k = norm(key)
+                    if k and k not in al:
+                        al[k] = x
+        except (ValueError, OSError):
             pass
 
-print(f"首页 FA={len(FA)} FM={len(FM)} | 媒体库 LIB={len(LIB)} "
-      f"| 磁力 {len(DATA_HOME['mag'])}/{len(DATA_LIB['mag'])} | 黑名单剔除 {dropped} 条")
+    rows, extra = [], {}
+    for it in cat.get("items") or []:
+        sid = it.get("id")
+        d = shards.get(sid) or {}
+        air = (it.get("d") or d.get("air") or "")
+        y = int((air[:4] or it.get("y") or 0) or 0) or None
+        month = int(air[5:7]) if len(air) >= 7 and air[5:7].isdigit() else 0
+        wd = 0
+        try:
+            wd = dt.date(int(air[:4]), int(air[5:7]), int(air[8:10])).weekday() + 1
+        except (ValueError, TypeError):
+            pass
+        name = it.get("n") or d.get("name") or ""
+        cn = it.get("cn") or d.get("name_cn") or ""
+        rows.append([sid, name, cn, (it.get("t") or "").lower(), y, month, wd,
+                     d.get("rating"), d.get("episodes") or 0, 1 if d else 0])
+
+        # 只给能匹配到 AniList 的条目挂补充字段，避免索引膨胀
+        a = al.get(norm(cn)) or al.get(norm(name))
+        if a:
+            ex = []
+            if a.get("banner"):
+                ex.append(a["banner"])
+            if a.get("img"):
+                ex.append(a["img"])
+            if a.get("trailer"):
+                ex.append(a["trailer"])
+            if a.get("next_at"):
+                ex.append(a["next_at"])
+            if ex:
+                extra[str(sid)] = ex
+
+    rows.sort(key=lambda r: (-(r[4] or 0), -(r[7] or 0)))
+    payload = {"built": BUILD_TAG, "poster": f"{MODELSCOPE}/posters/bgm-",
+               "year": TODAY.year, "extra": extra, "rows": rows}
+    out = SITE / "data"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "anime.json").write_text(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"anime: {len(rows)} 条（有评分 {sum(1 for r in rows if r[7])} / 有详情 "
+          f"{sum(1 for r in rows if r[9])} / AniList 补充 {len(extra)}）")
+    return rows
+
+
+def build_library():
+    lib_path = SITE / "data.json"
+    rows = []
+    if lib_path.is_file():
+        raw = json.loads(lib_path.read_text(encoding="utf-8"))
+        blocked = set()
+        bp = BASE / "library_blocklist.json"
+        if bp.is_file():
+            try:
+                blocked = {e["id"] for e in json.loads(bp.read_text(encoding="utf-8")).get("entries") or []}
+            except (ValueError, OSError):
+                pass
+        bili = {}
+        bp2 = SITE / "bili.json"
+        if bp2.is_file():
+            try:
+                bili = json.loads(bp2.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                pass
+        for a in raw:
+            if not isinstance(a, list) or len(a) < 2 or a[0] in blocked:
+                continue
+            bv = bili.get(a[0])
+            if isinstance(bv, dict):
+                bv = bv.get("bvid")
+            rows.append([a[0], a[1], 1 if a[2] else 0, a[3] or "", a[4] or None,
+                         a[6] or 0, (bv if isinstance(bv, str) else "")[:20],
+                         1 if (a[5] if len(a) > 5 else 0) else 0])
+    out = SITE / "data"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "library.json").write_text(
+        json.dumps({"built": BUILD_TAG, "poster": f"{MODELSCOPE}/posters/", "rows": rows},
+                   ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"library: {len(rows)} 条")
+    return rows
+
+
+PAGE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b0b0f">
+<title>__TITLE__</title>
+<style>__CSS__</style>
+</head>
+<body data-page="__PAGE__">
+<header class="site-head"><div class="wrap">
+  <a class="brand" href="./">番组<b>计划</b></a>
+  <nav class="mainnav">
+    <a href="./" __ON_HOME__>首页</a>
+    <a href="anime" __ON_ANIME__>番剧</a>
+    <a href="library" __ON_LIBRARY__>媒体库</a>
+  </nav>
+  <div class="searchbox"><input id="q" type="search" placeholder="__PH__" autocomplete="off"></div>
+  <span class="cnt" id="cnt"></span>
+  <span class="build" id="build">__BUILD__</span>
+</div></header>
+<main class="wrap" id="main"><div class="loading">加载中…</div></main>
+<div class="mask" id="mask"><div class="modal" id="modal"></div></div>
+<script>__JS__</script>
+</body>
+</html>
+"""
+
+PAGES = [
+    ("index.html", "home", "番组计划 · 新番表", "搜索番剧…", 'class="is-on"', "", ""),
+    ("anime.html", "anime", "番剧全收录 · 番组计划", "在 8,000+ 部里搜…", "", 'class="is-on"', ""),
+    ("library.html", "library", "媒体库 · 番组计划", "搜索我的媒体库…", "", "", 'class="is-on"'),
+]
+
+
+def main():
+    build_anime()
+    build_library()
+
+    css = min_css((TPL / "style.css").read_text(encoding="utf-8"))
+    js = (TPL / "app.js").read_text(encoding="utf-8")
+    for name, page, title, ph, on_home, on_anime, on_lib in PAGES:
+        html = (PAGE.replace("__TITLE__", title).replace("__PAGE__", page)
+                .replace("__CSS__", css).replace("__JS__", js).replace("__BUILD__", BUILD_TAG)
+                .replace("__PH__", ph)
+                .replace("__ON_HOME__", on_home).replace("__ON_ANIME__", on_anime)
+                .replace("__ON_LIBRARY__", on_lib))
+        (SITE / name).write_text(html, encoding="utf-8")
+        print(f"  {name}: {len(html.encode('utf-8'))/1024:.0f} KB")
+
+    # 分片给详情弹窗按需拉
+    sd = SITE / "data" / "s"
+    if sd.exists():
+        shutil.rmtree(sd)
+    sd.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for p in sorted((SITE / "anime").glob("*.json")):
+        shutil.copy2(p, sd / p.name)
+        n += 1
+    print(f"shards: {n}")
+
+
+if __name__ == "__main__":
+    main()

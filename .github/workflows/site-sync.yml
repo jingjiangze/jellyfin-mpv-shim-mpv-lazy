@@ -111,16 +111,6 @@ jobs:
           POSTER_DIR: ../media/posters
         run: python -u build_site.py
 
-      # 数据 JSON 单独走 Git Data API 推到 media/：HTML 里外链的就是这些带内容哈希的文件名，
-      # 下面的 git publish 因仓库历史 CRLF 问题会被跳过（rebase 冲突），不能作为唯一通道。
-      - name: Push data JSON to CDN
-        timeout-minutes: 10
-        continue-on-error: true
-        working-directory: site-src
-        env:
-          NO_LOCAL_PROXY: "1"
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -u push_assets.py --data-only
 
       # 构建产物立刻快照：后面的 git 提交/rebase 都碰不到部署内容。
       # （之前没有快照，一次失败的 pull --rebase 把工作树回滚成旧提交，
@@ -129,21 +119,11 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf build-out && mkdir -p build-out
-          cp site-src/site/index.html site-src/site/library.html site-src/site/style.css site-src/site/app.js site-src/site/sw.js build-out/
-          # 交互脚本走内容哈希文件名（HTML 引用的是 app-<hash>.js，不是 app.js）——
-          # 漏拷会被 CF Pages 的 SPA 回退用 text/html 兜底，浏览器拒执行（线上实测踩过）
-          cp site-src/site/app-*.js build-out/ 2>/dev/null || true
-          # 关键：提供 404.html 后 CF Pages 退出 SPA 模式，缺失文件返回真 404 ——
-          # 否则 SPA 会用 index.html 以 text/html 兜底任何缺失 JS/JSON，且 _headers 的
-          # immutable 会把这条错误响应在边缘缓存一年（app-<hash>.js 与 /posters/* 都中过招）
-          cp site-src/site/404.html build-out/404.html 2>/dev/null || true
+          cp site-src/site/index.html site-src/site/anime.html site-src/site/library.html build-out/
           cp site-src/tpl/_headers build-out/_headers
+          cp -r site-src/site/data build-out/data
           cp -r site-src/site/assets build-out/assets 2>/dev/null || true
-          cp site-src/site/index-*.json site-src/site/library-*.json build-out/ 2>/dev/null || true
-          cp -r site-src/site/years build-out/years 2>/dev/null || true
-          # 同源海报兜底（_headers 给 /posters/* 配了 1 年 immutable）
-          cp -r media/posters build-out/poster-img 2>/dev/null || true
-          ls -la build-out
+          du -sh build-out; ls build-out
 
       # 每轮只提交+推送一次：数据 JSON、海报、站点状态一起进仓库。
       # 必须排在 Build pages 之后 —— build_site 每轮用内容哈希生成新的
