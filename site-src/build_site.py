@@ -190,7 +190,7 @@ PAGE = """<!DOCTYPE html>
 <main class="wrap" id="main"><div class="loading">加载中…</div></main>
 <div class="mask" id="mask"><div class="modal" id="modal"></div></div>
 <script>__JS__</script>
-<script defer src="/magnet-eps.js"></script>
+<script defer src="./magnet-eps.js"></script>
 </body>
 </html>
 """
@@ -218,15 +218,24 @@ def main():
         print(f"  {name}: {len(html.encode('utf-8'))/1024:.0f} KB")
 
     # 分片给详情弹窗按需拉
-    sd = SITE / "data" / "s"
-    if sd.exists():
-        shutil.rmtree(sd)
-    sd.mkdir(parents=True, exist_ok=True)
+    ddir = SITE / "data"
+    ddir.mkdir(parents=True, exist_ok=True)
+    for old in ddir.glob("s[0-9]*.json"):
+        old.unlink()
     n = 0
     for p in sorted((SITE / "anime").glob("*.json")):
-        shutil.copy2(p, sd / p.name)
-        n += 1
-    print(f"shards: {n}")
+        try:
+            shutil.copy2(p, ddir / f"s{p.stem}.json")
+            n += 1
+        except OSError:
+            pass
+    print(f"shards: {n} (flat, data/s<N>.json)")
+
+    # 磁力层：把 prior 会话的 magnet-eps.js 一起部署，并在页面里引用
+    mj = TPL / "magnet-eps.js"
+    if mj.is_file():
+        shutil.copy2(mj, SITE / "magnet-eps.js")
+        print("magnet-eps.js: copied")
 
 
 if __name__ == "__main__":

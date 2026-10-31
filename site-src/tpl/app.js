@@ -74,7 +74,7 @@
       };
     }
     var sfx = id % 64;
-    var p = shardCache[sfx] || (shardCache[sfx] = j('./data/s/' + sfx + '.json').catch(function () { return []; }));
+    var p = shardCache[sfx] || (shardCache[sfx] = j('./data/s' + sfx + '.json').catch(function () { return []; }));
     p.then(function (list) {
       var rec = (list || []).find(function (x) { return x.id === id; });
       if (!rec) { $('#plot').textContent = '暂无详细资料'; return; }
