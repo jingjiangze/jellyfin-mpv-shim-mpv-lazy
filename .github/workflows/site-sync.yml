@@ -215,6 +215,8 @@ jobs:
           echo "posters: added=$added updated=$updated unchanged=$skipped blocklisted=$blocked"
           # 交互脚本镜像进数据集 assets/：CF Pages 劣化时给 jsDelivr/gh-proxy 之外的国内第三源
           mkdir -p "$RUNNER_TEMP/ms/assets"
+          mkdir -p "$RUNNER_TEMP/ms/assets/data"
+          cp -f site-src/site/data/*.json "$RUNNER_TEMP/ms/assets/data/" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/ms/assets"/app-*.js
           js_added=0
           for f in site-src/site/app-*.js; do
