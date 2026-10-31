@@ -73,20 +73,6 @@ jobs:
           PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
         run: python -u fetch_magnet.py
 
-      # 分集磁力索引：按片名归一化聚合每集的磁力（体积/做种/字幕），
-      # 供 magnet-eps.js 在详情页渲染 chips。每轮只补 MAGNET_MAX 条。
-      - name: Fetch magnet episodes
-        timeout-minutes: 20
-        continue-on-error: true
-        working-directory: site-src
-        env:
-          NO_LOCAL_PROXY: "1"
-          MAGNET_MAX: "80"
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PAN_HUB_USER: ${{ secrets.PAN_HUB_USER }}
-          PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
-        run: python -u fetch_magnet_eps.py
-
       - name: Fill year catalogs (2000-now)
         timeout-minutes: 25
         continue-on-error: true
@@ -138,7 +124,6 @@ jobs:
           # 逐个 glob 拷贝，不用 `cp -r 目录 目录`（目标已存在时会多套一层）
           cp -f site-src/site/data/*.json build-out/data/
           cp -f site-src/tpl/magnet-eps.js build-out/ || true
-          cp -f site-src/site/magnet-eps.json build-out/ || true
           cp -r site-src/site/assets build-out/assets 2>/dev/null || true
           N=$(ls -1 build-out/data/*.json | wc -l)
           echo "data files: $N"
@@ -163,7 +148,7 @@ jobs:
             mkdir -p media/posters
             cp -f site-src/site/posters/*.jpg media/posters/ 2>/dev/null || true
           fi
-          cp -f site-src/site/data.json site-src/site/bili.json site-src/site/magnet.json site-src/site/magnet-eps.json site-src/data/ || true
+          cp -f site-src/site/data.json site-src/site/bili.json site-src/site/magnet.json site-src/data/ || true
           cp -f site-src/poster_cache.json site-src/data/ || true
           cp -f site-src/site/years_state.json site-src/data/ || true
           git config user.name "github-actions[bot]"
