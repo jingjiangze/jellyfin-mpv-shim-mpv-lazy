@@ -85,6 +85,19 @@ def build_anime():
         except (ValueError, OSError):
             pass
 
+    # 老站留下的 179 条磁力（key 是 AniList 体系，值里带种子标题），
+    # 按「片名是否出现在种子标题里」映射到 bgm 条目，只用来点卡片角标。
+    mag_titles = []
+    mp = SITE / "magnet.json"
+    if mp.is_file():
+        try:
+            for v in (json.loads(mp.read_text(encoding="utf-8")) or {}).values():
+                t = norm((v or {}).get("t"))
+                if len(t) >= 4:
+                    mag_titles.append(t)
+        except (ValueError, OSError):
+            pass
+
     rows, extra = [], {}
     for it in cat.get("items") or []:
         sid = it.get("id")
@@ -92,7 +105,6 @@ def build_anime():
         air = (it.get("d") or d.get("air") or "")
         y = int((air[:4] or it.get("y") or 0) or 0) or None
         month = int(air[5:7]) if len(air) >= 7 and air[5:7].isdigit() else 0
-        day = int(air[8:10]) if len(air) >= 10 and air[8:10].isdigit() else 0
         wd = 0
         try:
             wd = dt.date(int(air[:4]), int(air[5:7]), int(air[8:10])).weekday() + 1
@@ -100,8 +112,10 @@ def build_anime():
             pass
         name = it.get("n") or d.get("name") or ""
         cn = it.get("cn") or d.get("name_cn") or ""
+        key = norm(cn or name)
+        has_mag = 1 if (len(key) >= 4 and any(key in t for t in mag_titles)) else 0
         rows.append([sid, name, cn, (it.get("t") or "").lower(), y, month, wd,
-                     d.get("rating"), d.get("episodes") or 0, 1 if d else 0, day])
+                     d.get("rating"), d.get("episodes") or 0, 1 if d else 0, has_mag])
 
         # 只给能匹配到 AniList 的条目挂补充字段，避免索引膨胀
         a = al.get(norm(cn)) or al.get(norm(name))
@@ -126,7 +140,7 @@ def build_anime():
     (out / "anime.json").write_text(
         json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"anime: {len(rows)} 条（有评分 {sum(1 for r in rows if r[7])} / 有详情 "
-          f"{sum(1 for r in rows if r[9])} / AniList 补充 {len(extra)}）")
+          f"{sum(1 for r in rows if r[9])} / 有磁力 {sum(1 for r in rows if r[10])} / AniList 补充 {len(extra)}）")
     return rows
 
 
