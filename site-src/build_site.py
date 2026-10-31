@@ -44,6 +44,11 @@ MODELSCOPE_BASE = os.environ.get(
 POSTER_BASE = os.environ.get("POSTER_BASE", MODELSCOPE_BASE).rstrip("/")
 POSTER_DIR = pathlib.Path(os.environ.get("POSTER_DIR", str(SITE / "posters")))
 
+# SSR 网格截断：首屏静态 DOM 只出前 N 张（弱网下 465KB 全量页会传输卡死），
+# 其余由交互层 fillCapped 按需展开；数据 JSON 仍含全量
+SSR_GRID_CAP = int(os.environ.get("SSR_GRID_CAP", "48"))
+SSR_YEAR_CAP = int(os.environ.get("SSR_YEAR_CAP", "24"))
+
 # ---------------------------------------------------------------- 数据
 fresh = json.loads((SITE / "fresh.json").read_text(encoding="utf-8"))
 lib_raw = json.loads((SITE / "data.json").read_text(encoding="utf-8"))
@@ -64,8 +69,7 @@ dropped = before - len(lib_raw)
 
 have_poster = lambda pid: (POSTER_DIR / f"{pid}.jpg").is_file()
 
-# ---------------------------------------------------------------- 新番封面镜像（e1d76409）
-# fetch_covers.py 把 AniList 的图下到 site/posters/<key>.jpg（大图带 -b 后缀），
+# ---------------------------------------------------------------- 新番封面镜像（e1d76409）# fetch_covers.py 把 AniList 的图下到 site/posters/<key>.jpg（大图带 -b 后缀），
 # 随后由 "Sync posters to ModelScope" 上云。有镜像 ⇒ 主源换 ModelScope（国内 0.35s），
 # 没有就还回 AniList 原图。大图（hero）不镜像：首屏只加载第 1 张，换源收益不抵复杂度。
 COVERS = SITE / "posters"
@@ -369,7 +373,7 @@ def render_home():
     if years:
         opts = "".join(f'<option value="{y}">{y}</option>' for y in sorted(years, reverse=True))
         ysel = f'<span class="select-wrap"><select class="yselect" id="ysel">{opts}</select></span>'
-        ycards, ytotal = year_cards(max(years))
+        ycards, ytotal = year_cards(max(years), SSR_YEAR_CAP)
         if ytotal:
             yhint = f"{max(years)} 年 · {ytotal} 部"
     parts.append(
@@ -385,7 +389,7 @@ def render_home():
         f'<div class="row" id="r-anime">{"".join(card(x) for x in hot)}</div></section>'
     )
 
-    all_cards = "".join(card(x) for x in sort_items(FA))
+    all_cards = "".join(card(x) for x in sort_items(FA)[:SSR_GRID_CAP])
     parts.append(
         f'<section class="sect" id="allanime">'
         f'{sect_head("全部动漫", f"{len(FA)} 部")}'
@@ -401,7 +405,7 @@ def available_years():
     return sorted(int(p.stem) for p in d.glob("*.json") if p.stem.isdigit())
 
 
-def year_cards(y):
+def year_cards(y, limit=100):
     p = BASE.parent / "media" / "years" / f"{y}.json"
     if not p.is_file():
         return "", 0
@@ -410,7 +414,7 @@ def year_cards(y):
     except (OSError, ValueError):
         return "", 0
     items = []
-    for x in raw[:100]:
+    for x in raw[:limit]:
         if not isinstance(x, dict):
             continue
         items.append({
