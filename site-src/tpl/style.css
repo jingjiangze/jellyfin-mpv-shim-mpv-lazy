@@ -96,3 +96,21 @@ background:var(--card2);border:1px solid var(--line);margin:14px 8px 0 0}
 }
 .eps-chip:hover { border-color: #7ee787; color: #7ee787; transform: translateY(-1px); }
 .eps-none { font-size: 12.5px; color: #8b8b98; padding: 2px 0 6px; }
+
+/* ---------- 首页四级层级：横屏左侧竖排 / 竖屏顶部横排 ---------- */
+.home-cols{display:grid;grid-template-columns:236px minmax(0,1fr);gap:26px;align-items:start}
+.levels{position:sticky;top:calc(var(--header-h) + 14px);display:flex;flex-direction:column;gap:16px;
+background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 14px 16px}
+.lv-h{font-size:12px;color:var(--dim);margin:0 0 8px;letter-spacing:1.5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:12.5px;padding:4px 10px;border-radius:999px;cursor:pointer;
+color:var(--dim);background:var(--card2);border:1px solid var(--line);font-variant-numeric:tabular-nums}
+.chip:hover{color:var(--fg)}
+.chip.on{color:var(--accent);border-color:var(--accent-dim);background:rgba(240,145,153,.12);font-weight:600}
+.home-main{min-width:0}
+@media(max-width:900px){
+  .home-cols{display:block}
+  .levels{position:static;flex-direction:row;flex-wrap:wrap;gap:14px;margin:0 0 20px;
+  border-radius:12px}
+  .lv{flex:1 1 140px}
+}

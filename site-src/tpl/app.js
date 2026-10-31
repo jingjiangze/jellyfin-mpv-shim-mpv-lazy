@@ -12,6 +12,14 @@
     });
   };
   function j(u) { return fetch(u).then(function (r) { if (!r.ok) throw 0; return r.json(); }); }
+  var MS = 'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/';
+  /* ModelScope 第一源：数据文件先走数据集（国内 CDN），失败退回同源 */
+  function jMS(path) {
+    return fetch(MS + path).then(function (r) {
+      if (!r.ok) throw 0;
+      return r.json();
+    }).catch(function () { return j(path); });
+  }
   function fbAttr(list) {
     var q = list.filter(Boolean);
     return q.length ? ' data-fb="' + esc(q.join('|')) + '" onerror="__fb(this)"' : '';
@@ -74,7 +82,7 @@
       };
     }
     var sfx = id % 64;
-    var p = shardCache[sfx] || (shardCache[sfx] = j('./data/s' + sfx + '.json').catch(function () { return []; }));
+    var p = shardCache[sfx] || (shardCache[sfx] = jMS('data/s' + sfx + '.json').catch(function () { return j('./data/s' + sfx + '.json').catch(function () { return []; }); }));
     p.then(function (list) {
       var rec = (list || []).find(function (x) { return x.id === id; });
       if (!rec) { $('#plot').textContent = '暂无详细资料'; return; }
@@ -86,45 +94,102 @@
   }
   function close() { $('#mask').classList.remove('on'); }
 
-  /* ---------------- 首页：今年新番，按周 / 按月 ---------------- */
-  function renderHome(mode) {
-    var y = ANI.year;
-    var list = ANI.rows.filter(function (r) { return r[4] === y; });
-    $('#cnt').textContent = y + ' 年 · ' + list.length + ' 部';
-    var main = $('#main');
-    var html = '<div class="tabs"><button class="tabbtn' + (mode === 'week' ? ' on' : '')
-      + '" data-mode="week" type="button">按周</button><button class="tabbtn'
-      + (mode === 'month' ? ' on' : '') + '" data-mode="month" type="button">按月</button></div>';
+  /* ---------------- 首页：年 → 月 → 周 → 星期 四级下钻 ---------------- */
+  var HOME = { y: 0, m: 0, w: 0, wd: 1 };
+  var WD_ALL = [1, 2, 3, 4, 5, 6, 7];
 
-    if (mode === 'week') {
-      for (var w = 1; w <= 7; w++) {
-        var g = list.filter(function (r) { return r[6] === w; })
-          .sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
-        if (!g.length) continue;
-        html += '<section class="block"><div class="bhead"><h2>' + WD[w - 1] + '</h2><span>'
-          + g.length + ' 部</span></div><div class="grid">'
-          + g.map(function (r) { return animeCard(r, { showYear: 0 }); }).join('') + '</div></section>';
-      }
-      var nowd = list.filter(function (r) { return !r[6]; });
-      if (nowd.length) {
-        html += '<section class="block"><div class="bhead"><h2>放送日未知</h2><span>'
-          + nowd.length + ' 部</span></div><div class="grid">'
-          + nowd.map(function (r) { return animeCard(r); }).join('') + '</div></section>';
-      }
-    } else {
-      for (var mo = 1; mo <= 12; mo++) {
-        var gm = list.filter(function (r) { return r[5] === mo; })
-          .sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
-        if (!gm.length) continue;
-        html += '<section class="block"><div class="bhead"><h2>' + mo + ' 月</h2><span>'
-          + gm.length + ' 部</span></div><div class="grid">'
-          + gm.map(function (r) { return animeCard(r); }).join('') + '</div></section>';
-      }
+  function wkOfDay(day) { return day ? Math.floor((day - 1) / 7) + 1 : 0; }
+
+  function homeRows() {
+    return ANI.rows.filter(function (r) {
+      if (HOME.y && r[4] !== HOME.y) return false;
+      if (HOME.m && r[5] !== HOME.m) return false;
+      if (HOME.w && wkOfDay(r[10]) !== HOME.w) return false;
+      if (HOME.wd && r[6] !== HOME.wd) return false;
+      return true;
+    }).sort(function (a, b) { return (b[7] || 0) - (a[7] || 0) || (b[10] || 0) - (a[10] || 0); });
+  }
+
+  function chip(label, on, val) {
+    return '<button class="chip' + (on ? ' on' : '') + '" data-v="' + val + '" type="button">' + label + '</button>';
+  }
+
+  function renderLevels() {
+    var years = {};
+    ANI.rows.forEach(function (r) { if (r[4]) years[r[4]] = (years[r[4]] || 0) + 1; });
+    var ys = Object.keys(years).map(Number).sort(function (a, b) { return b - a; });
+    var months = {}; ANI.rows.forEach(function (r) { if (r[4] === HOME.y && r[5]) months[r[5]] = 1; });
+    var ms = Object.keys(months).map(Number).sort(function (a, b) { return a - b; });
+    var inM = ANI.rows.filter(function (r) { return r[4] === HOME.y && r[5] === HOME.m; });
+    var weeks = {}; inM.forEach(function (r) { var w = wkOfDay(r[10]); if (w) weeks[w] = 1; });
+    var ws = Object.keys(weeks).map(Number).sort(function (a, b) { return a - b; });
+
+    var h = '<aside class="levels">';
+    h += '<div class="lv"><div class="lv-h">年份</div><div class="chips"><select class="lv-select" id="lv-y">'
+      + ys.map(function (y) { return '<option value="' + y + '"' + (y === HOME.y ? ' selected' : '') + '>'
+        + y + ' 年（' + years[y] + '）</option>'; }).join('')
+      + '</select></div></div>';
+    h += '<div class="lv"><div class="lv-h">月份</div><div class="chips">'
+      + ms.map(function (m) { return chip(m + ' 月', m === HOME.m, m); }).join('') + '</div></div>';
+    h += '<div class="lv"><div class="lv-h">周</div><div class="chips">'
+      + ws.map(function (w) {
+          var lo = (w - 1) * 7 + 1, hi = Math.min(w * 7, 31);
+          return chip('第' + w + '周', w === HOME.w, w);
+        }).join('') + '</div></div>';
+    h += '<div class="lv"><div class="lv-h">星期</div><div class="chips">'
+      + chip('全部', !HOME.wd, 0)
+      + WD_ALL.map(function (w) { return chip(WD[w - 1], w === HOME.wd, w); }).join('') + '</div></div>';
+    h += '</aside>';
+    return h;
+  }
+
+  function renderHomeContent() {
+    var list = homeRows();
+    var wdLabel = HOME.wd ? WD[HOME.wd - 1] : '本周全部';
+    var head = '<div class="bhead"><h2>' + HOME.y + ' 年 ' + HOME.m + ' 月 第' + HOME.w + '周 · '
+      + wdLabel + '</h2><span>' + list.length + ' 部</span></div>';
+    var body = list.length
+      ? '<div class="grid">' + list.map(function (r) { return animeCard(r); }).join('') + '</div>'
+      : '<div class="loading">这个时间段没有放送 —— 点上方选择器换一周试试</div>';
+    return head + body;
+  }
+
+  function homeDefaults() {
+    var y = ANI.year || new Date().getFullYear();
+    var inY = ANI.rows.filter(function (r) { return r[4] === y; });
+    if (!inY.length) {
+      var ys = {};
+      ANI.rows.forEach(function (r) { if (r[4]) ys[r[4]] = 1; });
+      y = Math.max.apply(null, Object.keys(ys).map(Number));
+      inY = ANI.rows.filter(function (r) { return r[4] === y; });
     }
-    main.innerHTML = html;
-    main.querySelectorAll('.tabbtn').forEach(function (b) {
-      b.onclick = function () { renderHome(b.dataset.mode); };
+    var months = {};
+    inY.forEach(function (r) { if (r[5]) months[r[5]] = 1; });
+    var m = Math.max.apply(null, Object.keys(months).map(Number));
+    var inM = inY.filter(function (r) { return r[5] === m; });
+    var weeks = {};
+    inM.forEach(function (r) { var w = wkOfDay(r[10]); if (w) weeks[w] = 1; });
+    var w = Math.max.apply(null, Object.keys(weeks).map(Number));
+    HOME = { y: y, m: m, w: w, wd: 0 };
+  }
+
+  function renderHome() {
+    if (!HOME.y) homeDefaults();
+    var main = $('#main');
+    main.innerHTML = '<div class="home-cols">' + renderLevels()
+      + '<div class="home-main" id="home-main">' + renderHomeContent() + '</div></div>';
+    main.querySelectorAll('.chip').forEach(function (b) {
+      b.onclick = function () {
+        var v = Number(b.dataset.v);
+        var lvName = b.closest('.lv').querySelector('.lv-h').textContent;
+        if (lvName === '月份') HOME.m = v;
+        else if (lvName === '周') HOME.w = v;
+        else HOME.wd = v;
+        renderHome();
+      };
     });
+    var ysel = $('#lv-y');
+    if (ysel) ysel.onchange = function () { HOME.y = Number(ysel.value); renderHome(); };
   }
 
   /* ---------------- 番剧：全量目录 ---------------- */
@@ -184,7 +249,7 @@
 
   /* ---------------- 媒体库 ---------------- */
   function initLibrary() {
-    j('./data/library.json').then(function (d) {
+    jMS('data/library.json').then(function (d) {
       var rows = d.rows || [];
       var base = d.poster || '';
       $('#cnt').textContent = rows.length + ' 部';
@@ -213,7 +278,7 @@
 
   /* ---------------- boot ---------------- */
   function bootAnime() {
-    return j('./data/anime.json').then(function (d) {
+    return jMS('data/anime.json').then(function (d) {
       ANI.poster = d.poster || ''; ANI.rows = d.rows || [];
       ANI.extra = d.extra || {}; ANI.year = d.year || new Date().getFullYear();
     });
@@ -249,9 +314,12 @@
             var hit = ANI.rows.filter(function (r) {
               return (r[1] + ' ' + (r[2] || '')).toLowerCase().indexOf(q) !== -1;
             }).slice(0, 120);
-            $('#main').innerHTML = '<section class="block"><div class="bhead"><h2>搜索</h2><span>'
+            var hm = $('#home-main');
+            if (!hm) { renderHome(); }
+            hm = $('#home-main');
+            hm.innerHTML = '<div class="bhead"><h2>搜索「' + esc(q) + '」</h2><span>'
               + hit.length + ' 部</span></div><div class="grid">'
-              + hit.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('') + '</div></section>';
+              + hit.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('') + '</div>';
           }, 220);
         };
       })());
