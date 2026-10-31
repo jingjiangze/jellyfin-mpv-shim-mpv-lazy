@@ -91,6 +91,18 @@ jobs:
           POSTER_MAX: "150"
         run: python -u fill_posters.py
 
+      # 新番封面落地：AniList 是海外源（单张 28–157KB、TTFB 0.57–4.80s 抖动），
+      # 落到 site/posters/ 后由下面的 Sync posters to ModelScope 自动上云，
+      # build_site 再把主源换成 ModelScope（国内 0.35s）。
+      - name: Fetch fresh covers
+        timeout-minutes: 20
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          NO_LOCAL_PROXY: "1"
+          COVER_MAX: "150"
+        run: python -u fetch_covers.py
+
       - name: Build pages
         timeout-minutes: 6
         working-directory: site-src
