@@ -1,0 +1,19 @@
+name: bgm-probe
+on: workflow_dispatch
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - name: probe api.bgm.tv from runner
+        run: |
+          echo "== subjects/253 =="
+          curl -sS -m 20 -o /tmp/s.json -w "code=%{http_code} size=%{size_download} ttfb=%{time_starttransfer}\n" \
+            -A "jellyfin-mpv-shim-mpv-lazy/site-sync" https://api.bgm.tv/v0/subjects/253 || true
+          head -c 200 /tmp/s.json || true
+          echo
+          echo "== lain.bgm.tv cover =="
+          curl -sS -m 20 -o /dev/null -w "code=%{http_code} size=%{size_download} ttfb=%{time_starttransfer}\n" \
+            https://lain.bgm.tv/pic/cover/l/c2/4c/253_jJJj9.jpg || true
+          echo "== bangumi-data =="
+          curl -sS -m 30 -o /dev/null -w "code=%{http_code} size=%{size_download}\n" \
+            https://cdn.jsdelivr.net/npm/bangumi-data@latest/dist/data.json || true
