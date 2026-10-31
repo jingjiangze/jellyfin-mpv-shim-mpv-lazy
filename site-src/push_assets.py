@@ -57,7 +57,12 @@ def main():
     posters_only = "--posters-only" in sys.argv
     # 站点数据 JSON（build_site 生成的 index-*.json / library-*.json）也要进 CDN，
     # 否则 HTML 里的外链会 404
-    data_files = sorted((HERE / "site").glob("index-*.json")) + sorted((HERE / "site").glob("library-*.json"))
+    # app-<hash>.js 交互脚本也走同一条 Git Data API 通道进 media/：
+    # CF Pages 服务路径劣化时（实测 70-146B/s 卡死），HTML 引用的 jsDelivr 哈希 URL
+    # 由国内优化的 gcore 边缘服务（实测 7423 B/s，约 7 倍且零 stall）
+    data_files = (sorted((HERE / "site").glob("index-*.json"))
+                  + sorted((HERE / "site").glob("library-*.json"))
+                  + sorted((HERE / "site").glob("app-*.js")))
     data_entries = []
     if not posters_only:
         for f in data_files:
