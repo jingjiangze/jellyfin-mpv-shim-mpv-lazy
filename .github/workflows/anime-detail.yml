@@ -1,0 +1,92 @@
+name: anime-detail
+
+# 全量详情：把 catalog 里的 bgm id 按 64 个分片抓 /v0/subjects/{id}，
+# 16 个 job 并行，每个 job 处理 4 个分片；collect job 统一提交，避免 16 个 job 抢同一个 ref。
+on:
+  workflow_dispatch:
+    inputs:
+      only_recent:
+        description: "只补最近 5 年（true/false）"
+        required: false
+        default: "false"
+  schedule:
+    - cron: "40 18 * * *"   # 每天 02:40（北京时间）
+
+permissions:
+  contents: write
+
+concurrency:
+  group: anime-detail
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore existing shards (incremental)
+        run: cp -f site-src/site/anime/*.json /tmp/ 2>/dev/null || true
+
+      - name: Fetch detail shards
+        working-directory: site-src
+        env:
+          SHARD_TOTAL: "64"
+          DETAIL_WORKERS: "6"
+        run: |
+          set -euo pipefail
+          S=${{ matrix.shard }}
+          export SHARD_LIST="$((S*4)),$((S*4+1)),$((S*4+2)),$((S*4+3))"
+          echo "shard list = $SHARD_LIST"
+          python -u fetch_details.py
+
+      - name: Upload shard artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: anime-${{ matrix.shard }}
+          path: site-src/site/anime/*.json
+          if-no-files-found: warn
+          retention-days: 3
+
+  collect:
+    needs: fetch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all shard artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: anime-*
+          path: site-src/site/anime
+          merge-multiple: true
+
+      - name: Report coverage
+        run: |
+          python - <<'PY'
+          import json, glob, os
+          files = sorted(glob.glob("site-src/site/anime/*.json"))
+          rows = sum(len(json.load(open(f))) for f in files)
+          size = sum(os.path.getsize(f) for f in files)
+          cat = json.load(open("site-src/data/catalog.json"))
+          print(f"shards={len(files)}/64 records={rows} catalog={cat['count']} size={size/1024:.0f}KB")
+          PY
+
+      - name: Commit shards
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A site-src/site/anime
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit -m "anime: $(ls site-src/site/anime/*.json | wc -l) shard files [skip ci]"
+          git fetch origin "${GITHUB_REF_NAME}"
+          git -c rebase.autoStash=true rebase FETCH_HEAD || { echo "rebase conflict, skip push"; git rebase --abort || true; exit 0; }
+          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "push failed (non-fatal)"
