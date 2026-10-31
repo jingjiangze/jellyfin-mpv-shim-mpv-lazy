@@ -85,32 +85,44 @@ background:var(--card2);border:1px solid var(--line);margin:14px 8px 0 0}
   .bhead h2{font-size:17px}
 }
 
-/* ---------- 分集磁力 chip（magnet-eps.js 渲染） ---------- */
-.eps-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  margin: 0 8px 8px 0; padding: 6px 12px; border-radius: 999px;
-  background: #1c2030; border: 1px solid #34343f;
-  font-size: 12.5px; color: #ededf2; cursor: pointer;
-  font-variant-numeric: tabular-nums;
-  transition: border-color .15s, color .15s, transform .15s;
-}
-.eps-chip:hover { border-color: #7ee787; color: #7ee787; transform: translateY(-1px); }
-.eps-none { font-size: 12.5px; color: #8b8b98; padding: 2px 0 6px; }
-
-/* ---------- 首页四级层级：横屏左侧竖排 / 竖屏顶部横排 ---------- */
-.home-cols{display:grid;grid-template-columns:236px minmax(0,1fr);gap:26px;align-items:start}
-.levels{position:sticky;top:calc(var(--header-h) + 14px);display:flex;flex-direction:column;gap:16px;
-background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 14px 16px}
-.lv-h{font-size:12px;color:var(--dim);margin:0 0 8px;letter-spacing:1.5px}
-.chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{font:inherit;font-size:12.5px;padding:4px 10px;border-radius:999px;cursor:pointer;
-color:var(--dim);background:var(--card2);border:1px solid var(--line);font-variant-numeric:tabular-nums}
-.chip:hover{color:var(--fg)}
-.chip.on{color:var(--accent);border-color:var(--accent-dim);background:rgba(240,145,153,.12);font-weight:600}
-.home-main{min-width:0}
-@media(max-width:900px){
-  .home-cols{display:block}
-  .levels{position:static;flex-direction:row;flex-wrap:wrap;gap:14px;margin:0 0 20px;
-  border-radius:12px}
-  .lv{flex:1 1 140px}
+/* ---------- 详情页重构 ---------- */
+.modal{width:min(860px,100%);padding:24px 26px}
+.modal .x{position:absolute;right:18px;top:12px;font-size:26px;line-height:1;color:var(--dim);cursor:pointer}
+.modal .x:hover{color:var(--fg)}
+.mhd{display:flex;gap:22px;align-items:flex-start}
+.mposter{width:176px;flex:0 0 176px}
+.mposter img{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:12px;background:var(--bg2)}
+.mb{flex:1;min-width:0}
+.mb h3{margin:2px 0 6px;font-size:21px;line-height:1.35;font-weight:600}
+.orig{font-size:12.5px;color:var(--dim);margin:0 0 12px;word-break:break-all}
+.mrate{display:flex;align-items:center;gap:10px;margin:0 0 14px;flex-wrap:wrap}
+.mrate .num{font-size:22px;font-weight:700;color:var(--star);line-height:1}
+.mrate .num.dim{font-size:13px;color:var(--dim);font-weight:400}
+.mvotes{font-size:12px;color:var(--dim)}
+.stars{position:relative;display:inline-block;font-style:normal;font-size:13px;line-height:1;
+letter-spacing:1px;color:rgba(255,255,255,.16);vertical-align:-1px}
+.stars::before{content:"★★★★★★★★★★"}
+.stars::after{content:"★★★★★★★★★★";position:absolute;left:0;top:0;color:var(--star);
+white-space:nowrap;overflow:hidden;width:calc(var(--p,0) * 10%)}
+.infobox{display:grid;grid-template-columns:auto 1fr;gap:7px 18px;margin:0;font-size:13px}
+.infobox dt{color:var(--dim);white-space:nowrap}
+.infobox dd{margin:0;color:var(--fg)}
+.mbody{margin:20px 0 0;border-top:1px solid var(--line);padding-top:16px}
+.mbody h4{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--dim);letter-spacing:.5px}
+.plot{font-size:13.5px;line-height:1.85;color:#c9c9d4;margin:0;white-space:pre-wrap}
+.tags{margin:14px 0 0}
+.tagpill{display:inline-block;font-size:12px;padding:3px 10px;border-radius:999px;
+background:var(--card2);color:var(--dim);margin:0 7px 7px 0}
+.tagpill:hover{color:var(--accent)}
+.acts{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0 0;border-top:1px solid var(--line);padding-top:16px}
+.btn.pri{background:rgba(240,145,153,.14);border-color:var(--accent-dim);color:var(--accent);font-weight:600}
+/* magnet-eps.js 注入的容器沿用 relbox/relhead 类名 */
+.relbox{margin:14px 0 0}
+.relhead{font-size:12px;color:var(--dim);margin:0 0 8px;letter-spacing:.5px}
+.eps-none{font-size:12.5px;color:var(--dim)}
+@media(max-width:760px){
+  .mhd{flex-direction:column;gap:14px}
+  .mposter{width:132px}
+  .mb h3{font-size:18px}
+  .modal{padding:18px}
 }
