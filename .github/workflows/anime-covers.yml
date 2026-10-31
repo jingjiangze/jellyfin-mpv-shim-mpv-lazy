@@ -70,24 +70,30 @@ jobs:
           if [ -z "${MS_TOKEN:-}" ]; then echo "no MODELSCOPE_TOKEN, skip"; exit 0; fi
           MS_URL="https://oauth2:${MS_TOKEN}@www.modelscope.cn/datasets/jingjiangze/Anime-JPG.git"
           rm -rf ms
-          GIT_LFS_SKIP_SMUDGE=1 git clone -q "$MS_URL" ms 2>/dev/null
-          mkdir -p ms/posters
+          GIT_LFS_SKIP_SMUDGE=1 git clone -q "$MS_URL" ms
+          cd ms
+          echo "branch: $(git rev-parse --abbrev-ref HEAD)"
+          mkdir -p posters
           added=0; skipped=0
-          for f in covers/*.jpg; do
+          for f in ../covers/*.jpg; do
             [ -e "$f" ] || continue
             b=$(basename "$f")
-            if [ -e "ms/posters/$b" ]; then skipped=$((skipped+1)); continue; fi
-            cp -f "$f" "ms/posters/$b"; added=$((added+1))
+            if [ -e "posters/$b" ]; then skipped=$((skipped+1)); continue; fi
+            cp -f "$f" "posters/$b"; added=$((added+1))
           done
           echo "added=$added skipped=$skipped"
           if [ "$added" -eq 0 ]; then echo "no new covers"; exit 0; fi
-          cd ms
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add posters
+          git add -A posters
           git commit -q -m "covers: add $added"
+          # 有未暂存改动时不 stash 会让 pull --rebase 直接中断（上一轮就死在这）
+          git stash -u -q || true
           for i in 1 2 3; do
-            if git push -q origin HEAD:master 2>/dev/null; then echo "pushed"; exit 0; fi
-            echo "push retry $i"; sleep 5; git pull --rebase -q || true
+            git fetch -q origin HEAD || true
+            git -c rebase.autoStash=true rebase FETCH_HEAD || git rebase --abort || true
+            echo "== push attempt $i =="
+            if git push origin HEAD:master; then echo "PUSHED"; exit 0; fi
+            sleep 6
           done
-          echo "::warning::push to ModelScope failed"
+          echo "::error::push to ModelScope failed"; exit 1
