@@ -457,8 +457,16 @@ select.yselect:hover { border-color: var(--line-strong); }
 
 /* （内嵌播放 / 播放灯箱已按用户要求移除，2026-10-31 —— 相关样式一并删除） */
 
-/* 线路选择已改为「按系统时区自动判断」（app.js 的 USE_CN），无 UI。
-   快审判定 .regionsw 为死规则，删除；若恢复顶栏开关，从 git 历史找回这 8 行。 */
+/* ---------- 线路切换（顶栏：自动/国内/海外，控制「相关信息」里的优先项） ---------- */
+.regionsw { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; font-size: 12px; color: var(--dim); }
+.regionsw b { color: var(--accent); font-weight: 600; }
+.regionsw span.r {
+  padding: 3px 9px; border-radius: var(--r-pill); cursor: pointer;
+  border: 1px solid var(--line); transition: all .18s;
+}
+.regionsw span.r:hover { color: var(--fg); }
+.regionsw span.r.is-on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.regionsw .hint { opacity: .55; font-size: 11px; }
 
 /* ---------- 追番同步条 ---------- */
 .syncbar { margin-left: auto; display: flex; gap: 8px; }

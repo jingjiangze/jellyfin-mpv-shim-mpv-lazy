@@ -293,6 +293,39 @@
     return null;
   }
 
+  /* ---------- 线路切换（自动/国内/海外）：控制「相关信息」里播放入口的优先项 ---------- */
+  var RMODE = (function () { try { return localStorage.getItem('bgm_region') || 'auto'; } catch (e) { return 'auto'; } })();
+  var TZ_CN = (function () {
+    try {
+      var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      if (/^Asia\/(Shanghai|Chongqing|Urumqi|Harbin)$/.test(tz)) return true;
+      if (tz) return false;
+      return /^zh(-|$)/i.test(navigator.language || '');
+    } catch (e) { return false; }
+  })();
+  function useCN() { return RMODE === 'cn' ? true : RMODE === 'intl' ? false : TZ_CN; }
+  function setRegion(mode) {
+    RMODE = mode;
+    try { localStorage.setItem('bgm_region', mode); } catch (e) {}
+    renderRegionSwitch();
+  }
+  function renderRegionSwitch() {
+    var box = $('#regionsw');
+    if (!box) return;
+    box.innerHTML = '<b>线路</b>';
+    [['auto', '自动'], ['cn', '国内'], ['intl', '海外']].forEach(function (p) {
+      var el = document.createElement('span');
+      el.className = 'r' + (RMODE === p[0] ? ' is-on' : '');
+      el.textContent = p[1];
+      el.addEventListener('click', function (e) { e.stopPropagation(); setRegion(p[0]); });
+      box.appendChild(el);
+    });
+    var hint = document.createElement('span');
+    hint.className = 'hint';
+    hint.textContent = '（' + (useCN() ? 'B 站优先' : '预告优先') + '）';
+    box.appendChild(hint);
+  }
+
   function openModal(it) {
     var mg = magnetOf(it);
     var h = '<span class="x" data-close="1">×</span><div class="mtop">' +
@@ -337,14 +370,20 @@
     }
     h += '</div>';
 
-    /* 相关信息（替代原内嵌播放区）：全部是外链 chip，不再嵌 iframe */
+    /* 相关信息（替代原内嵌播放区）：全部是外链 chip，不再嵌 iframe。
+       线路开关决定播放入口的排序：国内 B 站优先，海外预告优先。 */
+    var biliLink = it.name ? ['B站搜索', 'https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name)] : null;
+    var trLink = it.trailer ? ['▶ 预告', 'https://www.youtube.com/watch?v=' + encodeURIComponent(it.trailer)] : null;
     var links = [];
     if (it.url) links.push(['来源页', it.url]);
-    if (it.trailer) links.push(['▶ 预告', 'https://www.youtube.com/watch?v=' + encodeURIComponent(it.trailer)]);
-    if (it.name) {
-      links.push(['B站搜索', 'https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name)]);
-      links.push(['Bangumi', 'https://bgm.tv/subject_search/' + encodeURIComponent(it.name)]);
+    if (useCN()) {
+      if (biliLink) links.push(biliLink);
+      if (trLink) links.push(trLink);
+    } else {
+      if (trLink) links.push(trLink);
+      if (biliLink) links.push(biliLink);
     }
+    if (it.name) links.push(['Bangumi', 'https://bgm.tv/subject_search/' + encodeURIComponent(it.name)]);
     if (links.length) {
       h += '<div class="relbox"><div class="relhead">相关信息</div>';
       links.forEach(function (kv) {
@@ -738,6 +777,14 @@
     bindHero();
     renderFilterBar();
     syncFavButtons();
+    /* 线路开关挂在顶栏 meta 区（≤920 隐藏 —— 手机顶栏没有空间，走自动判断） */
+    var meta = document.querySelector('.head-meta');
+    if (meta && !$('#regionsw')) {
+      var sw = document.createElement('span');
+      sw.id = 'regionsw';
+      meta.appendChild(sw);
+    }
+    renderRegionSwitch();
 
     /* 海报缓存层：ModelScope 的 302 与最终响应都没有 Cache-Control、签名 URL 每次还变，
        不缓存的话每次开页都要重下全部可见海报。sw.js 按请求 URL 缓存图片字节一年。 */
