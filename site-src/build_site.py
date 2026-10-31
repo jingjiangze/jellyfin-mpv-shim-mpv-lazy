@@ -523,11 +523,24 @@ for out, tpl_name, content, data, cnt in PAGES:
     data_fb = "https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/" + jname
     script = ""
     if JS_URL:
+        # JS 走 4 源级联：CF Pages 服务路径劣化时（实测 70-146B/s），由
+        # gcore jsDelivr（国内优化边缘，实测 7423 B/s 约 7 倍）优先供体；
+        # 哈希文件名 immutable，永不中毒。同源排在最后只当兜底。
+        _gh_raw = ("https://gh-proxy.com/https://raw.githubusercontent.com/"
+                   "jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/")
+        _ms = "https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/"
         script = (
             '<script>window.DATA_URL="' + data_url + '";'
             'window.DATA_FB="' + data_fb + '";'
             'window.DATA_LOCAL="' + jname + '";</script>\n'
-            '<script defer src="' + JS_URL + '"></script>'
+            '<script>(function(){var u=['
+            '"https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/' + JS_URL + '",'
+            '"' + _gh_raw + JS_URL + '",'
+            '"' + _ms + JS_URL + '",'
+            '"' + JS_URL + '"];'
+            'var i=0;(function n(){if(i>=u.length)return;'
+            'var s=document.createElement("script");s.defer=true;s.src=u[i++];s.onerror=n;'
+            'document.head.appendChild(s)})()})();</script>'
         )
     html = ((TPL / tpl_name).read_text(encoding="utf-8")
             .replace("__CSS__", CSS)

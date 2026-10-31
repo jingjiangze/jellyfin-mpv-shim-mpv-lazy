@@ -227,10 +227,19 @@ jobs:
             fi
           done
           echo "posters: added=$added updated=$updated unchanged=$skipped blocklisted=$blocked"
-          if [ $((added+updated)) -eq 0 ]; then echo "dataset already in sync"; exit 0; fi
+          # 交互脚本镜像进数据集 assets/：CF Pages 劣化时给 jsDelivr/gh-proxy 之外的国内第三源
+          mkdir -p "$RUNNER_TEMP/ms/assets"
+          rm -f "$RUNNER_TEMP/ms/assets"/app-*.js
+          js_added=0
+          for f in site-src/site/app-*.js; do
+            [ -e "$f" ] || continue
+            cp -f "$f" "$RUNNER_TEMP/ms/assets/"; js_added=$((js_added+1))
+          done
+          echo "js: copied=$js_added"
+          if [ $((added+updated+js_added)) -eq 0 ]; then echo "dataset already in sync"; exit 0; fi
           cd "$RUNNER_TEMP/ms"
-          git add -A posters
-          git -c commit.gpgsign=false -c user.name=github-actions               -c user.email=actions@users.noreply.github.com commit -qm "sync posters from site repo (+$added ~$updated)"
+          git add -A posters assets
+          git -c commit.gpgsign=false -c user.name=github-actions               -c user.email=actions@users.noreply.github.com commit -qm "sync posters + js from site repo (+$added ~$updated js=$js_added)"
           if ! git push "$MS_URL" HEAD:master 2>"$RUNNER_TEMP/ms-push.err"; then
             sed -E 's#oauth2:[^@]*@#oauth2:***@#g' "$RUNNER_TEMP/ms-push.err"
             echo "::error::push to ModelScope failed"; exit 1
