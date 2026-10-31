@@ -82,4 +82,7 @@ jobs:
       - name: Commit shards (Git Data API)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -u site-src/push_tree.py --message "anime: $(ls site-src/site/anime/*.json | wc -l) shard files [skip ci]" --dir site-src/site/anime
+        run: |
+          set -euo pipefail
+          N=$(ls -1 site-src/site/anime/*.json 2>/dev/null | wc -l)
+          python -u site-src/push_tree.py --message "anime: ${N} shard files [skip ci]" --dir site-src/site/anime
