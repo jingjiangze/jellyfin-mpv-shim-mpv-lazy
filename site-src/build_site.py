@@ -44,10 +44,11 @@ MODELSCOPE_BASE = os.environ.get(
 POSTER_BASE = os.environ.get("POSTER_BASE", MODELSCOPE_BASE).rstrip("/")
 POSTER_DIR = pathlib.Path(os.environ.get("POSTER_DIR", str(SITE / "posters")))
 
-# SSR 网格截断：首屏静态 DOM 只出前 N 张（弱网下 465KB 全量页会传输卡死），
-# 其余由交互层 fillCapped 按需展开；数据 JSON 仍含全量
+# SSR 网格截断：首屏静态 DOM 只出 hero+近期更新（首屏优先，弱网先看到内容），
+# 首屏以下的网格只出 SSR_BELOWFOLD 张占位（JS 数据到达后重渲全量）
 SSR_GRID_CAP = int(os.environ.get("SSR_GRID_CAP", "48"))
-SSR_YEAR_CAP = int(os.environ.get("SSR_YEAR_CAP", "24"))
+SSR_YEAR_CAP = int(os.environ.get("SSR_YEAR_CAP", "8"))
+SSR_BELOWFOLD = int(os.environ.get("SSR_BELOWFOLD", "8"))
 
 # ---------------------------------------------------------------- 数据
 fresh = json.loads((SITE / "fresh.json").read_text(encoding="utf-8"))
@@ -356,7 +357,9 @@ def render_home():
         n = len(FA) if d == "全部" else sum(1 for x in FA if x.get("wd") == d)
         on = " is-on" if d == today else ""
         tabs.append(f'<span class="tab{on}">{esc(d)} <b>{n}</b></span>')
-    sched_cards = "".join(card(x) for x in sort_items(by_day))
+    sched_cards = "".join(card(x) for x in sort_items(by_day)[:SSR_BELOWFOLD])
+    if sched_cards:
+        sched_cards += '<div class="loading">更多加载中…</div>'
     parts.append(
         f'<section class="sect" id="sched">'
         f'{sect_head("番剧表", f"今日 {today} · 共 {len(by_day)} 部")}'
@@ -376,6 +379,7 @@ def render_home():
         ycards, ytotal = year_cards(max(years), SSR_YEAR_CAP)
         if ytotal:
             yhint = f"{max(years)} 年 · {ytotal} 部"
+        ycards += '<div class="loading">更多加载中…</div>'
     parts.append(
         f'<section class="sect" id="yearsel">'
         f'{sect_head("按年份", yhint, ysel)}'
@@ -383,17 +387,18 @@ def render_home():
         f'</section>'
     )
 
-    hot = sort_items(FA)[:24]
+    hot = sort_items(FA)[:SSR_BELOWFOLD]
     parts.append(
-        f'<section class="sect">{sect_head("热门动漫", f"Top {len(hot)}")}'
-        f'<div class="row" id="r-anime">{"".join(card(x) for x in hot)}</div></section>'
+        f'<section class="sect">{sect_head("热门动漫", f"Top {len(FA)}")}'
+        f'<div class="row" id="r-anime">{"".join(card(x) for x in hot)}'
+        f'<div class="loading">更多加载中…</div></div></section>'
     )
 
-    all_cards = "".join(card(x) for x in sort_items(FA)[:SSR_GRID_CAP])
+    all_cards = "".join(card(x) for x in sort_items(FA)[:SSR_BELOWFOLD])
     parts.append(
         f'<section class="sect" id="allanime">'
         f'{sect_head("全部动漫", f"{len(FA)} 部")}'
-        f'<div class="grid" id="g-all">{all_cards}</div></section>'
+        f'<div class="grid" id="g-all">{all_cards}<div class="loading">更多加载中…</div></div></section>'
     )
     return "".join(parts)
 
@@ -516,6 +521,11 @@ PAGES = [
     ("library.html", "library.html", render_library(), DATA_LIB, len(LIB)),
 ]
 emitted = set()
+# JS 预载：head 解析阶段就开始下载交互脚本（与 HTML 流并行），不再等 DOM 解析完。
+# 注意不能带 crossorigin —— 经典 <script> 是 no-cors 拉取，preload 模式必须一致才能复用缓存
+js_preload = (f'<link rel="preload" as="script" '
+              f'href="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/{JS_URL}" '
+              f'fetchpriority="high">') if JS_URL else ""
 for out, tpl_name, content, data, cnt in PAGES:
     jname, jsize = emit_json(out.replace(".html", ""), data)
     emitted.add(jname)
@@ -539,13 +549,15 @@ for out, tpl_name, content, data, cnt in PAGES:
             '"' + _ms + JS_URL + '",'
             '"' + JS_URL + '"];'
             'var i=0;(function n(){if(i>=u.length)return;'
-            'var s=document.createElement("script");s.defer=true;s.src=u[i++];s.onerror=n;'
+            'var s=document.createElement("script");s.defer=true;s.src=u[i++];'
+            's.setAttribute("fetchpriority","high");s.onerror=n;'
             'document.head.appendChild(s)})()})();</script>'
         )
     html = ((TPL / tpl_name).read_text(encoding="utf-8")
             .replace("__CSS__", CSS)
             .replace("__CONTENT__", content)
             .replace("__CNT__", f"{cnt} 部")
+            .replace("__JS_PRELOAD__", js_preload)
             .replace("__SCRIPT__", script)
             .replace("__BUILD__", BUILD_TAG))
     (SITE / out).write_text(html, encoding="utf-8")

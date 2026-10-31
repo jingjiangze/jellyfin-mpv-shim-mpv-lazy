@@ -752,18 +752,18 @@
     }
     syncWd();
 
-    /* 空闲时预取数据：点卡片就不用等 */
-    var later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 400); };
-    later(function () {
-      loadData().then(function () {
-        renderFilterBar();
-        syncFavButtons();
-        renderFollow();
-        applyAll();
-        applySched();
-        /* 年份网格保持构建期直出的那一份：只有用户改下拉时才重新拉 */
-      }).catch(function () {});
-    });
+    /* 数据立刻开拉（三源竞速）：首屏以下的网格（番剧表/年份/热门/全部）全靠它填充。
+       首屏（hero + 近期更新）是构建期直出的，不依赖数据。 */
+    loadData().then(function () {
+      renderFilterBar();
+      syncFavButtons();
+      renderFollow();
+      applyAll();
+      applySched();
+      var fa = (DATA.fresh && DATA.fresh.anime) || [];
+      renderInto($('#r-anime'), sortItems(fa).slice(0, 24));
+      if ($('#ysel') && $('#ysel').value) applyYear($('#ysel').value);
+    }).catch(function () {});
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

@@ -139,6 +139,14 @@ h1, h2, h3 { font-weight: 650; }
 /* ---------- 页面容器 ---------- */
 .page { max-width: var(--wrap); margin: 0 auto; padding: 22px 28px 88px; }
 
+/* 区块入场（hero 首屏块不做，立即可见；prefers-reduced-motion 全局关闭） */
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.sect { animation: rise .45s ease both; }
+.sect.is-first { animation: none; }
+.sect:nth-of-type(3) { animation-delay: .05s; }
+.sect:nth-of-type(4) { animation-delay: .1s; }
+.morewrap { animation: rise .3s ease both; }
+
 /* ---------- 区块标题 ---------- */
 .sect { margin-top: 44px; }
 .sect.is-first { margin-top: 18px; }
@@ -378,17 +386,25 @@ select.yselect:hover { border-color: var(--line-strong); }
 /* ---------- 弹窗 ---------- */
 .mask {
   position: fixed; inset: 0; z-index: 200;
-  display: none; align-items: flex-start; justify-content: center;
+  display: flex; align-items: flex-start; justify-content: center;
   padding: 5vh 20px; overflow-y: auto;
   background: rgba(4, 5, 9, .82); backdrop-filter: blur(8px);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .22s ease, visibility 0s linear .24s;
 }
-.mask.is-on { display: flex; }
+.mask.is-on {
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transition: opacity .22s ease;
+}
 .modal {
   position: relative; width: min(940px, 100%);
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-lg); overflow: hidden;
   box-shadow: var(--shadow-2), inset 0 1px 0 rgba(255, 255, 255, .05);
+  transform: translateY(16px) scale(.985); opacity: 0;
+  transition: transform .28s cubic-bezier(.2, .85, .3, 1.08), opacity .2s ease;
 }
+.mask.is-on .modal { transform: none; opacity: 1; }
 .modal .x {
   position: absolute; top: 12px; right: 14px; z-index: 3;
   width: 32px; height: 32px; line-height: 30px; border-radius: 50%;
