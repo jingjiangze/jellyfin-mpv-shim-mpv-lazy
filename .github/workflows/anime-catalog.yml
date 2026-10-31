@@ -27,14 +27,7 @@ jobs:
         working-directory: site-src
         run: python -u fetch_catalog.py
 
-      - name: Commit catalog
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add site-src/data/catalog.json
-          if git diff --cached --quiet; then echo "catalog unchanged"; exit 0; fi
-          git commit -m "catalog: $(python -c "import json;print(json.load(open('site-src/data/catalog.json'))['count'])") anime subjects [skip ci]"
-          git fetch origin "${GITHUB_REF_NAME}"
-          git -c rebase.autoStash=true rebase FETCH_HEAD || { echo "rebase conflict, skip push"; git rebase --abort || true; exit 0; }
-          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "push failed (non-fatal)"
+      - name: Commit catalog (Git Data API)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -u site-src/push_tree.py --message "catalog: $(python -c "import json;print(json.load(open('site-src/data/catalog.json'))['count'])") anime subjects [skip ci]" site-src/data/catalog.json

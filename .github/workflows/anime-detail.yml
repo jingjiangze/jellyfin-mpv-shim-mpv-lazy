@@ -79,14 +79,7 @@ jobs:
           print(f"shards={len(files)}/64 records={rows} catalog={cat['count']} size={size/1024:.0f}KB")
           PY
 
-      - name: Commit shards
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A site-src/site/anime
-          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
-          git commit -m "anime: $(ls site-src/site/anime/*.json | wc -l) shard files [skip ci]"
-          git fetch origin "${GITHUB_REF_NAME}"
-          git -c rebase.autoStash=true rebase FETCH_HEAD || { echo "rebase conflict, skip push"; git rebase --abort || true; exit 0; }
-          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "push failed (non-fatal)"
+      - name: Commit shards (Git Data API)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -u site-src/push_tree.py --message "anime: $(ls site-src/site/anime/*.json | wc -l) shard files [skip ci]" --dir site-src/site/anime
