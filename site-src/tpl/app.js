@@ -148,7 +148,7 @@
     if (it.trailer) tags += '<span class="tag tag-trailer">预告</span>';
     if (it.episodes) tags += '<span class="tag tag-ep">' + it.episodes + ' 集</span>';
     var srcs = '';
-    if (bvidOf(it)) srcs += '<span class="tag tag-bili">B站</span>';
+    /* B 站角标已按用户要求移除（2026-10-31）；bvidOf 仍用于排序优先级 */
     if (magnetOf(it)) srcs += '<span class="tag tag-mag">磁力</span>';
     var line = srcs ? '<div class="tag-line">' + srcs + '</div>' : '';
 
@@ -293,10 +293,11 @@
   }
 
   function openModal(it) {
-    var bv = bvidOf(it);
     var mg = magnetOf(it);
     var h = '<span class="x" data-close="1">×</span><div class="mtop">' +
-      '<div class="mp">' + (it.poster ? '<img src="' + esc(it.poster) + '" alt="">' : '<div class="ph">🎬</div>') + '</div>' +
+      '<div class="mp">' + (it.poster
+        ? '<img src="' + esc(it.poster) + '" alt="" onerror="this.remove()">'
+        : '<div class="ph">🎬</div>') + '</div>' +
       '<div class="mb"><h3>' + esc(it.name) + '</h3>';
 
     if (it.rating || (it.st === 'RELEASING' && it.next_at)) {
@@ -307,8 +308,8 @@
       }
       h += '</div>';
     }
+    /* 信息表（精简版，2026-10-31）：去「放送」——与卡片副行的星期重复 */
     var info = [];
-    if (it.wd && it.wd !== '-') info.push(['放送', it.wd]);
     if (it.air) info.push(['首播', it.air]);
     if (it.episodes) info.push(['话数', it.episodes + ' 集']);
     if (it.du) info.push(['时长', it.du + ' 分钟']);
@@ -323,6 +324,33 @@
       h += '</dl>';
     }
     if (it.overview) h += '<p class="plot">' + esc(it.overview) + '</p>';
+
+    /* 主操作：磁力优先。内嵌播放已移除（2026-10-31），播放改为「相关信息」里的外链 */
+    h += '<div class="acts">';
+    if (mg) {
+      h += '<span class="btn is-pri" data-magnet="' + esc(mg.m) + '">磁力</span>';
+      h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(magnetPlay(mg.m)) + '">在线播放</a>';
+    }
+    if (PAGE === 'library' && it.id) {
+      h += '<a class="btn" target="_blank" rel="noopener" href="' + esc((window.JF || 'http://127.0.0.1:8100')) + '/web/#/details?id=' + esc(it.id) + '">Jellyfin</a>';
+    }
+    h += '</div>';
+
+    /* 相关信息（替代原内嵌播放区）：全部是外链 chip，不再嵌 iframe */
+    var links = [];
+    if (it.url) links.push(['来源页', it.url]);
+    if (it.trailer) links.push(['▶ 预告', 'https://www.youtube.com/watch?v=' + encodeURIComponent(it.trailer)]);
+    if (it.name) {
+      links.push(['B站搜索', 'https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name)]);
+      links.push(['Bangumi', 'https://bgm.tv/subject_search/' + encodeURIComponent(it.name)]);
+    }
+    if (links.length) {
+      h += '<div class="relbox"><div class="relhead">相关信息</div>';
+      links.forEach(function (kv) {
+        h += '<a class="relchip" target="_blank" rel="noopener" href="' + esc(kv[1]) + '">' + esc(kv[0]) + '</a>';
+      });
+      h += '</div>';
+    }
     if ((it.rel || []).length) {
       h += '<div class="relbox"><div class="relhead">关联作品</div>';
       (it.rel || []).forEach(function (r) {
@@ -332,88 +360,23 @@
       });
       h += '</div>';
     }
-    h += '<div class="acts">';
-    if (mg) {
-      h += '<span class="btn is-pri" data-magnet="' + esc(mg.m) + '">磁力</span>';
-      h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(magnetPlay(mg.m)) + '">在线播放</a>';
-    }
-    if (bv) h += '<span class="btn' + (!mg ? ' is-pri' : '') + '" data-play="' + esc(bv) + '">▶ B站播放</span>';
-    if (it.trailer) h += '<span class="btn' + (!mg && !bv ? ' is-pri' : '') + '" data-trailer="' + esc(it.trailer) + '">▶ 预告</span>';
-    if (it.url) h += '<a class="btn" target="_blank" rel="noopener" href="' + esc(it.url) + '">来源页</a>';
-    if (it.name) h += '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name) + '">B站搜索</a>';
-    if (PAGE === 'library' && it.id) {
-      h += '<a class="btn" target="_blank" rel="noopener" href="' + esc((window.JF || 'http://127.0.0.1:8100')) + '/web/#/details?id=' + esc(it.id) + '">Jellyfin</a>';
-    }
-    h += '</div>';
     if (mg && (mg.alt || []).length) {
       h += '<div class="relbox"><div class="relhead">其他磁力版本</div>';
       (mg.alt || []).forEach(function (a) {
         h += '<span class="relchip" title="' + esc(a.t || '') + '" data-magnet="' + esc(a.m) + '">' +
-          esc((a.t || '').slice(0, 46)) + '<em>' +
+          esc((a.t || '').slice(0, 32)) + '<em>' +
           [fmtSize(a.s), a.sd ? a.sd + ' 种' : '', a.sub || ''].filter(Boolean).join(' · ') + '</em></span>';
       });
       h += '</div>';
     }
-    h += '</div></div><div class="trailer" id="trailer"></div>';
+    h += '</div></div>';
     $('#modal').innerHTML = h;
     $('#mask').classList.add('is-on');
     document.body.style.overflow = 'hidden';
-    autoPlay(it, bv);
   }
 
-  /* 线路：时区优先（B 站 / YouTube 预告），没有 UI 开关 */
-  var USE_CN = (function () {
-    try {
-      var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-      if (/^Asia\/(Shanghai|Chongqing|Urumqi|Harbin)$/.test(tz)) return true;
-      if (tz) return false;
-      return /^zh(-|$)/i.test(navigator.language || '');
-    } catch (e) { return false; }
-  })();
-
-  function autoPlay(it, bv) {
-    var t = $('#trailer');
-    if (!t) return;
-    if (USE_CN && bv) { playBili(bv, true); return; }
-    if (!USE_CN && it.trailer) { playTrailer(it.trailer); return; }
-    if (USE_CN && !bv) {
-      t.innerHTML = '<div class="tph">国内网络无法直接播放 YouTube 预告<br>' +
-        '<a class="btn is-pri" style="display:inline-block;margin-top:12px" target="_blank" rel="noopener" ' +
-        'href="https://search.bilibili.com/all?keyword=' + encodeURIComponent(it.name || '') + '">在 B 站搜索</a></div>';
-    }
-  }
-
-  function playerHost() {
-    var t = $('#trailer');
-    if (t) return t;
-    var lb = $('#lightbox');
-    if (!lb) {
-      lb = document.createElement('div');
-      lb.id = 'lightbox';
-      lb.innerHTML = '<div class="lb-inner"><span class="lb-x" data-close-lb="1">×</span><div id="trailer"></div></div>';
-      document.body.appendChild(lb);
-      $('#' + 'trailer').style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
-    }
-    lb.classList.add('is-on');
-    document.body.style.overflow = 'hidden';
-    return $('#trailer');
-  }
-  function playTrailer(vid) {
-    playerHost().innerHTML = '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(vid) +
-      '?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
-  }
-  function playBili(bvid) {
-    playerHost().innerHTML = '<iframe src="//player.bilibili.com/player.html?bvid=' + encodeURIComponent(bvid) +
-      '&page=1&high_quality=1&danmaku=0&autoplay=1" allowfullscreen scrolling="no" allow="autoplay; fullscreen"></iframe>';
-  }
   function closeModal() {
     $('#mask').classList.remove('is-on');
-    var t = $('#trailer'); if (t) t.innerHTML = '';
-    document.body.style.overflow = '';
-  }
-  function closeLB() {
-    var lb = $('#lightbox');
-    if (lb) { lb.classList.remove('is-on'); var t = $('#trailer'); if (t) t.innerHTML = ''; }
     document.body.style.overflow = '';
   }
 
@@ -694,7 +657,6 @@
       var t = e.target;
 
       if (t.closest('[data-close]') || t.id === 'mask') { closeModal(); return; }
-      if (t.closest('[data-close-lb]') || t.id === 'lightbox') { closeLB(); return; }
 
       var fav = t.closest('.fav');
       if (fav) {
@@ -710,10 +672,6 @@
         copyMagnet(mg.dataset.magnet, mg);
         return;
       }
-      var pb = t.closest('[data-play]');
-      if (pb) { playBili(pb.dataset.play); return; }
-      var tr = t.closest('[data-trailer]');
-      if (tr) { playTrailer(tr.dataset.trailer); return; }
 
       var card = t.closest('.card');
       if (card) {
@@ -728,7 +686,7 @@
     });
 
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { closeModal(); closeLB(); }
+      if (e.key === 'Escape') closeModal();
     });
 
     window.addEventListener('scroll', function () {

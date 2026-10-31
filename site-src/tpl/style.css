@@ -41,7 +41,6 @@
   --accent-soft: rgba(240, 145, 153, .13);
   --star: #f5c451;
   --ok: #7ee787;
-  --bili: #fb7299;
 
   /* 形 */
   --r: 12px;
@@ -274,7 +273,6 @@ h1, h2, h3 { font-weight: 650; }
   max-width: calc(100% - 62px);
 }
 .tag-line .tag { position: static; }
-.tag-bili { background: var(--bili); color: var(--accent-ink); }
 .tag-mag  { background: var(--ok); color: var(--accent-ink); }
 
 .card-head { display: flex; align-items: flex-start; gap: 6px; margin: 10px 0 4px; }
@@ -454,24 +452,10 @@ select.yselect:hover { border-color: var(--line-strong); }
 }
 .relchip:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
 .relchip em { font-style: normal; font-size: 11px; color: var(--dim); }
-.trailer { position: relative; aspect-ratio: 16 / 9; background: #000; border-top: 1px solid var(--line); }
-.trailer iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.tph {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 12px;
-  padding: 20px; text-align: center; font-size: 13px; color: var(--dim); background: var(--bg);
-}
+/* 长标题磁力版本（截 32 字）在窄弹窗里也要折行而不是撑破（手机端审计） */
+.relchip { max-width: 100%; }
 
-/* ---------- 播放灯箱 ---------- */
-#lightbox {
-  position: fixed; inset: 0; z-index: 240;
-  display: none; align-items: center; justify-content: center;
-  background: rgba(4, 5, 9, .92); backdrop-filter: blur(6px);
-}
-#lightbox.is-on { display: flex; }
-#lightbox .lb-inner { position: relative; width: min(1100px, 92vw); aspect-ratio: 16 / 9; }
-#lightbox iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 12px; }
-#lightbox .lb-x { position: absolute; top: -38px; right: 0; font-size: 26px; color: var(--fg-2); cursor: pointer; }
+/* （内嵌播放 / 播放灯箱已按用户要求移除，2026-10-31 —— 相关样式一并删除） */
 
 /* 线路选择已改为「按系统时区自动判断」（app.js 的 USE_CN），无 UI。
    快审判定 .regionsw 为死规则，删除；若恢复顶栏开关，从 git 历史找回这 8 行。 */
@@ -539,7 +523,9 @@ select.yselect:hover { border-color: var(--line-strong); }
   .tab { padding: 8px 14px; }
   .fav { width: 30px; height: 30px; line-height: 30px; }
   .mtop { flex-direction: column; padding: 18px; }
-  .mp { width: 116px; flex-basis: 116px; }
+  /* 修复：纵向 flex 里 flex-basis 映射的是高度，与 aspect-ratio 冲突会把海报压成
+     116×116 正方形 —— 改 flex:none，让宽度定、高度由 2:3 推出（手机端审计） */
+  .mp { width: 116px; flex: none; }
   .mb h3 { font-size: 19px; }
 }
 

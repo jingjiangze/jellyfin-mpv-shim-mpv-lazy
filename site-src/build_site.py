@@ -239,8 +239,7 @@ def card(it):
     if it.get("episodes"):
         tags.append(f'<span class="tag tag-ep">{int(it["episodes"])} 集</span>')
     sources = []
-    if it.get("bili"):
-        sources.append('<span class="tag tag-bili">B站</span>')
+    # B 站角标已按用户要求移除（2026-10-31）；bili 字段保留，仍参与播放源优先级排序
     if it.get("mag"):
         sources.append('<span class="tag tag-mag">磁力</span>')
     src_line = f'<div class="tag-line">{"".join(sources)}</div>' if sources else ""
@@ -287,8 +286,7 @@ def hero_block(slides, total):
         if it.get("st") and ST.get(it["st"]):
             meta.append(f'<span>{esc(ST[it["st"]])}</span>')
         btns = ""
-        if it.get("trailer"):
-            btns += '<span class="hbtn is-primary">▶ 播放预告</span>'
+        # 内嵌播放已移除（2026-10-31）：hero 只留「详情」，预告走弹窗里的外链
         btns += f'<span class="hbtn is-ghost" data-open="{esc(it.get("key"))}">详情</span>'
         # 只有第一张预载背景图；其余留给 JS 在切换时再挂（6 张 banner 全预载太重）
         bg_attr = (f'style="background-image:url(&quot;{esc(bg)}&quot;)"' if i == 0
