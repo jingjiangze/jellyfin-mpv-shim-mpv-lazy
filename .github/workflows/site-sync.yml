@@ -130,6 +130,9 @@ jobs:
           set -euo pipefail
           rm -rf build-out && mkdir -p build-out
           cp site-src/site/index.html site-src/site/library.html site-src/site/style.css site-src/site/app.js site-src/site/sw.js build-out/
+          # 交互脚本走内容哈希文件名（HTML 引用的是 app-<hash>.js，不是 app.js）——
+          # 漏拷会被 CF Pages 的 SPA 回退用 text/html 兜底，浏览器拒执行（线上实测踩过）
+          cp site-src/site/app-*.js build-out/ 2>/dev/null || true
           cp site-src/tpl/_headers build-out/_headers
           cp -r site-src/site/assets build-out/assets 2>/dev/null || true
           cp site-src/site/index-*.json site-src/site/library-*.json build-out/ 2>/dev/null || true

@@ -522,6 +522,8 @@ select.yselect:hover { border-color: var(--line-strong); }
   .chip { padding: 8px 14px; }
   .tab { padding: 8px 14px; }
   .fav { width: 30px; height: 30px; line-height: 30px; }
+  /* 窄卡信息行：nowrap + 裁剪，避免折 2-3 行把卡片底部撑参差（真机探针实测定级：中） */
+  .sub { flex-wrap: nowrap; overflow: hidden; }
   .mtop { flex-direction: column; padding: 18px; }
   /* 修复：纵向 flex 里 flex-basis 映射的是高度，与 aspect-ratio 冲突会把海报压成
      116×116 正方形 —— 改 flex:none，让宽度定、高度由 2:3 推出（手机端审计） */
