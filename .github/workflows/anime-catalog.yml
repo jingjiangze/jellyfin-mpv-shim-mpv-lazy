@@ -30,4 +30,7 @@ jobs:
       - name: Commit catalog (Git Data API)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -u site-src/push_tree.py --message "catalog: $(python -c "import json;print(json.load(open('site-src/data/catalog.json'))['count'])") anime subjects [skip ci]" site-src/data/catalog.json
+        run: |
+          set -euo pipefail
+          CNT=$(python -c 'import json;print(json.load(open("site-src/data/catalog.json"))["count"])')
+          python -u site-src/push_tree.py --message "catalog: ${CNT} anime subjects [skip ci]" site-src/data/catalog.json
