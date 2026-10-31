@@ -190,6 +190,7 @@ PAGE = """<!DOCTYPE html>
 <main class="wrap" id="main"><div class="loading">加载中…</div></main>
 <div class="mask" id="mask"><div class="modal" id="modal"></div></div>
 <script>__JS__</script>
+<script defer src="/magnet-eps.js"></script>
 </body>
 </html>
 """

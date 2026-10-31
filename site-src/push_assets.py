@@ -62,7 +62,9 @@ def main():
     # 由国内优化的 gcore 边缘服务（实测 7423 B/s，约 7 倍且零 stall）
     data_files = (sorted((HERE / "site").glob("index-*.json"))
                   + sorted((HERE / "site").glob("library-*.json"))
-                  + sorted((HERE / "site").glob("app-*.js")))
+                  + sorted((HERE / "site").glob("app-*.js"))
+                  + sorted((HERE / "site").glob("magnet-eps.json"))
+                  + sorted((HERE / "site").glob("magnet-eps.js")))
     data_entries = []
     if not posters_only:
         for f in data_files:

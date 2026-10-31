@@ -84,3 +84,15 @@ background:var(--card2);border:1px solid var(--line);margin:14px 8px 0 0}
   .mtop>img{width:130px}
   .bhead h2{font-size:17px}
 }
+
+/* ---------- 分集磁力 chip（magnet-eps.js 渲染） ---------- */
+.eps-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: 0 8px 8px 0; padding: 6px 12px; border-radius: 999px;
+  background: #1c2030; border: 1px solid #34343f;
+  font-size: 12.5px; color: #ededf2; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: border-color .15s, color .15s, transform .15s;
+}
+.eps-chip:hover { border-color: #7ee787; color: #7ee787; transform: translateY(-1px); }
+.eps-none { font-size: 12.5px; color: #8b8b98; padding: 2px 0 6px; }
