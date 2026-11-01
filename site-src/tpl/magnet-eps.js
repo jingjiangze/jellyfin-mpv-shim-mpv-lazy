@@ -73,10 +73,18 @@
   }
 
   /* 清单很小（几百字节），用它确认哪个源是活的；拿不到就整体降级成「暂无」。 */
-  function getJSON(url) {
-    return fetch(url).then(function (r) {
+  /* 每个请求都带超时：CF 边缘抖动时 fetch 会一直 pending，界面就卡在
+     「索引加载中…」既不渲染也不降级（实测遇到过一次）。 */
+  function getJSON(url, ms) {
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, ms || 9000);
+    return fetch(url, ctl ? { signal: ctl.signal } : undefined).then(function (r) {
+      clearTimeout(timer);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
+    }, function (e) {
+      clearTimeout(timer);
+      throw e;
     });
   }
 
@@ -135,7 +143,10 @@
     if (LIVE[name]) return Promise.resolve(LIVE[name]);
     var u = '/api/eps?t=' + encodeURIComponent(name);
     if (epsN) u += '&n=' + epsN;
-    return fetch(u).then(function (r) {
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
+    return fetch(u, ctl ? { signal: ctl.signal } : undefined).then(function (r) {
+      clearTimeout(timer);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function (d) {
