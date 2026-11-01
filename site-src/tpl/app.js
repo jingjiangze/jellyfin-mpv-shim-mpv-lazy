@@ -285,8 +285,8 @@
               return (r[1] + ' ' + (r[2] || '')).toLowerCase().indexOf(q) !== -1;
             }).slice(0, 120);
             $('#main').innerHTML = '<section class="block"><div class="bhead"><h2>搜索</h2><span>'
-              + res.length + ' 部</span></div><div class="grid">'
-              + res.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('') + '</div></section>';
+              + hit.length + ' 部</span></div><div class="grid">'
+              + hit.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('') + '</div></section>';
           }, 220);
         };
       })());
