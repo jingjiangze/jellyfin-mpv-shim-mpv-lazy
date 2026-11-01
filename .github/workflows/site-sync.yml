@@ -73,8 +73,27 @@ jobs:
           PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
         run: python -u fetch_magnet.py
 
-      # 分集磁力索引：按片名归一化聚合每集的磁力（体积/做种/字幕），
-      # 供 magnet-eps.js 在详情页渲染 chips。每轮只补 MAGNET_MAX 条。
+      # 分集磁力索引：按「卡片标题」查聚合站，把每集磁力（体积/做种/字幕）
+      # 写进 magnet-eps.json，供 magnet-eps.js 在详情页渲染 chips。
+      # 每轮按评分降序补 MAGNET_MAX 条，已收录的跳过（--resume），多轮收敛。
+      # 注意：这一步之前被整段删过，导致线上索引冻在旧的 179 条（覆盖率 1.3%）。
+      - name: Index per-episode magnets
+        timeout-minutes: 25
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          NO_LOCAL_PROXY: "1"
+          MAGNET_MAX: "700"
+          MAGNET_WORKERS: "3"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PAN_HUB_USER: ${{ secrets.PAN_HUB_USER }}
+          PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
+        run: |
+          set -euo pipefail
+          python -u index_eps.py --resume
+          # gcore 第一优先级读的是仓库 media/ 下这份，必须同步，否则线上仍是旧索引
+          cp -f site/magnet-eps.json ../media/magnet-eps.json
+
       - name: Fill year catalogs (2000-now)
         timeout-minutes: 25
         continue-on-error: true

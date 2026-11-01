@@ -15,12 +15,42 @@
     'magnet-eps.json'
   ];
 
+  /* 季/部标记。旧版只做子串命中，导致：
+       · 「我的英雄学院 I am a hero too」吃到正传 52 集的磁力
+       · 「乒乓」吃到「灼热的乒乓妹」
+       · 剧场版吃到同名片子的 TV 集数
+     现在子串命中必须同时满足「季号一致」且「不是短名的宽松匹配」。 */
+  var RE_SEASON = /(第\s*[一二三四五六七八九十\d]+\s*[季期]|Season\s*\d+|Part\.?\s*\d+|\bS\d{1,2}\b|[ⅡⅢⅣⅤⅥ])/i;
+  var NUM = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+              'Ⅱ': 2, 'Ⅲ': 3, 'Ⅳ': 4, 'Ⅴ': 5, 'Ⅵ': 6 };
+
   function norm(s) {
     s = String(s || '').toLowerCase();
     s = s.replace(/[（）【】：]/g, function (c) {
       return { '（': '(', '）': ')', '【': '[', '】': ']', '：': ':' }[c];
     });
-    return s.replace(/[\s\-_.·・:：!！?？,，。'"()\[\]（）【】]/g, '');
+    return s.replace(/[\s\-_.·・:：!！?？,，。'"()\[\]（）【】～~]/g, '');
+  }
+
+  function seasonsOf(s) {
+    var out = {}, m, str = String(s || '');
+    var re = new RegExp(RE_SEASON.source, 'gi');
+    while ((m = re.exec(str))) {
+      var raw = m[1];
+      var d = raw.match(/\d+/);
+      var n = d ? Number(d[0]) : NUM[raw.charAt(raw.length - 1)];
+      if (!n) continue;
+      out[(/Part/i.test(raw) ? 'part' : 's') + n] = 1;
+    }
+    return out;
+  }
+
+  function sameSeasons(a, b) {
+    var ka = Object.keys(a), kb = Object.keys(b);
+    if (!ka.length && !kb.length) return true;
+    if (ka.length !== kb.length) return false;
+    for (var i = 0; i < ka.length; i++) if (kb.indexOf(ka[i]) < 0) return false;
+    return true;
   }
 
   function load() {
@@ -45,13 +75,22 @@
     if (!IDX || !name) return null;
     var q = norm(name);
     if (!q) return null;
-    var best = null;
+    var qs = seasonsOf(name);
+    var best = null, bestScore = 0;
     for (var k in IDX) {
       var e = IDX[k];
-      var nt = norm(e.n);
+      var nt = norm(e && e.n);
       if (!nt) continue;
-      var hit = nt === q || (nt.indexOf(q) >= 0 && q.length >= 4) || (q.indexOf(nt) >= 0 && nt.length >= 4);
-      if (hit && (!best || nt.length > norm(best.n).length)) best = e;
+      /* 优先级：完全相同 > 片名被发布名包含 > 发布名被片名包含（后者要求长度占比） */
+      var score = 0;
+      if (nt === q) score = 1000;
+      else if (nt.indexOf(q) >= 0 && q.length >= 5) score = 100 + q.length;
+      else if (q.indexOf(nt) >= 0 && nt.length >= 5 && nt.length >= q.length * 0.6) score = 50 + nt.length;
+      if (!score) continue;
+      if (q.length <= 3) score -= 200;            // 短名（乒乓/虫师）只信完全相同
+      if (score <= 0) continue;
+      if (!sameSeasons(qs, seasonsOf(e.n))) continue;   // 季号必须一致
+      if (score > bestScore) { bestScore = score; best = e; }
     }
     return best || null;
   }
@@ -119,4 +158,7 @@
     arm();
   }
   document.addEventListener('DOMContentLoaded', arm);
+
+  /* 测试钩子：让离线脚本能验证匹配逻辑（生产路径不使用） */
+  window.__epsTest = { find: findByName, norm: norm, setIdx: function (d) { IDX = d; return IDX; } };
 })();
