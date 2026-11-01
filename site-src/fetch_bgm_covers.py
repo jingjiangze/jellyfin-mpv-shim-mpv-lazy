@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """把 Bangumi 封面抓到本地，供 ModelScope 数据集分发。
 
-尺寸选择：用 `c`（中图，实测 8.7KB）而不是 `l`（大图 77.7KB）。
-  8,800 部 × 77.7KB ≈ 680MB —— 塞不进 GitHub LFS，推 ModelScope 也很重；
-  8,800 × 8.7KB ≈ 75MB —— 整个数据集可控，卡片宽 176px 也够用。
-`c` 的 URL 可以直接从 `l` 换路径得到：/pic/cover/l/ → /pic/cover/c/
+尺寸选择：COVER_SIZE 环境变量控制（默认 c 保持日常轻量）。
+  - c：中图 ~8.7KB/张（8,800 × 8.7KB ≈ 75MB），日常增量轮用；
+  - l：大图 ~77.7KB/张，Retina 屏与弹窗详情（CSS 180px 宽 × 2 = 380px 实际）
+       需要高清时用 COVER_SIZE=l 触发一次全量刷新。
+  这些封面只进 ModelScope 数据集（不进 GitHub 仓/LFS），680MB 量级可承受；
+  publish 端按字节数只升不降，l 传上去后 c 轮不会覆盖回去。
+源分片里的 poster URL 本身就是 /pic/cover/l/；降级到 c 是换路径得到：
+/pic/cover/l/ → /pic/cover/c/
 
 用法：SHARD_LIST=0,1 python fetch_bgm_covers.py
+      COVER_SIZE=l SHARD_TOTAL=64 python fetch_bgm_covers.py   # 高清全量
 """
 import concurrent.futures as cf
 import json
@@ -32,9 +37,14 @@ else:
     MY = set(range(a, b + 1))
 
 
+COVER_SIZE = (os.environ.get("COVER_SIZE") or "c").strip().lower()
+
+
 def medium(url):
     if not url:
         return ""
+    if COVER_SIZE != "c":
+        return url                      # l/g：用源分片里的原 URL（大图）
     for a, b in (("/cover/l/", "/cover/c/"), ("/cover/m/", "/cover/c/"), ("/cover/g/", "/cover/c/")):
         if a in url:
             return url.replace(a, b)

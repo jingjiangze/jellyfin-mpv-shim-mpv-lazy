@@ -4,6 +4,11 @@ name: anime-covers
 # 8 个 job 并行下载，collect job 统一提交到数据集仓库（并发 push 同一个 LFS 仓库会冲突，所以必须收口）。
 on:
   workflow_dispatch:
+    inputs:
+      cover_size:
+        description: "封面尺寸：c=中图~8.7KB（日常），l=大图~77.7KB（高清全量刷新一次）"
+        required: false
+        default: "c"
   schedule:
     - cron: "50 19 * * *"   # 每天 03:50（北京时间）
 
@@ -32,6 +37,7 @@ jobs:
         env:
           SHARD_TOTAL: "64"
           COVER_WORKERS: "8"
+          COVER_SIZE: ${{ github.event.inputs.cover_size || 'c' }}
         run: |
           set -euo pipefail
           P=${{ matrix.part }}
@@ -74,19 +80,30 @@ jobs:
           cd ms
           echo "branch: $(git rev-parse --abbrev-ref HEAD)"
           mkdir -p posters
-          added=0; skipped=0
+          added=0; skipped=0; updated=0
           for f in ../covers/*.jpg; do
             [ -e "$f" ] || continue
             b=$(basename "$f")
-            if [ -e "posters/$b" ]; then skipped=$((skipped+1)); continue; fi
+            want=$(stat -c%s "$f")
+            if [ -e "posters/$b" ]; then
+              # LFS 指针里带 "size N"；真实文件读不到 size 就按一致处理。
+              # 只升不降：新图更大（c→l 高清刷新）才覆盖，避免日常 c 轮把 l 打回去。
+              have=$(grep -o 'size [0-9]\+' "posters/$b" 2>/dev/null | awk '{print $2}' | head -1 || true)
+              if [ -n "${have:-}" ] && [ "$have" -lt "$want" ]; then
+                cp -f "$f" "posters/$b"; updated=$((updated+1))
+              else
+                skipped=$((skipped+1))
+              fi
+              continue
+            fi
             cp -f "$f" "posters/$b"; added=$((added+1))
           done
-          echo "added=$added skipped=$skipped"
-          if [ "$added" -eq 0 ]; then echo "no new covers"; exit 0; fi
+          echo "added=$added updated=$updated skipped=$skipped"
+          if [ $((added+updated)) -eq 0 ]; then echo "no new covers"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A posters
-          git commit -q -m "covers: add $added"
+          git commit -q -m "covers: +$added ~$updated"
           # 有未暂存改动时不 stash 会让 pull --rebase 直接中断（上一轮就死在这）
           git stash -u -q || true
           for i in 1 2 3; do
