@@ -4,7 +4,7 @@ name: anime-magnet
 on:
   workflow_dispatch:
   schedule:
-    - cron: "15 */6 * * *"
+    - cron: "15 */3 * * *"
 
 permissions:
   contents: write
@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,8 +29,8 @@ jobs:
         working-directory: site-src
         env:
           SHARD: ${{ matrix.shard }}
-          SHARD_TOTAL: "8"
-          MAGNET_MAX: "200"
+          SHARD_TOTAL: "16"
+          MAGNET_MAX: "150"
           PAN_HUB_USER: ${{ secrets.PAN_HUB_USER }}
           PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
         run: python -u fetch_magnet_eps.py
