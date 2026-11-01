@@ -124,10 +124,10 @@
     return ANI.rows.filter(function (r) {
       if (HOME.y && r[4] !== HOME.y) return false;
       if (HOME.m && r[5] !== HOME.m) return false;
-      if (HOME.w && wkOfDay(r[10]) !== HOME.w) return false;
+      if (HOME.w && wkOfDay(r[11]) !== HOME.w) return false;
       if (HOME.wd && r[6] !== HOME.wd) return false;
       return true;
-    }).sort(function (a, b) { return (b[7] || 0) - (a[7] || 0) || (b[10] || 0) - (a[10] || 0); });
+    }).sort(function (a, b) { return (b[7] || 0) - (a[7] || 0) || (b[11] || 0) - (a[11] || 0); });
   }
 
   function chip(label, on, val) {
@@ -141,7 +141,7 @@
     var months = {}; ANI.rows.forEach(function (r) { if (r[4] === HOME.y && r[5]) months[r[5]] = 1; });
     var ms = Object.keys(months).map(Number).sort(function (a, b) { return a - b; });
     var inM = ANI.rows.filter(function (r) { return r[4] === HOME.y && r[5] === HOME.m; });
-    var weeks = {}; inM.forEach(function (r) { var w = wkOfDay(r[10]); if (w) weeks[w] = 1; });
+    var weeks = {}; inM.forEach(function (r) { var w = wkOfDay(r[11]); if (w) weeks[w] = 1; });
     var ws = Object.keys(weeks).map(Number).sort(function (a, b) { return a - b; });
 
     var h = '<aside class="levels">';
@@ -204,7 +204,7 @@
     var m = Math.max.apply(null, Object.keys(months).map(Number));
     var inM = inY.filter(function (r) { return r[5] === m; });
     var weeks = {};
-    inM.forEach(function (r) { var w = wkOfDay(r[10]); if (w) weeks[w] = 1; });
+    inM.forEach(function (r) { var w = wkOfDay(r[11]); if (w) weeks[w] = 1; });
     var w = Math.max.apply(null, Object.keys(weeks).map(Number));
     HOME = { y: y, m: m, w: w, wd: 0 };
   }
