@@ -1,19 +1,38 @@
 /* 分集磁力层（架构无关附加层）
  *
  * 不依赖任何一方的数据/key 体系：监听 #modal 的内容变化，从弹窗标题取片名，
- * 按「归一化片名」查分集索引（magnet-eps.json），把「第 N 集」chip 渲染进弹窗。
- * 索引来源（级联回退）：gcore jsDelivr → gh-proxy → ModelScope → 同源。
- * 点击 chip 复制磁力（页面有 __magnet 就复用，否则 navigator.clipboard）。
+ * 按片名查分集索引，把「第 N 集」chip 渲染进弹窗。
+ *
+ * 索引已分片：整份 7.5MB 在手机上首次点开卡片就要下完，太重。
+ *   media/eps/index.json     清单（shards / count，几百字节）
+ *   media/eps/s<NN>.json     按「片名哈希 % 16」切的分片，单份约 500KB
+ * 客户端只拉当前片名所在的那一片。哈希函数必须与构建端（src/shard_eps.py）
+ * 逐字符一致：都按 Unicode 码点、h = (h*31 + cp) mod 2^32。改一边必须改另一边。
+ * 来源级联：gcore jsDelivr → gh-proxy → raw.githubusercontent。
+ * 点 chip 复制磁力（页面有 __magnet 就复用，否则 navigator.clipboard）。
  */
 (function () {
   'use strict';
-  var IDX = null, LOADING = false, LAST_NAME = null;
-  var URLS = [
-    'https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/magnet-eps.json',
-    'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/magnet-eps.json',
-    'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/magnet-eps.json',
-    'magnet-eps.json'
+  var ENTRY = null, LOADING = false, LAST_NAME = null, BASE_I = -1, MANIFEST = null;
+  var BASES = [
+    'https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/eps/',
+    'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/eps/',
+    'https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/eps/'
   ];
+  var SHARDS = 16;
+  var CACHE = {};                      // shardNo -> { 归一化片名: 条目 }
+
+  /* 与 src/shard_eps.py 的 shard_of 必须逐字节等价 */
+  function hashOf(str) {
+    var h = 0, i = 0, s = String(str || '');
+    while (i < s.length) {
+      var cp = s.codePointAt(i);
+      i += cp > 0xffff ? 2 : 1;
+      h = (h * 31 + cp) % 4294967296;
+    }
+    return h;
+  }
+  function shardOf(name) { return hashOf(String(name || '').trim()) % SHARDS; }
 
   /* 季/部标记。旧版只做子串命中，导致：
        · 「我的英雄学院 I am a hero too」吃到正传 52 集的磁力
@@ -53,45 +72,74 @@
     return true;
   }
 
-  /* 索引当前是 1,400+ 部。jsDelivr 对 @main 最长缓存 12 小时（purge 也不一定
-     立刻生效），cdns 上可能还挂着旧的 179 条小索引 —— 那种副本条目数少得离谱，
-     直接当失败跳过，落到下一个源，别让用户看到「暂无按集索引」。 */
-  var MIN_ENTRIES = 300;
+  /* 清单很小（几百字节），用它确认哪个源是活的；拿不到就整体降级成「暂无」。 */
+  function getJSON(url) {
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
 
-  function load() {
-    if (IDX) return Promise.resolve(IDX);
-    if (LOADING) return new Promise(function (r) { setTimeout(function () { r(load()); }, 300); });
-    LOADING = true;
+  function loadManifest() {
+    if (MANIFEST) return Promise.resolve(MANIFEST);
     var i = 0;
-    return new Promise(function (resolve) {
+    return new Promise(function (resolve, reject) {
       (function next() {
-        if (i >= URLS.length) { LOADING = false; return resolve(null); }
-        fetch(URLS[i++]).then(function (r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        }).then(function (d) {
-          if (!d || Object.keys(d).length < MIN_ENTRIES) {
-            throw new Error('stale index: ' + (d ? Object.keys(d).length : 0));
-          }
-          IDX = d; LOADING = false; resolve(d);
+        if (i >= BASES.length) return reject(new Error('no manifest'));
+        var at = i++;
+        getJSON(BASES[at] + 'index.json').then(function (m) {
+          if (!m || !m.shards || !m.count) throw new Error('bad manifest');
+          MANIFEST = m;
+          BASE_I = at;
+          resolve(m);
         }).catch(next);
       })();
     });
   }
 
-  function findByName(name) {
-    if (!IDX || !name) return null;
+  function loadShard(n) {
+    if (CACHE[n]) return Promise.resolve(CACHE[n]);
+    var order = [], i;
+    if (BASE_I >= 0) order.push(BASE_I);
+    for (i = 0; i < BASES.length; i++) if (order.indexOf(i) < 0) order.push(i);
+    var k = 0;
+    return new Promise(function (resolve, reject) {
+      (function next() {
+        if (k >= order.length) return reject(new Error('shard ' + n + ' unavailable'));
+        var at = order[k++];
+        getJSON(BASES[at] + 's' + (n < 10 ? '0' + n : n) + '.json').then(function (d) {
+          if (!d) throw new Error('empty shard');
+          CACHE[n] = d;
+          resolve(d);
+        }).catch(next);
+      })();
+    });
+  }
+
+
+  function resolveEntry(name) {
+    if (!name) return Promise.resolve(null);
+    var n = shardOf(name);
+    return loadManifest().then(function () { return loadShard(n); })
+      .then(function (d) { return findByName(d, name); })
+      .catch(function () { return null; });
+  }
+
+  function findByName(store, name) {
+    if (!store || !name) return null;
     var q = norm(name);
     if (!q) return null;
     var qs = seasonsOf(name);
     var best = null, bestScore = 0;
-    for (var k in IDX) {
-      var e = IDX[k];
+    for (var k in store) {
+      var e = store[k];
       var nt = norm(e && e.n);
       if (!nt) continue;
-      /* 优先级：完全相同 > 片名被发布名包含 > 发布名被片名包含（后者要求长度占比） */
+      /* 优先级：完全相同 > 片名被发布名包含 > 发布名被片名包含（后者要求长度占比）。
+         归一化后相同的片名可能不止一部（「工作细胞」与「工作细胞!!」都归一成同一串），
+         此时按「原始字符串完全相同」再压一层，别让 A 的磁力挂到 B 上。 */
       var score = 0;
-      if (nt === q) score = 1000;
+      if (nt === q) score = (String(e.n).trim() === String(name).trim()) ? 2000 : 1000;
       else if (nt.indexOf(q) >= 0 && q.length >= 5) score = 100 + q.length;
       else if (q.indexOf(nt) >= 0 && nt.length >= 5 && nt.length >= q.length * 0.6) score = 50 + nt.length;
       if (!score) continue;
@@ -112,10 +160,9 @@
     return (v >= 100 ? v.toFixed(0) : v.toFixed(1)) + u[i] || '';
   }
 
-  function render(m, name) {
+  function render(m, e) {
     var box = m.querySelector('#epsbox');
     if (!box) return;
-    var e = findByName(name);
     if (!e || !e.eps) {
       box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">暂无按集索引</div>';
       return;
@@ -156,7 +203,7 @@
       box.id = 'epsbox';
       box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引加载中…</div>';
       host.parentNode.insertBefore(box, host.nextSibling);
-      load().then(function () { render(m, name); });
+      resolveEntry(name).then(function (e) { render(m, e); });
     }).observe(m, { childList: true, subtree: false });
   }
 
@@ -167,6 +214,12 @@
   }
   document.addEventListener('DOMContentLoaded', arm);
 
-  /* 测试钩子：让离线脚本能验证匹配逻辑（生产路径不使用） */
-  window.__epsTest = { find: findByName, norm: norm, setIdx: function (d) { IDX = d; return IDX; } };
+  /* 测试钩子：让离线脚本能验证匹配 / 分片逻辑（生产路径不使用） */
+  window.__epsTest = {
+    find: findByName,
+    norm: norm,
+    shardOf: shardOf,
+    hashOf: hashOf,
+    setIdx: function (d) { ENTRY = d; return ENTRY; },
+  };
 })();

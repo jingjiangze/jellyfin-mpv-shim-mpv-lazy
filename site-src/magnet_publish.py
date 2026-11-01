@@ -29,11 +29,41 @@ for f in sorted(glob.glob("eps/*/magnet-eps.json")):
 if empty_over:
     print(f"跳过 {empty_over} 条「空覆盖非空」")
 raw = json.dumps(base, ensure_ascii=False, separators=(",", ":"))
-for out in ("media/magnet-eps.json", "site-src/data/magnet-eps.json"):
-    q = pathlib.Path(out); q.parent.mkdir(parents=True, exist_ok=True)
-    q.write_text(raw, encoding="utf-8")
+# 整份只留在 data/，作为 CI 的 resume 状态（含 mark-miss 的空条目）。
+q = pathlib.Path("site-src/data/magnet-eps.json"); q.parent.mkdir(parents=True, exist_ok=True)
+q.write_text(raw, encoding="utf-8")
 eps = sum(len(v.get("eps") or {}) for v in base.values())
 print(f"merged: {before} -> {len(base)} 部 / {eps} 个分集磁力", flush=True)
+
+# 浏览器载荷走分片：整份 7.5MB 手机上首次点开卡片就要下完，太重。
+# 分片号算法必须与 tpl/magnet-eps.js 的 shardOf 一致，见 site-src/shard_eps.py。
+SHARDS = 16
+
+
+def shard_of(title, n=SHARDS):
+    h = 0
+    for ch in str(title or "").strip():
+        h = (h * 31 + ord(ch)) % 4294967296
+    return h % n
+
+
+buckets = [{} for _ in range(SHARDS)]
+skipped = 0
+for aid, rec in base.items():
+    if not isinstance(rec, dict) or not (rec.get("eps") or {}):
+        skipped += 1
+        continue
+    buckets[shard_of(rec.get("n"))][aid] = rec
+outdir = pathlib.Path("media/eps"); outdir.mkdir(parents=True, exist_ok=True)
+for f in outdir.glob("s[0-9][0-9].json"):
+    f.unlink()
+for i, b in enumerate(buckets):
+    (outdir / f"s{i:02d}.json").write_text(
+        json.dumps(b, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+(outdir / "index.json").write_text(
+    json.dumps({"v": 2, "shards": SHARDS, "count": len(base) - skipped},
+               ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+print(f"shards: {SHARDS} 片，条目 {len(base) - skipped}（空条目 {skipped} 不入载荷）", flush=True)
 
 if not TOK:
     print("无 GH_TOKEN，跳过推送"); raise SystemExit(0)
@@ -58,6 +88,9 @@ def call(method, path, payload=None):
     raise SystemExit(1)
 
 
+DELETES = []
+
+
 def push_once(files, msg):
     ref = call("GET", f"/repos/{REPO}/git/ref/heads/{BR}")
     parent = ref["object"]["sha"]
@@ -69,6 +102,8 @@ def push_once(files, msg):
                     {"content": base64.b64encode(b).decode(), "encoding": "base64"})
         print(f"[gh] blob {f} {len(b)}B {blob.get('sha','')[:8]}", flush=True)
         entries.append({"path": f, "mode": "100644", "type": "blob", "sha": blob["sha"]})
+    for f in DELETES:
+        entries.append({"path": f, "mode": "100644", "type": "blob", "sha": None})
     tree = call("POST", f"/repos/{REPO}/git/trees", {"base_tree": base_tree, "tree": entries})
     commit = call("POST", f"/repos/{REPO}/git/commits",
                   {"message": msg, "tree": tree["sha"], "parents": [parent]})
@@ -82,7 +117,10 @@ def push_once(files, msg):
         return False
 
 
-files = [f for f in ("media/magnet-eps.json", "site-src/data/magnet-eps.json") if pathlib.Path(f).is_file()]
+files = sorted(str(p) for p in pathlib.Path("media/eps").glob("*.json"))
+files.append("site-src/data/magnet-eps.json")
+# 旧的整份 monolith 从仓库里删掉：浏览器已改读分片，留着等于每轮多推 7.5MB
+DELETES = ["media/magnet-eps.json"]
 msg = f"magnet-eps: index {len(base)} titles [skip ci]"
 for attempt in range(4):
     if push_once(files, msg):
