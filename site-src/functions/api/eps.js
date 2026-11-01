@@ -118,6 +118,17 @@ function build(name, orig, epsN, results) {
 }
 
 export async function onRequestGet(context) {
+  try {
+    return await handle(context);
+  } catch (e) {
+    // 兜底：把真实异常带出来，别让 CF 直接回一个没有信息量的 502 页面
+    return new Response(JSON.stringify({ ok: false, error: String(e && e.stack || e) }), {
+      status: 500, headers: { 'content-type': 'application/json; charset=utf-8' },
+    });
+  }
+}
+
+async function handle(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const name = (url.searchParams.get('t') || '').trim();
