@@ -53,6 +53,11 @@
     return true;
   }
 
+  /* 索引当前是 1,400+ 部。jsDelivr 对 @main 最长缓存 12 小时（purge 也不一定
+     立刻生效），cdns 上可能还挂着旧的 179 条小索引 —— 那种副本条目数少得离谱，
+     直接当失败跳过，落到下一个源，别让用户看到「暂无按集索引」。 */
+  var MIN_ENTRIES = 300;
+
   function load() {
     if (IDX) return Promise.resolve(IDX);
     if (LOADING) return new Promise(function (r) { setTimeout(function () { r(load()); }, 300); });
@@ -65,8 +70,11 @@
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.json();
         }).then(function (d) {
+          if (!d || Object.keys(d).length < MIN_ENTRIES) {
+            throw new Error('stale index: ' + (d ? Object.keys(d).length : 0));
+          }
           IDX = d; LOADING = false; resolve(d);
-        }, next);
+        }).catch(next);
       })();
     });
   }
