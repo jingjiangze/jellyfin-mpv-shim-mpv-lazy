@@ -33,7 +33,9 @@ jobs:
           MAGNET_MAX: "150"
           PAN_HUB_USER: ${{ secrets.PAN_HUB_USER }}
           PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
-        run: python -u fetch_magnet_eps.py
+        # --mark-miss：把「查过但没结果」也写进索引（eps 为空），否则每轮都从
+        # 评分最高那批重查、永远卡在同一批无结果的作品上，后面的轮不到。
+        run: python -u fetch_magnet_eps.py --mark-miss
       - uses: actions/upload-artifact@v4
         with:
           name: eps-${{ matrix.shard }}
