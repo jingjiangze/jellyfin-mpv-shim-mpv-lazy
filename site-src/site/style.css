@@ -230,8 +230,11 @@ button, input, select { font: inherit; color: inherit; }
   border: 1px solid rgba(255, 255, 255, .05);
   transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
 }
-/* 兜底：万一某处 .ph 没被 .pw 包住，也要保持 2:3 比例而不是撑成一条 */
-.card > .ph { aspect-ratio: 2 / 3; border-radius: var(--r); }
+/* 兜底：万一某处 .ph 没被 .pw 包住，也要保持 2:3 比例而不是撑成一条。
+   height 必须显式回成 auto —— .ph 基础规则是 height:100%，而在 .row 的
+   grid 行里卡片会被拉伸到整行高度，100% 会让占位块吃满整卡、把标题和
+   元信息行挤到卡片外面压住下一区块（上一版实拍就是这个现象）。 */
+.card > .ph { height: auto; aspect-ratio: 2 / 3; border-radius: var(--r); }
 .card:hover .pw {
   transform: translateY(-4px);
   box-shadow: var(--shadow);
