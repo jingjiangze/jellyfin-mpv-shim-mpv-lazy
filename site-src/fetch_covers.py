@@ -56,6 +56,8 @@ def grab(item):
     dst = OUT / f"{k}.jpg"
     if dst.is_file() and dst.stat().st_size > 2000:
         return "skip"
+    # HD 升级：AniList medium (~230px) → large (~450px)
+    url = url.replace("/medium/", "/large/")
     req = urllib.request.Request(url, headers={"user-agent": UA, "accept": "image/*"})
     try:
         with urllib.request.urlopen(req, timeout=25) as r:
