@@ -25,6 +25,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # 把已发布的索引还原成 resume 的种子。没有这一步，每个分片每轮都从空的
+      # 结果集开始 → --resume 无事可跳 → 永远重查同一批 top-150（实测：
+      # merged 3066 -> 3066，一条没新增）。magnet_publish.py 只写 media/ 和
+      # data/，所以这里必须显式拷一份到 site/。
+      - name: Seed existing episode index
+        working-directory: site-src
+        run: |
+          mkdir -p site
+          if [ -f data/magnet-eps.json ]; then
+            cp -f data/magnet-eps.json site/magnet-eps.json
+            echo "seeded $(stat -c%s site/magnet-eps.json) B from data/"
+          else
+            echo "no data/magnet-eps.json, start from empty"
+          fi
+
       - name: Fetch episode magnets (shard ${{ matrix.shard }})
         working-directory: site-src
         env:
