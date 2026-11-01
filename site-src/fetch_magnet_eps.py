@@ -19,6 +19,7 @@ import urllib.request
 
 BASE = pathlib.Path(__file__).resolve().parent
 SITE = BASE / "site"
+DATA = BASE / "data"
 API = os.environ.get("PAN_HUB_API", "http://120.48.56.189/pan/api/search")
 USER = os.environ.get("PAN_HUB_USER", "")
 PASS = os.environ.get("PAN_HUB_PASS", "")
@@ -126,6 +127,32 @@ def main():
 
     todo = [(k, v.get("t") or "") for k, v in magnet.items()
             if k not in index and v.get("t")]
+
+    # magnet.json 只有 179 条（旧站遗留）。全量收录必须从 catalog 取片名：
+    # key 用 "bgm<id>" 与旧 key 并存；magnet-eps.js 是按 n（片名归一化）匹配的。
+    cat_p = DATA / "catalog.json"
+    if cat_p.is_file():
+        try:
+            cat = json.loads(cat_p.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            cat = {}
+        seen = set()
+        for v in index.values():
+            seen.add(clean_title((v or {}).get("n") or ""))
+        for _, t in todo:
+            seen.add(clean_title(t))
+        added = 0
+        for it in cat.get("items") or []:
+            nm = it.get("cn") or it.get("n") or ""
+            if len(nm) < 2:
+                continue
+            k2 = "bgm" + str(it.get("id"))
+            if k2 in index or clean_title(nm) in seen:
+                continue
+            todo.append((k2, nm))
+            added += 1
+        print(f"catalog 补充候选 {added} 条")
+
     todo = todo[:LIMIT]
     print(f"magnet {len(magnet)} 条 / 已索引 {len(index)} 条 / 本轮 {len(todo)} 条")
     if not todo:
