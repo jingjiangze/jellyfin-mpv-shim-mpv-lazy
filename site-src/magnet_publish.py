@@ -10,11 +10,24 @@ p = pathlib.Path("media/magnet-eps.json")
 if p.is_file():
     base = json.loads(p.read_text(encoding="utf-8"))
 before = len(base)
+# 合并规则：空结果（eps 为空，来自 --mark-miss 的「查过但没结果」）不能覆盖
+# 已有的非空结果 —— 否则每一轮抓空的分片都会把上一轮建好的分集磁力抹掉
+# （实测：1,420 部 → 1,154 部，丢了 266 部）。
+empty_over = 0
 for f in sorted(glob.glob("eps/*/magnet-eps.json")):
     try:
-        base.update(json.loads(pathlib.Path(f).read_text(encoding="utf-8")))
+        part = json.loads(pathlib.Path(f).read_text(encoding="utf-8"))
     except (ValueError, OSError) as e:
         print("skip", f, e)
+        continue
+    for k, v in part.items():
+        old = base.get(k)
+        if old and (old.get("eps") or {}) and not ((v or {}).get("eps") or {}):
+            empty_over += 1
+            continue
+        base[k] = v
+if empty_over:
+    print(f"跳过 {empty_over} 条「空覆盖非空」")
 raw = json.dumps(base, ensure_ascii=False, separators=(",", ":"))
 for out in ("media/magnet-eps.json", "site-src/data/magnet-eps.json"):
     q = pathlib.Path(out); q.parent.mkdir(parents=True, exist_ok=True)
