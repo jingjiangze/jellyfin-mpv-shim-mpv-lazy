@@ -104,6 +104,8 @@ def push_once(files, msg):
         entries.append({"path": f, "mode": "100644", "type": "blob", "sha": blob["sha"]})
     for f in DELETES:
         entries.append({"path": f, "mode": "100644", "type": "blob", "sha": None})
+    for f in files:
+        assert "\\" not in f, f"路径里出现反斜杠，Git 树会建错：{f}"
     tree = call("POST", f"/repos/{REPO}/git/trees", {"base_tree": base_tree, "tree": entries})
     commit = call("POST", f"/repos/{REPO}/git/commits",
                   {"message": msg, "tree": tree["sha"], "parents": [parent]})
@@ -117,7 +119,10 @@ def push_once(files, msg):
         return False
 
 
-files = sorted(str(p) for p in pathlib.Path("media/eps").glob("*.json"))
+# 必须用 POSIX 分隔符：Windows 上 str(Path) 会给成 "media\eps\s00.json"，
+# Git Data API 会把它当成根目录下名字里带反斜杠的单文件（实测推上去 17 个
+# 名字里含 "\" 的文件、真正的 media/eps/ 目录根本不存在）。
+files = sorted(p.as_posix() for p in pathlib.Path("media/eps").glob("*.json"))
 files.append("site-src/data/magnet-eps.json")
 # 旧的整份 monolith 从仓库里删掉：浏览器已改读分片，留着等于每轮多推 7.5MB
 DELETES = ["media/magnet-eps.json"]
