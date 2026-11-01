@@ -263,10 +263,16 @@ jobs:
         run: |
           set -euo pipefail
           cp -r build-out dist
-          # Pages Functions：/api/eps 按需向后端取分集磁力（wrangler 从
-          # <deploy-dir>/functions 里发现路由）
-          if [ -d site-src/functions ]; then cp -r site-src/functions dist/functions; fi
-          ls -la dist
+          # Pages Functions：/api/eps 按需向后端取分集磁力。
+          # 实测 wrangler 4 不认 <deploy-dir>/functions（那样部署里 /api/eps 仍
+          # 落到 SPA 兜底返回 index.html），它是在**工作目录**下找 functions/。
+          # 两处都放，哪种生效都不亏。
+          if [ -d site-src/functions ]; then
+            cp -r site-src/functions dist/functions
+            cp -r site-src/functions functions
+          fi
+          ls -la dist | head -20
+          echo "--- functions ---"; find functions -type f | head
           # --branch 必须显式给 main：checkout 后是 detached HEAD，wrangler 会把部署
           # 当成预览版（alias=head）而不更新生产环境
           npx -y wrangler@4 pages deploy dist --project-name=media-library \
