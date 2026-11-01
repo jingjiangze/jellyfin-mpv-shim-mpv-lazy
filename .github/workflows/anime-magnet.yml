@@ -53,29 +53,7 @@ jobs:
         with:
           pattern: eps-*
           path: eps
-      - name: Merge shards
+      - name: Merge + push
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json, glob, pathlib
-          base = {}
-          p = pathlib.Path("media/magnet-eps.json")
-          if p.is_file():
-              base = json.loads(p.read_text(encoding="utf-8"))
-          before = len(base)
-          for f in sorted(glob.glob("eps/*/magnet-eps.json")):
-              try:
-                  base.update(json.loads(pathlib.Path(f).read_text(encoding="utf-8")))
-              except (ValueError, OSError) as e:
-                  print("skip", f, e)
-          raw = json.dumps(base, ensure_ascii=False, separators=(",", ":"))
-          for out in ("media/magnet-eps.json", "site-src/data/magnet-eps.json"):
-              q = pathlib.Path(out); q.parent.mkdir(parents=True, exist_ok=True)
-              q.write_text(raw, encoding="utf-8")
-          eps = sum(len(v.get("eps") or {}) for v in base.values())
-          print(f"merged: {before} -> {len(base)} 部 / {eps} 个分集磁力")
-          PY
-          N=$(python -c 'import json;print(len(json.load(open("media/magnet-eps.json"))))')
-          python site-src/push_tree.py --message "magnet-eps: ${N} titles [skip ci]" media/magnet-eps.json site-src/data/magnet-eps.json
+        run: python -u site-src/magnet_publish.py
