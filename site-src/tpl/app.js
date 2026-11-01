@@ -11,6 +11,14 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   };
+  /* 模糊搜索：全角转半角 + 去标点空白 + 小写；命中任意位置即算 */
+  function nrm(x) {
+    return String(x == null ? '' : x).toLowerCase()
+      .replace(/[\uFF01-\uFF5E]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 65248); })
+      .replace(/[\s\-_.·・:!?,.'"()\[\]{}<>【】（）~〜]/g, '');
+  }
+  function hit(hay, q) { return !q || nrm(hay).indexOf(q) !== -1; }
+
   function j(u) { return fetch(u).then(function (r) { if (!r.ok) throw 0; return r.json(); }); }
   function fbAttr(list) {
     var q = list.filter(Boolean);
@@ -165,14 +173,14 @@
     $('#hint').textContent = '筛出 ' + BROWSE.view.length + ' 部，已显示 ' + BROWSE.shown;
   }
   function applyBrowse() {
-    var q = ($('#q').value || '').trim().toLowerCase();
+    var q = nrm(($('#q').value || '').trim());
     var y = ($('#f-year') || {}).value || '';
     var t = ($('#f-type') || {}).value || '';
     var sort = ($('#f-sort') || {}).value || 'year';
     BROWSE.view = ANI.rows.filter(function (r) {
       if (y && String(r[4] || '') !== y) return false;
       if (t && r[3] !== t) return false;
-      if (q && (r[1] + ' ' + (r[2] || '')).toLowerCase().indexOf(q) === -1) return false;
+      if (q && !hit(r[1] + ' ' + (r[2] || ''), q)) return false;
       return true;
     });
     if (sort === 'rating') BROWSE.view.sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
@@ -264,15 +272,15 @@
         var t = 0;
         return function () {
           clearTimeout(t);
-          var q = this.value.trim().toLowerCase();
+          var q = nrm(this.value.trim());
           t = setTimeout(function () {
             if (!q) { renderHome('week'); return; }
             var hit = ANI.rows.filter(function (r) {
               return (r[1] + ' ' + (r[2] || '')).toLowerCase().indexOf(q) !== -1;
             }).slice(0, 120);
             $('#main').innerHTML = '<section class="block"><div class="bhead"><h2>搜索</h2><span>'
-              + hit.length + ' 部</span></div><div class="grid">'
-              + hit.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('') + '</div></section>';
+              + res.length + ' 部</span></div><div class="grid">'
+              + res.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('') + '</div></section>';
           }, 220);
         };
       })());

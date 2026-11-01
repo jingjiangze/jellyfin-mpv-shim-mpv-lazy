@@ -24,6 +24,8 @@ API = os.environ.get("PAN_HUB_API", "http://120.48.56.189/pan/api/search")
 USER = os.environ.get("PAN_HUB_USER", "")
 PASS = os.environ.get("PAN_HUB_PASS", "")
 LIMIT = int(os.environ.get("MAGNET_MAX", "150"))
+SHARD = int(os.environ.get("SHARD", "-1"))
+SHARD_TOTAL = int(os.environ.get("SHARD_TOTAL", "1"))
 TIMEOUT = int(os.environ.get("MAGNET_TIMEOUT", "90"))
 
 REPO = os.environ.get("TARGET_REPO", "jingjiangze/jellyfin-mpv-shim-mpv-lazy")
@@ -152,6 +154,9 @@ def main():
             todo.append((k2, nm))
             added += 1
         print(f"catalog 补充候选 {added} 条")
+
+    if SHARD >= 0 and SHARD_TOTAL > 1:
+        todo = [x for n, x in enumerate(todo) if n % SHARD_TOTAL == SHARD]
 
     todo = todo[:LIMIT]
     print(f"magnet {len(magnet)} 条 / 已索引 {len(index)} 条 / 本轮 {len(todo)} 条")

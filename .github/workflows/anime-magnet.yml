@@ -1,0 +1,79 @@
+name: anime-magnet
+
+# 分集磁力索引：8 分片并行打聚合站，publish 统一合并提交（并发 push 同一文件会互相覆盖）。
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 */6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anime-magnet
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch episode magnets (shard ${{ matrix.shard }})
+        working-directory: site-src
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: "8"
+          MAGNET_MAX: "200"
+          PAN_HUB_USER: ${{ secrets.PAN_HUB_USER }}
+          PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
+        run: python -u fetch_magnet_eps.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eps-${{ matrix.shard }}
+          path: site-src/site/magnet-eps.json
+          if-no-files-found: warn
+          retention-days: 3
+
+  publish:
+    needs: fetch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: eps-*
+          path: eps
+      - name: Merge shards
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, glob, pathlib
+          base = {}
+          p = pathlib.Path("media/magnet-eps.json")
+          if p.is_file():
+              base = json.loads(p.read_text(encoding="utf-8"))
+          before = len(base)
+          for f in sorted(glob.glob("eps/*/magnet-eps.json")):
+              try:
+                  base.update(json.loads(pathlib.Path(f).read_text(encoding="utf-8")))
+              except (ValueError, OSError) as e:
+                  print("skip", f, e)
+          raw = json.dumps(base, ensure_ascii=False, separators=(",", ":"))
+          for out in ("media/magnet-eps.json", "site-src/data/magnet-eps.json"):
+              q = pathlib.Path(out); q.parent.mkdir(parents=True, exist_ok=True)
+              q.write_text(raw, encoding="utf-8")
+          eps = sum(len(v.get("eps") or {}) for v in base.values())
+          print(f"merged: {before} -> {len(base)} 部 / {eps} 个分集磁力")
+          PY
+          N=$(python -c 'import json;print(len(json.load(open("media/magnet-eps.json"))))')
+          python site-src/push_tree.py --message "magnet-eps: ${N} titles [skip ci]" media/magnet-eps.json site-src/data/magnet-eps.json
