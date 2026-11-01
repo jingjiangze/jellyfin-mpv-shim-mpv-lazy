@@ -119,7 +119,7 @@
 
   /* 静态索引没覆盖到的片名，直接问边缘函数（它在服务端代打 pan-hub）。
      返回与索引条目同形状；拿不到就 null，界面照常显示「暂无按集索引」。 */
-  var LIVE = {};
+  var LIVE = {}, LIVE_DOWN = false;
   function episodeCount(m) {
     var dts = m.querySelectorAll('.infobox dt');
     for (var i = 0; i < dts.length; i++) {
@@ -143,7 +143,7 @@
       var e = { n: name, eps: d.eps, live: 1 };
       LIVE[name] = e;
       return e;
-    }).catch(function () { return null; });
+    }).catch(function () { LIVE_DOWN = true; return null; });
   }
 
   function resolveEntry(name) {
@@ -235,7 +235,14 @@
       resolveEntry(name).then(function (e) {
         if (e && e.eps && Object.keys(e.eps).length) return render(m, e);
         box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引里没有，正在向后端查询…</div>';
-        return fetchLive(name, episodeCount(m)).then(function (live) { render(m, live || e); });
+        return fetchLive(name, episodeCount(m)).then(function (live) {
+          if (live) return render(m, live);
+          if (LIVE_DOWN) {                       // 后端连不上：说清楚，别装作"没有"
+            box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引里没有，后端暂时连不上</div>';
+            return;
+          }
+          render(m, e);
+        });
       });
     }).observe(m, { childList: true, subtree: false });
   }
