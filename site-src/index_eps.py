@@ -44,7 +44,9 @@ RE_DASH = re.compile(r"\s-\s*(\d{1,4})(?:v\d)?\s*(?:\[|\(|$)")
 # 噪声：音乐单曲、整卷/原盘、合集
 NOISE = re.compile(r"(OP\d?テーマ|ED\d?テーマ|OPテーマ|EDテーマ|主題歌|主题歌|挿入歌|"
                    r"オリジナルサウンドトラック|サントラ|Soundtrack|"
-                   r"\bBatch\b|全集|合集|Complete|BDBOX|\bBOX\b|DVDISO|BDISO|"
+                   # 只认 BDBOX/DVDISO 这种整卷盘，别再写裸 \bBOX\b ——
+                   # 那会把「NOMAD MEGALO BOX 2」这类片名整体判成噪声
+                   r"\bBatch\b|全集|合集|Complete|BDBOX|BOX\s*SET|DVDISO|BDISO|"
                    r"\bvol\.?\s*\d+|\d+\s*[巻卷]|漫画|コミック|小説|小说)", re.I)
 # 季/部 标记：查询与发布名必须一致，否则 S3 的磁力会挂到 S1 上
 RE_SEASON = re.compile(r"(第\s*[一二三四五六七八九十\d]+\s*[季期]|Season\s*\d+|Part\.?\s*\d+|"
