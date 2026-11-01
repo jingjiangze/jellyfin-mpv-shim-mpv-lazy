@@ -117,6 +117,35 @@
   }
 
 
+  /* 静态索引没覆盖到的片名，直接问边缘函数（它在服务端代打 pan-hub）。
+     返回与索引条目同形状；拿不到就 null，界面照常显示「暂无按集索引」。 */
+  var LIVE = {};
+  function episodeCount(m) {
+    var dts = m.querySelectorAll('.infobox dt');
+    for (var i = 0; i < dts.length; i++) {
+      if (String(dts[i].textContent).indexOf('话数') >= 0) {
+        var dd = dts[i].nextElementSibling;
+        var n = parseInt(String(dd && dd.textContent || '').replace(/[^0-9]/g, ''), 10);
+        return isNaN(n) ? 0 : n;
+      }
+    }
+    return 0;
+  }
+  function fetchLive(name, epsN) {
+    if (LIVE[name]) return Promise.resolve(LIVE[name]);
+    var u = '/api/eps?t=' + encodeURIComponent(name);
+    if (epsN) u += '&n=' + epsN;
+    return fetch(u).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (d) {
+      if (!d || !d.ok || !d.eps || !Object.keys(d.eps).length) return null;
+      var e = { n: name, eps: d.eps, live: 1 };
+      LIVE[name] = e;
+      return e;
+    }).catch(function () { return null; });
+  }
+
   function resolveEntry(name) {
     if (!name) return Promise.resolve(null);
     var n = shardOf(name);
@@ -203,7 +232,11 @@
       box.id = 'epsbox';
       box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引加载中…</div>';
       host.parentNode.insertBefore(box, host.nextSibling);
-      resolveEntry(name).then(function (e) { render(m, e); });
+      resolveEntry(name).then(function (e) {
+        if (e && e.eps && Object.keys(e.eps).length) return render(m, e);
+        box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引里没有，正在向后端查询…</div>';
+        return fetchLive(name, episodeCount(m)).then(function (live) { render(m, live || e); });
+      });
     }).observe(m, { childList: true, subtree: false });
   }
 

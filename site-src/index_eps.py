@@ -29,8 +29,10 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = pathlib.Path(__file__).resolve().parent
 API = os.environ.get("PAN_HUB_API", "http://120.48.56.189/pan/api/search")
-USER = os.environ.get("PAN_HUB_USER", "pan")
-PASS = os.environ.get("PAN_HUB_PASS", "5RV9taEXIh07AF")
+# 凭据只从环境变量读，**不要**再写默认值：这个仓库是公开的，
+# 之前把账号密码当默认值提交过（已移除，但 git 历史里仍有，建议轮换）。
+USER = os.environ.get("PAN_HUB_USER", "")
+PASS = os.environ.get("PAN_HUB_PASS", "")
 TIMEOUT = int(os.environ.get("MAGNET_TIMEOUT", "40"))
 WORKERS = int(os.environ.get("MAGNET_WORKERS", "6"))
 PER_EP = int(os.environ.get("MAGNET_MAX_PER_EP", "2"))
@@ -128,6 +130,8 @@ def build_one(row):
     name = cn or orig
     if not name:
         return aid, None, "noname"
+    if not USER or not PASS:
+        return aid, None, "nocred"
     try:
         d = search(name)
     except Exception as e:
