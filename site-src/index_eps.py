@@ -187,18 +187,49 @@ def build_one(row):
     return aid, {"n": name, "eps": eps}, f"eps={len(eps)}"
 
 
+def load_catalog(a):
+    """优先读 anime.json 的 rows；否则从 site/anime/*.json 分片拼出同形状的行。
+
+    行形状：[id, 原名, 中文名, 格式, 年, 月, 星期, 评分, 话数]
+    """
+    cp = pathlib.Path(a.catalog) if a.catalog else None
+    if cp and cp.is_file():
+        return json.loads(cp.read_text(encoding="utf-8")).get("rows") or []
+    rows = []
+    sd = pathlib.Path(a.shards)
+    if not sd.is_dir():
+        return rows
+    for fp in sorted(sd.glob("*.json")):
+        try:
+            recs = json.loads(fp.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for rec in recs or []:
+            if not isinstance(rec, dict) or not rec.get("id"):
+                continue
+            rows.append([rec.get("id"), rec.get("name") or "", rec.get("name_cn") or "",
+                         rec.get("format") or "", 0, 0, 0,
+                         rec.get("rating") or 0, rec.get("episodes") or 0])
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--catalog", default=str(BASE / "catalog.json"), help="anime.json（含 rows）")
-    ap.add_argument("--out", default=str(BASE / "magnet-eps.json"))
-    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--catalog", default="", help="anime.json（含 rows）；不传则读 --shards")
+    ap.add_argument("--shards", default=str(BASE / "site" / "anime"), help="目录：site/anime/*.json 分片")
+    ap.add_argument("--out", default=str(BASE / "site" / "magnet-eps.json"))
+    ap.add_argument("--limit", type=int, default=int(os.environ.get("MAGNET_MAX", "0") or 0))
     ap.add_argument("--min-rating", type=float, default=0.0)
     ap.add_argument("--resume", action="store_true", help="跳过 out 里已存在的条目（多轮收敛）")
     ap.add_argument("--save-every", type=int, default=100, help="每 N 条落盘一次，进程被掐也不丢进度")
+    ap.add_argument("--shard", type=int, default=int(os.environ.get("SHARD", "-1")))
+    ap.add_argument("--shard-total", type=int, default=int(os.environ.get("SHARD_TOTAL", "0") or 0))
+    # 记「查过但没结果」的条目（eps 为空），否则每轮都从评分最高那批重查，
+    # 永远卡在同一批无结果的作品上、后面的永远轮不到（收敛必须靠这个）
+    ap.add_argument("--mark-miss", action="store_true")
     a = ap.parse_args()
 
-    d = json.loads(pathlib.Path(a.catalog).read_text(encoding="utf-8"))
-    rows = d.get("rows") or []
+    rows = load_catalog(a)
     todo = []
     for r in rows:
         if not r:
@@ -213,11 +244,16 @@ def main():
         todo.append((aid, orig, cn, eps_n, rating or 0))
     # 按评分降序 —— 限流截断时先保热门
     todo.sort(key=lambda x: x[4], reverse=True)
+    # 分片：按 id 取模，保证同一部作品永远落在同一片
+    if a.shard_total > 0 and a.shard >= 0:
+        todo = [t for t in todo if int(t[0]) % a.shard_total == a.shard]
+        print(f"分片 {a.shard}/{a.shard_total} -> {len(todo)} 条", flush=True)
     if a.limit:
         todo = todo[: a.limit]
     todo = [(t[0], t[1], t[2], t[3]) for t in todo]
     print(f"待建 {len(todo)} 条，并发 {WORKERS}，单条超时 {TIMEOUT}s", flush=True)
 
+    names = {str(t[0]): (t[2] or t[1]) for t in todo}
     out, stat = {}, {}
     outp = pathlib.Path(a.out)
     if a.resume and outp.is_file():
@@ -237,6 +273,8 @@ def main():
             stat[msg.split("=")[0]] = stat.get(msg.split("=")[0], 0) + 1
             if rec:
                 out[str(aid)] = rec
+            elif a.mark_miss:
+                out[str(aid)] = {"n": names.get(str(aid), ""), "eps": {}}
             if a.save_every and i % a.save_every == 0:
                 save()
             if i % 20 == 0 or i == len(todo):
