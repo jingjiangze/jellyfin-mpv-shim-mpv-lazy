@@ -114,20 +114,19 @@
   }
   function close() { $('#mask').classList.remove('on'); }
 
-  /* ---------------- 首页：年 → 月 → 周 → 星期 四级下钻 ---------------- */
-  var HOME = { y: 0, m: 0, w: 0, wd: 0 };
+  /* ---------------- 首页：年 → 月 → 周 → 星期 三级下钻 ---------------- */
+  var HOME = { y: 0, q: 0, wd: 0 };
   var WD_ALL = [1, 2, 3, 4, 5, 6, 7];
 
-  function wkOfDay(day) { return day ? Math.floor((day - 1) / 7) + 1 : 0; }
+  function seasonOf(month) { return month ? Math.ceil(month / 3) : 0; }
 
   function homeRows() {
     return ANI.rows.filter(function (r) {
       if (HOME.y && r[4] !== HOME.y) return false;
-      if (HOME.m && r[5] !== HOME.m) return false;
-      if (HOME.w && wkOfDay(r[11]) !== HOME.w) return false;
+      if (HOME.q && seasonOf(r[5]) !== HOME.q) return false;
       if (HOME.wd && r[6] !== HOME.wd) return false;
       return true;
-    }).sort(function (a, b) { return (b[7] || 0) - (a[7] || 0) || (b[11] || 0) - (a[11] || 0); });
+    }).sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
   }
 
   function chip(label, on, val) {
@@ -138,36 +137,35 @@
     var years = {};
     ANI.rows.forEach(function (r) { if (r[4]) years[r[4]] = (years[r[4]] || 0) + 1; });
     var ys = Object.keys(years).map(Number).sort(function (a, b) { return b - a; });
-    var months = {}; ANI.rows.forEach(function (r) { if (r[4] === HOME.y && r[5]) months[r[5]] = 1; });
-    var ms = Object.keys(months).map(Number).sort(function (a, b) { return a - b; });
-    var inM = ANI.rows.filter(function (r) { return r[4] === HOME.y && r[5] === HOME.m; });
-    var weeks = {}; inM.forEach(function (r) { var w = wkOfDay(r[11]); if (w) weeks[w] = 1; });
-    var ws = Object.keys(weeks).map(Number).sort(function (a, b) { return a - b; });
+    var seasons = {}; ANI.rows.forEach(function (r) {
+      var q = seasonOf(r[5]);
+      if (q) seasons[q] = (seasons[q] || 0) + 1;
+    });
+    var qs = Object.keys(seasons).map(Number).sort(function (a, b) { return a - b; });
 
     var h = '<aside class="levels">';
     h += '<div class="lv"><div class="lv-h">年份</div><div class="chips"><select class="lv-select" id="lv-y">'
       + ys.map(function (y) { return '<option value="' + y + '"' + (y === HOME.y ? ' selected' : '') + '>'
         + y + ' 年（' + years[y] + '）</option>'; }).join('')
       + '</select></div></div>';
-    h += '<div class="lv"><div class="lv-h">月份</div><div class="chips">'
-      + ms.map(function (m) { return chip(m + ' 月', m === HOME.m, m); }).join('') + '</div></div>';
-    h += '<div class="lv"><div class="lv-h">周</div><div class="chips">'
-      + ws.map(function (w) { return chip('第' + w + '周', w === HOME.w, w); }).join('') + '</div></div>';
+    h += '<div class="lv"><div class="lv-h">季度</div><div class="chips">'
+      + qs.map(function (q) { return chip('第' + q + '季度', q === HOME.q, q); }).join('') + '</div></div>';
     h += '<div class="lv"><div class="lv-h">星期</div><div class="chips">'
       + chip('全部', !HOME.wd, 0)
-      + WD_ALL.map(function (w) { return chip(WD[w - 1], w === HOME.wd, w); }).join('') + '</div></div>';
+      + [1,2,3,4,5,6,7].map(function (w) { return chip(WD[w-1], w === HOME.wd, w); }).join('') + '</div></div>';
     h += '</aside>';
     return h;
   }
 
   function renderHomeContent() {
     var list = homeRows();
-    var wdLabel = HOME.wd ? WD[HOME.wd - 1] : '本周全部';
-    var head = '<div class="bhead"><h2>' + HOME.y + ' 年 ' + HOME.m + ' 月 第' + HOME.w + '周 · '
+    var qLabel = HOME.q ? '第' + HOME.q + '季度' : '全部季度';
+    var wdLabel = HOME.wd ? WD[HOME.wd - 1] : '全部';
+    var head = '<div class="bhead"><h2>' + HOME.y + ' 年 ' + qLabel + ' · '
       + wdLabel + '</h2><span>' + list.length + ' 部</span></div>';
     var body = list.length
       ? '<div class="grid">' + list.map(function (r) { return animeCard(r); }).join('') + '</div>'
-      : '<div class="loading">这个时间段没有放送 —— 点左侧选择器换一周试试</div>';
+      : '<div class="loading">这个时间段没有放送 —— 点左侧选择器换个季度试试</div>';
     return head + body;
   }
 
@@ -180,8 +178,7 @@
       b.onclick = function () {
         var v = Number(b.dataset.v);
         var lvName = b.closest('.lv').querySelector('.lv-h').textContent;
-        if (lvName === '月份') HOME.m = v;
-        else if (lvName === '周') HOME.w = v;
+        if (lvName === '季度') HOME.q = v;
         else HOME.wd = v;
         renderHome();
       };
@@ -199,14 +196,10 @@
       y = Math.max.apply(null, Object.keys(ys).map(Number));
       inY = ANI.rows.filter(function (r) { return r[4] === y; });
     }
-    var months = {};
-    inY.forEach(function (r) { if (r[5]) months[r[5]] = 1; });
-    var m = Math.max.apply(null, Object.keys(months).map(Number));
-    var inM = inY.filter(function (r) { return r[5] === m; });
-    var weeks = {};
-    inM.forEach(function (r) { var w = wkOfDay(r[11]); if (w) weeks[w] = 1; });
-    var w = Math.max.apply(null, Object.keys(weeks).map(Number));
-    HOME = { y: y, m: m, w: w, wd: 0 };
+    var seasons = {};
+    inY.forEach(function (r) { var q = seasonOf(r[5]); if (q) seasons[q] = 1; });
+    var q = Math.max.apply(null, Object.keys(seasons).map(Number));
+    HOME = { y: y, q: q, wd: 0 };
   }
 
   /* ---------------- 番剧：全量目录 ---------------- */
