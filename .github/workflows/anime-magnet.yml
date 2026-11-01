@@ -54,6 +54,8 @@ jobs:
           pattern: eps-*
           path: eps
       - name: Merge shards
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           python - <<'PY'
