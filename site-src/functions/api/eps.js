@@ -131,6 +131,34 @@ export async function onRequestGet(context) {
 async function handle(context) {
   const { request, env } = context;
   const url = new URL(request.url);
+
+  /* 临时排障：?probe=xxx 直接回子请求的状态，用来区分「CF 出网不通」和
+     「后端拒绝」。定位完就删。 */
+  const probe = url.searchParams.get('probe');
+  if (probe) {
+    const targets = {
+      example: 'https://example.com/',
+      iphttp: 'http://120.48.56.189/pan/api/health',
+      api: 'http://120.48.56.189/pan/api/search?kw=' + encodeURIComponent('虫师'),
+    };
+    const tgt = targets[probe] || probe;
+    const out = { target: tgt, hasUser: !!env.PAN_HUB_USER, hasPass: !!env.PAN_HUB_PASS };
+    try {
+      const c = new AbortController();
+      const tt = setTimeout(function () { c.abort(); }, 8000);
+      const r = await fetch(tgt, { signal: c.signal, redirect: 'manual' });
+      clearTimeout(tt);
+      const body = await r.text();
+      out.status = r.status;
+      out.bytes = body.length;
+      out.head = body.slice(0, 120);
+    } catch (e) {
+      out.err = String(e && e.message || e);
+    }
+    return new Response(JSON.stringify(out), {
+      status: 200, headers: { 'content-type': 'application/json; charset=utf-8' },
+    });
+  }
   const name = (url.searchParams.get('t') || '').trim();
   const orig = (url.searchParams.get('o') || '').trim();
   const epsN = Number(url.searchParams.get('n') || 0);
