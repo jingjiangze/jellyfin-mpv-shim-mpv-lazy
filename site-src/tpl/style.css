@@ -226,6 +226,17 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 .chip.on { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); font-weight: 600; }
 .home-main { min-width: 0; }
 
+/* 视图切换（首页「按周 / 按月」）—— 与 .chip 同一套观感，尺寸略大 */
+.tabs { display: flex; gap: var(--s2); margin: 0 0 var(--s4); }
+.tabbtn {
+  padding: 6px var(--s4); border-radius: 999px; cursor: pointer;
+  font-size: var(--fs-sm); color: var(--dim);
+  background: var(--card2); border: 1px solid var(--line);
+  transition: color .16s ease, background .16s ease, border-color .16s ease;
+}
+.tabbtn:hover { color: var(--fg); border-color: var(--accent-line); }
+.tabbtn.on { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); font-weight: 600; }
+
 /* ---------------------------------------------------------------- 弹窗 */
 .mask {
   position: fixed; inset: 0; z-index: 60; display: none;
