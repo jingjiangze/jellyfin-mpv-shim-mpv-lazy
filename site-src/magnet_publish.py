@@ -45,20 +45,35 @@ def call(method, path, payload=None):
     raise SystemExit(1)
 
 
+def push_once(files, msg):
+    ref = call("GET", f"/repos/{REPO}/git/ref/heads/{BR}")
+    parent = ref["object"]["sha"]
+    base_tree = call("GET", f"/repos/{REPO}/git/commits/{parent}")["tree"]["sha"]
+    entries = []
+    for f in files:
+        b = pathlib.Path(f).read_bytes()
+        blob = call("POST", f"/repos/{REPO}/git/blobs",
+                    {"content": base64.b64encode(b).decode(), "encoding": "base64"})
+        print(f"[gh] blob {f} {len(b)}B {blob.get('sha','')[:8]}", flush=True)
+        entries.append({"path": f, "mode": "100644", "type": "blob", "sha": blob["sha"]})
+    tree = call("POST", f"/repos/{REPO}/git/trees", {"base_tree": base_tree, "tree": entries})
+    commit = call("POST", f"/repos/{REPO}/git/commits",
+                  {"message": msg, "tree": tree["sha"], "parents": [parent]})
+    try:
+        out = call("PATCH", f"/repos/{REPO}/git/refs/heads/{BR}", {"sha": commit["sha"], "force": False})
+        print("PUSHED", out["object"]["sha"][:8], flush=True)
+        return True
+    except SystemExit:
+        # ref 在 get→patch 之间被别的 workflow 推进了，整段重来（重取 parent）
+        print("[gh] ref moved, retry whole commit", flush=True)
+        return False
+
+
 files = [f for f in ("media/magnet-eps.json", "site-src/data/magnet-eps.json") if pathlib.Path(f).is_file()]
-ref = call("GET", f"/repos/{REPO}/git/ref/heads/{BR}")
-parent = ref["object"]["sha"]
-base_tree = call("GET", f"/repos/{REPO}/git/commits/{parent}")["tree"]["sha"]
-entries = []
-for f in files:
-    b = pathlib.Path(f).read_bytes()
-    blob = call("POST", f"/repos/{REPO}/git/blobs",
-                {"content": base64.b64encode(b).decode(), "encoding": "base64"})
-    print(f"[gh] blob {f} {len(b)}B {blob.get('sha','')[:8]}", flush=True)
-    entries.append({"path": f, "mode": "100644", "type": "blob", "sha": blob["sha"]})
-tree = call("POST", f"/repos/{REPO}/git/trees", {"base_tree": base_tree, "tree": entries})
-commit = call("POST", f"/repos/{REPO}/git/commits",
-              {"message": f"magnet-eps: index {len(base)} titles [skip ci]",
-               "tree": tree["sha"], "parents": [parent]})
-out = call("PATCH", f"/repos/{REPO}/git/refs/heads/{BR}", {"sha": commit["sha"], "force": False})
-print("PUSHED", out["object"]["sha"][:8], flush=True)
+msg = f"magnet-eps: index {len(base)} titles [skip ci]"
+for attempt in range(4):
+    if push_once(files, msg):
+        break
+    time.sleep(3)
+else:
+    raise SystemExit(1)
