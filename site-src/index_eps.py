@@ -248,8 +248,6 @@ def main():
     if a.shard_total > 0 and a.shard >= 0:
         todo = [t for t in todo if int(t[0]) % a.shard_total == a.shard]
         print(f"分片 {a.shard}/{a.shard_total} -> {len(todo)} 条", flush=True)
-    if a.limit:
-        todo = todo[: a.limit]
     todo = [(t[0], t[1], t[2], t[3]) for t in todo]
     print(f"待建 {len(todo)} 条，并发 {WORKERS}，单条超时 {TIMEOUT}s", flush=True)
 
@@ -264,6 +262,12 @@ def main():
             out = {}
     done = set(out)
     todo = [t for t in todo if str(t[0]) not in done]
+    # 顺序很关键：必须「先剔除已收录、再截断到 MAGNET_MAX」。
+    # 反过来（先取前 150 再剔除）会导致每轮都只剩 0 条可做 —— 实测两轮
+    # merged 3066 -> 3066，一条没新增。
+    if a.limit:
+        todo = todo[: a.limit]
+    print(f"本轮可做 {len(todo)} 条（已跳过 {len(done)} 条）", flush=True)
 
     def save():
         outp.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
