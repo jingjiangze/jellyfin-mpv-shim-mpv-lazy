@@ -87,6 +87,21 @@ def build_anime():
 
     # 老站留下的 179 条磁力（key 是 AniList 体系，值里带种子标题），
     # 按「片名是否出现在种子标题里」映射到 bgm 条目，只用来点卡片角标。
+    # 分集索引（magnet-eps.json）里出现的条目 = 真有磁力，角标以它为准；
+    # 179 条旧 magnet.json 的映射作为补充。
+    eps_ids, eps_names = set(), set()
+    ep = SITE / "magnet-eps.json"
+    if ep.is_file():
+        try:
+            for k, v in (json.loads(ep.read_text(encoding="utf-8")) or {}).items():
+                if isinstance(k, str) and k.startswith("bgm"):
+                    eps_ids.add(k[3:])
+                nm = norm((v or {}).get("n"))
+                if nm:
+                    eps_names.add(nm)
+        except (ValueError, OSError):
+            pass
+
     mag_titles = []
     mp = SITE / "magnet.json"
     if mp.is_file():
@@ -113,7 +128,8 @@ def build_anime():
         name = it.get("n") or d.get("name") or ""
         cn = it.get("cn") or d.get("name_cn") or ""
         key = norm(cn or name)
-        has_mag = 1 if (len(key) >= 4 and any(key in t for t in mag_titles)) else 0
+        has_mag = 1 if (str(sid) in eps_ids or key in eps_names
+                      or (len(key) >= 4 and any(key in t for t in mag_titles))) else 0
         rows.append([sid, name, cn, (it.get("t") or "").lower(), y, month, wd,
                      d.get("rating"), d.get("episodes") or 0, 1 if d else 0, has_mag])
 
