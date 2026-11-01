@@ -113,3 +113,75 @@ color:var(--dim);background:var(--card2);border:1px solid var(--line);font-varia
   .levels{position:static;flex-direction:row;flex-wrap:wrap;gap:14px;margin:0 0 20px;border-radius:12px}
   .lv{flex:1 1 140px}
 }
+
+/* ---------- 弹窗详情（mhd/mposter/infobox/mbody/mrate） ---------- */
+.modal{background:var(--card);border:1px solid var(--line);border-radius:16px;
+width:min(820px,100%);max-height:90vh;overflow:auto;position:relative;
+box-shadow:0 24px 64px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.04)}
+.modal .x{position:absolute;right:14px;top:12px;font-size:22px;line-height:1;
+color:var(--dim);cursor:pointer;width:32px;height:32px;display:flex;
+align-items:center;justify-content:center;border-radius:50%;
+background:rgba(0,0,0,.3);transition:color .15s,background .15s;z-index:2}
+.modal .x:hover{color:var(--fg);background:rgba(0,0,0,.5)}
+
+.mhd{display:flex;gap:24px;padding:28px 28px 22px}
+.mposter{flex:0 0 180px;width:180px;aspect-ratio:2/3;border-radius:10px;overflow:hidden;
+background:var(--bg2);box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.mposter img{width:100%;height:100%;object-fit:cover}
+.mb{flex:1;min-width:0}
+.mb h3{margin:0 0 4px;font-size:22px;line-height:1.35;font-weight:700;letter-spacing:-.3px}
+.orig{font-size:13px;color:var(--dim);margin:0 0 12px;word-break:break-all}
+
+.mrate{display:flex;align-items:center;gap:10px;margin:0 0 16px}
+.mrate .stars{position:relative;display:inline-block;font-style:normal;font-size:16px;
+line-height:1;letter-spacing:2px;color:rgba(255,255,255,.12);vertical-align:-2px}
+.mrate .stars::before{content:"★★★★★"}
+.mrate .stars::after{content:"★★★★★";position:absolute;left:0;top:0;color:var(--star);
+white-space:nowrap;overflow:hidden;width:calc(var(--p,0)*10%)}
+.mrate .num{color:var(--star);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.mrate .num.dim{color:var(--dim);font-size:14px;font-weight:400}
+.mvotes{font-size:12.5px;color:var(--dim)}
+
+.infobox{display:grid;grid-template-columns:auto 1fr;gap:7px 18px;
+margin:0 0 16px;padding:14px 18px;
+background:rgba(255,255,255,.03);border-radius:10px;
+font-size:13px;line-height:1.5}
+.infobox dt{color:var(--dim);white-space:nowrap;font-weight:400}
+.infobox dd{margin:0;color:var(--fg);word-break:break-word}
+
+.mbody{padding:0 28px}
+.mbody h4{margin:0 0 10px;font-size:15px;font-weight:600;color:var(--fg)}
+.plot{font-size:13.5px;line-height:1.82;color:#c9c9d4;margin:0;white-space:pre-wrap}
+.tags{margin:14px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+.tagpill{display:inline-block;font-size:12px;padding:4px 11px;border-radius:999px;
+background:var(--card2);color:var(--dim);border:1px solid var(--line)}
+
+.acts{display:flex;flex-wrap:wrap;gap:8px;padding:18px 28px 0}
+.btn{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;
+padding:9px 18px;border-radius:10px;cursor:pointer;
+background:var(--card2);border:1px solid var(--line);color:var(--fg);
+transition:border-color .15s,color .15s,background .15s,transform .12s}
+.btn:hover{border-color:var(--accent-dim);color:var(--accent);transform:translateY(-1px)}
+.btn.pri{background:var(--accent);border-color:transparent;color:#1a1216;font-weight:600}
+.btn.pri:hover{background:var(--accent);color:#1a1216}
+
+.trailer{position:relative;margin:18px 28px 20px;aspect-ratio:16/9;
+border-radius:10px;overflow:hidden;background:#000}
+.trailer iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+
+.eps-chip{display:inline-flex;align-items:center;gap:6px;
+margin:0 6px 6px 0;padding:5px 12px;border-radius:999px;
+background:var(--card2);border:1px solid var(--line);
+font-size:12.5px;color:var(--fg);cursor:pointer;
+font-variant-numeric:tabular-nums;
+transition:border-color .15s,color .15s,transform .12s}
+.eps-chip:hover{border-color:#7ee787;color:#7ee787;transform:translateY(-1px)}
+.eps-none{font-size:12.5px;color:var(--dim);padding:4px 0}
+
+@media(max-width:760px){
+  .mhd{flex-direction:column;gap:16px}
+  .mposter{width:130px;flex-basis:130px}
+  .mb h3{font-size:18px}
+  .mbody{padding:0 18px}
+  .acts{padding:14px 18px 0}
+}
