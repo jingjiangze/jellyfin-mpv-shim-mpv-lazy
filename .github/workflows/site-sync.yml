@@ -7,13 +7,6 @@ on:
   schedule:
     - cron: "10 */4 * * *"   # 每 4 小时一轮（北京时间 02:10/06:10/10:10/14:10/18:10/22:10）
   workflow_dispatch:
-    inputs:
-      sync_pages_secrets:
-        description: "把 PAN_HUB_USER/PASS 写成 Pages 项目环境变量（/api/eps 需要，跑一次即可）"
-        required: false
-        default: "no"
-        type: choice
-        options: ["no", "yes"]
 
 permissions:
   contents: write
@@ -243,19 +236,6 @@ jobs:
           echo "pushed: +$added ~$updated posters"
 
       # 部署只认 build-out/ 快照
-      # 只有在 workflow_dispatch 里显式选 yes 才跑：每次 pages secret put 都会
-      # 生成一个新部署，放在例行轮次里会白烧部署配额。
-      - name: Sync Pages env secrets
-        if: ${{ github.event.inputs.sync_pages_secrets == 'yes' }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PAN_HUB_USER: ${{ secrets.PAN_HUB_USER }}
-          PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
-        run: |
-          set -euo pipefail
-          printf '%s' "$PAN_HUB_USER" | npx -y wrangler@4 pages secret put PAN_HUB_USER --project-name=media-library
-          printf '%s' "$PAN_HUB_PASS" | npx -y wrangler@4 pages secret put PAN_HUB_PASS --project-name=media-library
-
       - name: Deploy to Cloudflare Pages
         timeout-minutes: 10
         env:
@@ -263,16 +243,7 @@ jobs:
         run: |
           set -euo pipefail
           cp -r build-out dist
-          # Pages Functions：/api/eps 按需向后端取分集磁力。
-          # 实测 wrangler 4 不认 <deploy-dir>/functions（那样部署里 /api/eps 仍
-          # 落到 SPA 兜底返回 index.html），它是在**工作目录**下找 functions/。
-          # 两处都放，哪种生效都不亏。
-          if [ -d site-src/functions ]; then
-            cp -r site-src/functions dist/functions
-            cp -r site-src/functions functions
-          fi
           ls -la dist | head -20
-          echo "--- functions ---"; find functions -type f | head
           # --branch 必须显式给 main：checkout 后是 detached HEAD，wrangler 会把部署
           # 当成预览版（alias=head）而不更新生产环境
           npx -y wrangler@4 pages deploy dist --project-name=media-library \

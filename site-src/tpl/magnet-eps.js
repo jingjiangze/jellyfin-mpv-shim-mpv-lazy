@@ -128,6 +128,82 @@
   /* 静态索引没覆盖到的片名，直接问边缘函数（它在服务端代打 pan-hub）。
      返回与索引条目同形状；拿不到就 null，界面照常显示「暂无按集索引」。 */
   var LIVE = {}, LIVE_DOWN = false;
+
+  /* ---- 按需查询：浏览器直接调 120.48.56.189 的 /eps（nginx 服务端注入
+     BasicAuth，客户端拿不到凭据）。盒子未备案、域名入口被百度墙拦，但
+     https://120.48.56.189/ 用的是 IP 证书、浏览器直接信任，所以跨域可用；
+     nginx 那边已放行本站来源的 CORS。---- */
+  var LIVE_URL = 'https://120.48.56.189/eps';
+
+  /* 以下过滤规则与构建端 site-src/index_eps.py 一一对应：
+     噪声（音乐单曲/整卷/合集）、整季包、剧场版、季号一致性、话数上限。
+     改一边必须改另一边，否则「按需取的」和「预建的」口径会飘。 */
+  var RE_RANGE = /第\s*(\d{1,4})\s*[-–~〜]\s*(\d{1,4})\s*[話话集]/;
+  var RE_SINGLE = /第\s*(\d{1,4})\s*[話话集](?!\d)/;
+  var RE_BRACKET = /[\]\)\s\-–—]\s*\[?(\d{1,4})\]?(?=\s*(?:\[|\(|END|完|【|v\d|$))/;
+  var RE_EP = /(?:^|[\s\-–—\[])E[P]?(\d{1,4})/i;
+  var RE_DASH = /\s-\s*(\d{1,4})(?:v\d)?\s*(?:\[|\(|$)/;
+  var NOISE = /(OP\d?テーマ|ED\d?テーマ|OPテーマ|EDテーマ|主題歌|主题歌|挿入歌|オリジナルサウンドトラック|サントラ|Soundtrack|\bBatch\b|全集|合集|Complete|BDBOX|BOX\s*SET|DVDISO|BDISO|\bvol\.?\s*\d+|\d+\s*[巻卷]|漫画|コミック|小説|小说)/i;
+  var RE_PACK = /[\[\(【]\s*\d{1,3}\s*[-–~〜]\s*\d{1,3}\s*[\]\)】]|\b\d{1,3}\s*[-–~〜]\s*\d{1,3}\s*[话話集]/;
+
+  function parseEpsTitle(t) {
+    var m = RE_RANGE.exec(t);
+    if (m) {
+      var a = +m[1], b = +m[2], out = [];
+      if (b - a < 0 || b - a > 200) return out;
+      for (var i = a; i <= b; i++) out.push(i);
+      return out;
+    }
+    var rxs = [RE_SINGLE, RE_DASH, RE_EP, RE_BRACKET];
+    for (var k = 0; k < rxs.length; k++) {
+      var x = rxs[k].exec(t);
+      if (x) {
+        var n = +x[1];
+        return (n > 0 && n <= 999) ? [n] : [];
+      }
+    }
+    return [];
+  }
+
+  function buildEps(name, epsN, results) {
+    var q = norm(name), qs = seasonsOf(name), short = q.length <= 3;
+    var cand = {};
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      var t = String(r.title || r.name || '');
+      if (!t || NOISE.test(t) || RE_PACK.test(t)) continue;
+      if (epsN && epsN <= 2) break;                 // 剧场版/OAD 不给分集
+      var mg = String(r.magnet || r.m || '');
+      if (mg.indexOf('magnet:') !== 0) continue;
+      var nt = norm(t);
+      if (!(q && nt.indexOf(q) >= 0)) continue;
+      if (short) {
+        var esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (!new RegExp('[\\[\\]【】()（）\\s\\-_/]' + esc + '[\\[\\]【】()（）\\s\\-_/]').test(t)) continue;
+      }
+      if (!sameSeasons(qs, seasonsOf(t))) continue;
+      var nums = parseEpsTitle(t);
+      if (!nums.length || nums.length > 3) continue;
+      var item = {
+        m: mg,
+        s: Number(r.size || 0),
+        sd: Number(r.seeders || 0),
+        sub: String(r.subs || r.sub || '').slice ? String(r.subs || r.sub || '').slice(0, 12) : '',
+        t: t.slice(0, 120)
+      };
+      for (var j = 0; j < nums.length; j++) {
+        var n = nums[j];
+        if (epsN && n > epsN + 2) continue;
+        (cand[n] = cand[n] || []).push(item);
+      }
+    }
+    var eps = {};
+    for (var key in cand) {
+      cand[key].sort(function (a, b) { return (b.sd - a.sd) || (b.s - a.s); });
+      eps[key] = cand[key].slice(0, 2);
+    }
+    return eps;
+  }
   function episodeCount(m) {
     var dts = m.querySelectorAll('.infobox dt');
     for (var i = 0; i < dts.length; i++) {
@@ -141,8 +217,7 @@
   }
   function fetchLive(name, epsN) {
     if (LIVE[name]) return Promise.resolve(LIVE[name]);
-    var u = '/api/eps?t=' + encodeURIComponent(name);
-    if (epsN) u += '&n=' + epsN;
+    var u = LIVE_URL + '?kw=' + encodeURIComponent(name);
     var ctl = typeof AbortController === 'function' ? new AbortController() : null;
     var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
     return fetch(u, ctl ? { signal: ctl.signal } : undefined).then(function (r) {
@@ -150,8 +225,9 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function (d) {
-      if (!d || !d.ok || !d.eps || !Object.keys(d.eps).length) return null;
-      var e = { n: name, eps: d.eps, live: 1 };
+      var eps = buildEps(name, epsN, (d && d.results) || []);
+      if (!Object.keys(eps).length) return null;
+      var e = { n: name, eps: eps, live: 1 };
       LIVE[name] = e;
       return e;
     }).catch(function () { LIVE_DOWN = true; return null; });
