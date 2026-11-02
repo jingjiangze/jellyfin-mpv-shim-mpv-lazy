@@ -510,3 +510,26 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 @media (max-width: 560px) {
   .psz { padding: 3px var(--s2); font-size: var(--fs-xs); }
 }
+
+/* ---------------- 详情页评分分布（10 档柱状） ---------------- */
+.rdist {
+  display: flex; align-items: flex-end; gap: 3px;
+  height: 64px; margin: 0 0 var(--s4); padding-bottom: 14px;
+  position: relative;
+}
+.rdist i {
+  flex: 1; position: relative; min-height: 2px;
+  background: var(--accent-soft); border-radius: 2px 2px 0 0;
+  border-top: 1px solid var(--accent-line);
+  transition: background .15s ease;
+}
+.rdist i:hover { background: rgba(240, 145, 153, .3); }
+.rdist i b {
+  position: absolute; left: 0; right: 0; bottom: -14px;
+  font-size: 9px; font-weight: 400; color: var(--dim2); text-align: center;
+}
+.rdist em {
+  position: absolute; right: 0; top: -2px;
+  font-size: var(--fs-xs); font-style: normal; color: var(--dim2);
+}
+@media (max-width: 760px) { .rdist { height: 52px; } }

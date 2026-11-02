@@ -83,6 +83,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python -u fetch_years.py
 
+      # 评分分布：Bangumi 旧接口的 rating.count（v0 没有分布字段）。
+      # 只在 CI 跑 —— 本机/盒子到 api.bgm.tv 一律 000，runner 直连 0.16s。
+      # 每轮补 RATE_MAX 条，已有 rc 的跳过，多轮收敛。
+      - name: Fill rating distributions
+        timeout-minutes: 15
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          NO_LOCAL_PROXY: "1"
+          RATE_MAX: "800"
+          RATE_WORKERS: "4"
+        run: python -u fetch_ratings.py
+
       - name: Fill missing posters
         timeout-minutes: 20
         working-directory: site-src
