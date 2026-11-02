@@ -122,11 +122,7 @@ jobs:
           cp site-src/site/index.html site-src/site/anime.html site-src/site/library.html build-out/
           # HTML 现在是骨架，样式与脚本拆成独立文件（由 build_site 写出）
           cp -f site-src/site/style.css site-src/site/app.js build-out/
-          # 同一份也进仓库 media/assets/，由 jsDelivr(gcore) 走 CDN 分发；
-          # HTML 里优先引用 CDN，onerror 回落到同源。?v=<内容哈希> 保证
-          # jsDelivr 的 @main 12h 缓存不会给出旧文件。
-          mkdir -p media/assets
-          cp -f site-src/site/style.css site-src/site/app.js media/assets/
+
           cp site-src/tpl/_headers build-out/_headers
           # 逐个 glob 拷贝，不用 `cp -r 目录 目录`（目标已存在时会多套一层）
           cp -f site-src/site/data/*.json build-out/data/
@@ -138,6 +134,17 @@ jobs:
           du -sh build-out
           # 分片少于 60 个说明构建没产出，直接失败而不是悄悄发个坏版
           if [ "$N" -lt 60 ]; then echo "::error::data files only $N, expected >=60"; exit 1; fi
+
+      # style.css / app.js 推到 media/assets/，由 jsDelivr(gcore) 分发。
+      # 不走 `git add -A media`：实测那条路 media/assets 进不了提交
+      # （publish 步骤 success 但仓库里没有该目录），原因未查清；
+      # 这里用 Git Data API 直推，与 magnet_publish.py 同一条可靠路径。
+      - name: Push style/app to CDN
+        timeout-minutes: 5
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -u site-src/push_site_assets.py
 
       # 每轮只提交+推送一次：数据 JSON、海报、站点状态一起进仓库。
       # 必须排在 Build pages 之后 —— build_site 每轮用内容哈希生成新的
