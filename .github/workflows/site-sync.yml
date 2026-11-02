@@ -120,6 +120,8 @@ jobs:
           set -euo pipefail
           rm -rf build-out && mkdir -p build-out/data
           cp site-src/site/index.html site-src/site/anime.html site-src/site/library.html build-out/
+          # HTML 现在是骨架，样式与脚本拆成独立文件（由 build_site 写出）
+          cp -f site-src/site/style.css site-src/site/app.js build-out/
           cp site-src/tpl/_headers build-out/_headers
           # 逐个 glob 拷贝，不用 `cp -r 目录 目录`（目标已存在时会多套一层）
           cp -f site-src/site/data/*.json build-out/data/
