@@ -229,6 +229,18 @@
       if (!Object.keys(eps).length) return null;
       var e = { n: name, eps: eps, live: 1 };
       LIVE[name] = e;
+      /* 回传给服务器队列：CI 每轮把它并进静态索引，下次就是静态命中。
+         用 text/plain 发（简单请求，浏览器不预检），失败静默。 */
+      try {
+        var ctl2 = typeof AbortController === 'function' ? new AbortController() : null;
+        var t2 = setTimeout(function () { if (ctl2) ctl2.abort(); }, 8000);
+        fetch(LIVE_URL + '-save', {
+          method: 'POST',
+          headers: { 'content-type': 'text/plain;charset=UTF-8' },
+          body: JSON.stringify({ n: name, eps: eps }),
+          signal: ctl2 ? ctl2.signal : undefined
+        }).then(function () { clearTimeout(t2); }, function () { clearTimeout(t2); });
+      } catch (err) { /* 忽略：只是入库，不影响展示 */ }
       return e;
     }).catch(function () { LIVE_DOWN = true; return null; });
   }

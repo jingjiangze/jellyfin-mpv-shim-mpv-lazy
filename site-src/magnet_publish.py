@@ -38,6 +38,38 @@ for f in sorted(glob.glob("eps/*/magnet-eps.json")):
         base[k] = v
 if empty_over:
     print(f"跳过 {empty_over} 条「空覆盖非空」")
+# 取「搜索即入库」队列：站点上用户实时查到并过滤好的结果，这里并进索引，
+# 下一轮就是静态命中。取完即清空（?clear=1），避免重复合并。
+def pull_queue():
+    user = os.environ.get("PAN_HUB_USER", "")
+    pw = os.environ.get("PAN_HUB_PASS", "")
+    if not user or not pw:
+        print("queue: 无凭据，跳过", flush=True)
+        return {}
+    url = "https://120.48.56.189/eps-queue?clear=1"
+    auth = "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()
+    try:
+        req = urllib.request.Request(url, headers={"authorization": auth, "user-agent": "eps-queue-puller"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            d = json.loads(r.read().decode("utf-8", "replace"))
+        items = d.get("items") or {}
+        print(f"queue: 取到 {len(items)} 条", flush=True)
+        return items
+    except Exception as e:
+        print(f"queue: 拉取失败 {type(e).__name__}: {e}", flush=True)
+        return {}
+
+
+qi = pull_queue()
+added = 0
+for k, v in qi.items():
+    if isinstance(v, dict) and (v.get("eps") or {}):
+        # 队列里是「片名 -> eps」，索引是按 id 存的，先按片名反查 id
+        if k not in base:
+            base[f"q:{k}"] = {"n": k, "eps": v["eps"]}
+            added += 1
+print(f"queue: 新增 {added} 条（按片名为键，q: 前缀）", flush=True)
+
 raw = json.dumps(base, ensure_ascii=False, separators=(",", ":"))
 # 整份只留在 data/，作为 CI 的 resume 状态（含 mark-miss 的空条目）。
 q = pathlib.Path("site-src/data/magnet-eps.json"); q.parent.mkdir(parents=True, exist_ok=True)

@@ -73,4 +73,7 @@ jobs:
       - name: Merge + push
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 取「搜索即入库」队列（/eps-queue 走 BasicAuth）
+          PAN_HUB_USER: ${{ secrets.PAN_HUB_USER }}
+          PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
         run: python -u site-src/magnet_publish.py
