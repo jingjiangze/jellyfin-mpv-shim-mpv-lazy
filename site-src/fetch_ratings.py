@@ -29,13 +29,26 @@ API = "https://api.bgm.tv/subject/%s?responseGroup=large"
 UA = "anime-site/1.0 (+https://github.com/jingjiangze)"
 LIMIT = int(os.environ.get("RATE_MAX", "600") or 600)
 WORKERS = int(os.environ.get("RATE_WORKERS", "4") or 4)
-SLEEP = float(os.environ.get("RATE_SLEEP", "0.12") or 0.12)
+SLEEP = float(os.environ.get("RATE_SLEEP", "0.2") or 0.2)
 
 
-def fetch(sid, timeout=20):
-    req = urllib.request.Request(API % sid, headers={"user-agent": UA, "accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        d = json.loads(r.read().decode("utf-8", "replace"))
+def fetch(sid, timeout=20, retries=2):
+    """单条抓取。Bangumi 会限流（实测 2000 条里 255 条 HTTPError），
+    这里退避重试两次；仍失败就留给下一轮（没有 rc 的记录会被再次拾取）。"""
+    last = None
+    for attempt in range(retries + 1):
+        try:
+            req = urllib.request.Request(API % sid,
+                                         headers={"user-agent": UA, "accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                d = json.loads(r.read().decode("utf-8", "replace"))
+            break
+        except Exception as e:
+            last = e
+            if attempt < retries:
+                time.sleep(1.2 * (attempt + 1))
+    else:
+        raise last
     cnt = ((d.get("rating") or {}).get("count") or {})
     if not isinstance(cnt, dict):
         return None
