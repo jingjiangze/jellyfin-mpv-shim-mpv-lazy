@@ -9,6 +9,10 @@ on:
         description: "封面尺寸：c=中图~8.7KB（日常），l=大图~77.7KB（高清全量刷新一次）"
         required: false
         default: "c"
+      dest:
+        description: "推送到数据集的目录（posters 或 posters-c）"
+        required: false
+        default: "posters"
   schedule:
     - cron: "50 19 * * *"   # 每天 03:50（北京时间）
 
@@ -38,6 +42,8 @@ jobs:
           SHARD_TOTAL: "64"
           COVER_WORKERS: "8"
           COVER_SIZE: ${{ github.event.inputs.cover_size || 'c' }}
+          # schedule 触发时 inputs 为空，必须带默认值兜底
+          COVER_OUT: site/${{ github.event.inputs.dest || 'posters' }}
         run: |
           set -euo pipefail
           P=${{ matrix.part }}
@@ -49,7 +55,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: covers-${{ matrix.part }}
-          path: site-src/site/posters/bgm-*.jpg
+          # dest=posters-c（低清档）时图在 site-src/site/posters-c/，这里不能写死
+          path: site-src/site/${{ github.event.inputs.dest || 'posters' }}/bgm-*.jpg
           if-no-files-found: warn
           retention-days: 3
 
@@ -71,6 +78,8 @@ jobs:
       - name: Push to ModelScope dataset
         env:
           MS_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
+          # schedule 触发时 inputs 为空，兜底 posters
+          DEST: ${{ github.event.inputs.dest || 'posters' }}
         run: |
           set -euo pipefail
           if [ -z "${MS_TOKEN:-}" ]; then echo "no MODELSCOPE_TOKEN, skip"; exit 0; fi
@@ -79,30 +88,30 @@ jobs:
           GIT_LFS_SKIP_SMUDGE=1 git clone -q "$MS_URL" ms
           cd ms
           echo "branch: $(git rev-parse --abbrev-ref HEAD)"
-          mkdir -p posters
+          mkdir -p "$DEST"
           added=0; skipped=0; updated=0
           for f in ../covers/*.jpg; do
             [ -e "$f" ] || continue
             b=$(basename "$f")
             want=$(stat -c%s "$f")
-            if [ -e "posters/$b" ]; then
+            if [ -e "$DEST/$b" ]; then
               # LFS 指针里带 "size N"；真实文件读不到 size 就按一致处理。
               # 只升不降：新图更大（c→l 高清刷新）才覆盖，避免日常 c 轮把 l 打回去。
-              have=$(grep -o 'size [0-9]\+' "posters/$b" 2>/dev/null | awk '{print $2}' | head -1 || true)
+              have=$(grep -o 'size [0-9]\+' "$DEST/$b" 2>/dev/null | awk '{print $2}' | head -1 || true)
               if [ -n "${have:-}" ] && [ "$have" -lt "$want" ]; then
-                cp -f "$f" "posters/$b"; updated=$((updated+1))
+                cp -f "$f" "$DEST/$b"; updated=$((updated+1))
               else
                 skipped=$((skipped+1))
               fi
               continue
             fi
-            cp -f "$f" "posters/$b"; added=$((added+1))
+            cp -f "$f" "$DEST/$b"; added=$((added+1))
           done
-          echo "added=$added updated=$updated skipped=$skipped"
+          echo "dest=$DEST added=$added updated=$updated skipped=$skipped"
           if [ $((added+updated)) -eq 0 ]; then echo "no new covers"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A posters
+          git add -A "$DEST"
           git commit -q -m "covers: +$added ~$updated"
           # 有未暂存改动时不 stash 会让 pull --rebase 直接中断（上一轮就死在这）
           git stash -u -q || true

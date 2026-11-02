@@ -9,7 +9,7 @@
  * 客户端只拉当前片名所在的那一片。哈希函数必须与构建端（src/shard_eps.py）
  * 逐字符一致：都按 Unicode 码点、h = (h*31 + cp) mod 2^32。改一边必须改另一边。
  * 来源级联：gcore jsDelivr → gh-proxy → raw.githubusercontent。
- * 点 chip 复制磁力（页面有 __magnet 就复用，否则 navigator.clipboard）。
+ * 点 chip 复制磁力（navigator.clipboard 优先，失败回退 execCommand）。
  */
 (function () {
   'use strict';
@@ -143,7 +143,7 @@
   var RE_RANGE = /第\s*(\d{1,4})\s*[-–~〜]\s*(\d{1,4})\s*[話话集]/;
   var RE_SINGLE = /第\s*(\d{1,4})\s*[話话集](?!\d)/;
   var RE_BRACKET = /[\]\)\s\-–—]\s*\[?(\d{1,4})\]?(?=\s*(?:\[|\(|END|完|【|v\d|$))/;
-  var RE_EP = /(?:^|[\s\-–—\[])E[P]?(\d{1,4})/i;
+  var RE_EP = /(?:^|[\s\-–—\[])[Ee][Pp]?(\d{1,4})\b/i;
   var RE_DASH = /\s-\s*(\d{1,4})(?:v\d)?\s*(?:\[|\(|$)/;
   var NOISE = /(OP\d?テーマ|ED\d?テーマ|OPテーマ|EDテーマ|主題歌|主题歌|挿入歌|オリジナルサウンドトラック|サントラ|Soundtrack|\bBatch\b|全集|合集|Complete|BDBOX|BOX\s*SET|DVDISO|BDISO|\bvol\.?\s*\d+|\d+\s*[巻卷]|漫画|コミック|小説|小说)/i;
   var RE_PACK = /[\[\(【]\s*\d{1,3}\s*[-–~〜]\s*\d{1,3}\s*[\]\)】]|\b\d{1,3}\s*[-–~〜]\s*\d{1,3}\s*[话話集]/;
@@ -237,8 +237,9 @@
       var eps = (d && d.eps && Object.keys(d.eps).length)
         ? d.eps
         : buildEps(name, orig, epsN, (d && d.results) || []);
-      if (!Object.keys(eps).length) return null;
-      var e = { n: name, eps: eps, live: 1 };
+      /* 只有整季包、没有可按集索引的片名（早期新番常见）也要保留条目 */
+      if (!Object.keys(eps).length && !(d && d.batch && d.batch.length)) return null;
+      var e = { n: name, eps: eps, batch: (d && d.batch) || [], live: 1 };
       LIVE[name] = e;
       /* 回传给服务器队列：CI 每轮把它并进静态索引，下次就是静态命中。
          用 text/plain 发（简单请求，浏览器不预检），失败静默。 */
@@ -299,15 +300,34 @@
     return (v >= 100 ? v.toFixed(0) : v.toFixed(1)) + u[i] || '';
   }
 
+  /* 先转 & 再转引号，否则 &quot; 会被二次转义成 &amp;quot; */
+  function escAttr(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  }
+
   function chipOf(c, label) {
-    var mg = String(c.m).replace(/"/g, '&quot;').replace(/&/g, '&amp;');
+    var mg = escAttr(c.m);
     var bits = [];
     if (c.s) bits.push(fmtSize(c.s));
     if (c.sd) bits.push(c.sd + ' 种');
     if (c.sub) bits.push(c.sub);
-    return '<span class="eps-chip" data-m="' + mg + '" title="' +
-      String(c.t || '').replace(/"/g, '&quot;') + '">' + label +
+    return '<span class="eps-chip" role="button" tabindex="0" data-m="' + mg + '" title="' +
+      escAttr(c.t) + '">' + label +
       (bits.length ? ' · ' + bits.join(' · ') : '') + '</span>';
+  }
+
+  /* 合集包标题里的集数范围：优先显示「合集 01–12」，没范围才退回序号。 */
+  var RE_BATCH_RANGE = /\[\s*(\d{1,3})\s*[-–~〜]\s*(\d{1,3})\s*(?:END|完)?\s*\]/i;
+  var RE_BATCH_RANGE_CN = /第\s*(\d{1,3})\s*[-–~〜]\s*(\d{1,3})\s*[话話集]/;
+  function pad2(n) { return String(n).length < 2 ? '0' + n : String(n); }
+  function batchLabel(c, i) {
+    var t = String((c && c.t) || '');
+    var m = RE_BATCH_RANGE.exec(t) || RE_BATCH_RANGE_CN.exec(t);
+    if (m) {
+      var a = +m[1], b = +m[2];
+      if (b > a) return '合集 ' + pad2(a) + '–' + pad2(b);
+    }
+    return '合集 ' + (i + 1);
   }
 
   function render(m, e) {
@@ -328,9 +348,67 @@
        实际它们往往是新番早期唯一能拿到的资源，单独成一组。 */
     if (batch.length) {
       h += '<div class="relhead" style="margin-top:10px">整季 / 合集 · ' + batch.length + ' 个（点击复制）</div>';
-      batch.forEach(function (c, i) { h += chipOf(c, '合集 ' + (i + 1)); });
+      batch.forEach(function (c, i) { h += chipOf(c, batchLabel(c, i)); });
     }
     box.innerHTML = h || '<div class="relhead">分集磁力</div><div class="eps-none">暂无按集索引</div>';
+  }
+
+  /* ---- 点击复制：clipboard API 优先，失败回退 execCommand。统一返回 Promise<boolean> ---- */
+  function legacyCopy(txt) {
+    var ta = null;
+    try {
+      ta = document.createElement('textarea');
+      ta.value = txt;
+      ta.style.cssText = 'position:fixed;top:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      return Promise.resolve(!!document.execCommand('copy'));
+    } catch (err) {
+      return Promise.resolve(false);
+    } finally {
+      if (ta && ta.parentNode) ta.parentNode.removeChild(ta);
+    }
+  }
+
+  function copyText(s) {
+    var txt = String(s || '');
+    if (!txt) return Promise.resolve(false);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(txt).then(function () { return true; }, function () {
+          return legacyCopy(txt);
+        });
+      }
+    } catch (err) { /* 非安全上下文等：直接走回退 */ }
+    return legacyCopy(txt);
+  }
+
+  /* 同一个 toast 节点复用，连点不会堆一屏；用 setTimeout 淡出，不依赖动画事件 */
+  function toast(msg) {
+    var el = document.querySelector('.epstoast');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'epstoast';
+      el.style.cssText = 'position:fixed;left:50%;bottom:72px;transform:translateX(-50%);' +
+        'z-index:9999;padding:9px 16px;border-radius:20px;font-size:13px;' +
+        'background:rgba(0,0,0,.86);color:#fff;opacity:1;transition:opacity .3s;' +
+        'pointer-events:none;max-width:80vw;text-align:center';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.opacity = '1';
+    el.__seq = (el.__seq || 0) + 1;
+    var seq = el.__seq;
+    if (el.__t1) clearTimeout(el.__t1);
+    if (el.__t2) clearTimeout(el.__t2);
+    el.__t1 = setTimeout(function () {
+      if (el.__seq !== seq) return;
+      el.style.opacity = '0';
+      el.__t2 = setTimeout(function () {
+        if (el.__seq !== seq) return;
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }, 320);
+    }, 1600);
   }
 
   function arm() {
@@ -338,6 +416,23 @@
     if (!m) return;
     if (m.__epsObs) return;
     m.__epsObs = true;
+    /* 事件委托：弹窗内容会被反复重写，不能给 chip 逐个绑 */
+    function onChip(ev) {
+      var c = ev.target && ev.target.closest && ev.target.closest('.eps-chip');
+      if (!c) return;
+      ev.preventDefault();
+      ev.stopPropagation();            // 别冒泡去触发卡片的开关逻辑
+      var mg = c.getAttribute('data-m') || '';
+      if (!mg) return;
+      copyText(mg).then(function (ok) {
+        toast(ok ? '已复制磁力链接' : '复制失败，请长按链接手动复制');
+      });
+    }
+    m.addEventListener('click', onChip);
+    m.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+      onChip(ev);
+    });
     new MutationObserver(function () {
       var h3 = m.querySelector('h3');
       if (!h3) return;
@@ -352,7 +447,8 @@
       box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引加载中…</div>';
       host.parentNode.insertBefore(box, host.nextSibling);
       resolveEntry(name).then(function (e) {
-        if (e && e.eps && Object.keys(e.eps).length) return render(m, e);
+        /* 静态条目里可能只有整季包（batch）、没有分集，那种也算有内容 */
+        if (e && ((e.eps && Object.keys(e.eps).length) || (e.batch && e.batch.length))) return render(m, e);
         box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引里没有，正在向后端查询…</div>';
         var origEl = m.querySelector('.orig');
         var origName = origEl ? origEl.textContent.trim() : '';

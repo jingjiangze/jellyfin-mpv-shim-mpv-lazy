@@ -12,6 +12,9 @@
 
 用法：SHARD_LIST=0,1 python fetch_bgm_covers.py
       COVER_SIZE=l SHARD_TOTAL=64 python fetch_bgm_covers.py   # 高清全量
+
+输出目录默认 site/posters；COVER_OUT 可覆盖（相对 cwd，CI 里 cwd=site-src）。
+      低清档：COVER_OUT=site/posters-c python fetch_bgm_covers.py   # 产出 posters-c/
 """
 import concurrent.futures as cf
 import json
@@ -22,7 +25,7 @@ import urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
 SITE = HERE / "site"
-OUT = SITE / "posters"
+OUT = pathlib.Path(os.environ.get("COVER_OUT") or (SITE / "posters"))
 UA = "jellyfin-mpv-shim-mpv-lazy/anime-covers (+https://github.com/jingjiangze)"
 
 SHARD_TOTAL = int(os.environ.get("SHARD_TOTAL", "64"))

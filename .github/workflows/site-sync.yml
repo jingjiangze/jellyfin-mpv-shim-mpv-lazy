@@ -103,6 +103,16 @@ jobs:
           COVER_MAX: "150"
         run: python -u fetch_covers.py
 
+      # TMDB 热门/正在上映：给「电影」页第二、三块供数。
+      # 接口失败不阻断站点（脚本自身 exit 0 并保留上一轮 tmdb.json）。
+      - name: Fetch TMDB movies
+        timeout-minutes: 10
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          POSTER_DIR: ../media/posters
+        run: python -u fetch_tmdb.py
+
       - name: Build pages
         timeout-minutes: 6
         working-directory: site-src
@@ -119,7 +129,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf build-out && mkdir -p build-out/data
-          cp site-src/site/index.html site-src/site/anime.html site-src/site/library.html build-out/
+          cp site-src/site/index.html site-src/site/anime.html site-src/site/movie.html build-out/
           # HTML 现在是骨架，样式与脚本拆成独立文件（由 build_site 写出）
           cp -f site-src/site/style.css site-src/site/app.js build-out/
 
@@ -253,7 +263,7 @@ jobs:
           # 页面 HTML 也镜像一份：数据集是主存，GitHub 是次存（构建产物本身不进仓，
           # 只有 dist 里的这份镜像能让人从数据集完整取回一个可跑的站点）。
           mkdir -p "$RUNNER_TEMP/ms/assets/site"
-          cp -f site-src/site/index.html site-src/site/anime.html site-src/site/library.html                 "$RUNNER_TEMP/ms/assets/site/" 2>/dev/null || true
+          cp -f site-src/site/index.html site-src/site/anime.html site-src/site/movie.html                 "$RUNNER_TEMP/ms/assets/site/" 2>/dev/null || true
           echo "html: $(ls -1 "$RUNNER_TEMP/ms/assets/site" 2>/dev/null | wc -l) 页"
           echo "site assets: copied=$asset_added eps=$(ls -1 "$RUNNER_TEMP/ms/assets/eps" 2>/dev/null | wc -l)"
           if [ $((added+updated+js_added+asset_added)) -eq 0 ]; then echo "dataset already in sync"; exit 0; fi
