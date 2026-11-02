@@ -266,8 +266,11 @@ def main():
                 if not t or len(t) > 20:
                     continue
                 tagmap.setdefault(t, []).append(rec["id"])
-    # 出现 3 次以下的多半是噪音标签，不进筛选器
-    tagmap = {t: ids for t, ids in tagmap.items() if len(ids) >= 3}
+    # 出现 3 次以下的多半是噪音标签；另外 TV/剧场版/OVA 这些和「类型」筛选重复，
+    # 留在标签里只会让下拉更难找
+    DUP_TYPE = {"TV", "剧场版", "OVA", "网络", "短片", "音乐", "其他", "WEB", "ONA"}
+    tagmap = {t: ids for t, ids in tagmap.items()
+              if len(ids) >= 3 and t not in DUP_TYPE}
     (ddir / "tags.json").write_text(
         json.dumps(tagmap, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"tags: {len(tagmap)} 个 / {sum(len(v) for v in tagmap.values())} 条映射")
