@@ -61,14 +61,22 @@ def pull_queue():
 
 
 qi = pull_queue()
+# 队列结构是 {片名: {集号: [磁力...]}}（前端 POST /eps-save 时就是这个形状）
+# 索引按 id 存，队列只有片名 —— 用 "q:<片名>" 当键，n 字段仍是片名，
+# 客户端 findByName 按 n 匹配，与 id 无关。
+known = {v.get("n") for v in base.values() if isinstance(v, dict)}
 added = 0
 for k, v in qi.items():
-    if isinstance(v, dict) and (v.get("eps") or {}):
-        # 队列里是「片名 -> eps」，索引是按 id 存的，先按片名反查 id
-        if k not in base:
-            base[f"q:{k}"] = {"n": k, "eps": v["eps"]}
-            added += 1
-print(f"queue: 新增 {added} 条（按片名为键，q: 前缀）", flush=True)
+    if not isinstance(v, dict) or not v:
+        continue
+    if k in known:
+        continue
+    eps = v.get("eps") if isinstance(v.get("eps"), dict) else v
+    if not eps:
+        continue
+    base[f"q:{k}"] = {"n": k, "eps": eps}
+    added += 1
+print(f"queue: 新增 {added} 条（键 q:<片名>）", flush=True)
 
 raw = json.dumps(base, ensure_ascii=False, separators=(",", ":"))
 # 整份只留在 data/，作为 CI 的 resume 状态（含 mark-miss 的空条目）。
