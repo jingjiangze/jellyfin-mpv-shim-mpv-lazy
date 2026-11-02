@@ -108,6 +108,19 @@ button, input, select { font: inherit; color: inherit; }
 .cnt, .build { font-size: var(--fs-sm); color: var(--dim); white-space: nowrap; }
 .build { font-size: var(--fs-xs); color: var(--dim2); }
 
+/* 清晰度切换（搜索框右侧，.cnt 之前）：与 .mainnav a 同一套胶囊观感，
+   默认低调透明底，aria-pressed="true" 时同 .mainnav a.is-on 走强调色 */
+.psz {
+  flex: 0 0 auto;
+  padding: 4px var(--s3); border-radius: 999px;
+  cursor: pointer; user-select: none; white-space: nowrap;
+  font-size: var(--fs-sm); color: var(--dim);
+  background: transparent; border: 1px solid var(--line);
+  transition: color .16s ease, background .16s ease, border-color .16s ease;
+}
+.psz:hover { color: var(--fg); border-color: var(--line-hi); }
+.psz[aria-pressed="true"] { color: #14141a; background: var(--accent); border-color: transparent; font-weight: 600; }
+
 /* ---------------------------------------------------------------- 版面 */
 main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 .loading { padding: var(--s7) 0; text-align: center; color: var(--dim); font-size: var(--fs-md); }
@@ -124,6 +137,9 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
   width: 3px; border-radius: 2px; background: var(--accent);
 }
 .bhead span { font-size: var(--fs-sm); color: var(--dim); }
+/* 区块标题右侧的「更多」入口（首页「剧场版 · 精选」等） */
+.bhead .morelink { color: var(--accent); text-decoration: none; }
+.bhead .morelink:hover { text-decoration: underline; }
 
 /* 筛选栏（番剧页：年份/类型/排序 + 提示） */
 .filters {
@@ -202,14 +218,54 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 }
 .morebtn:hover { border-color: var(--accent-line); color: var(--accent); }
 
+/* ---------------------------------------------------------------- 电影页（剧场版） */
+/* 与番剧 .block / .bhead 同节奏；标题不带 .bhead 的粉竖条，计数靠右 */
+.msect { margin: 0 0 var(--s6); }
+.mhead { display: flex; align-items: baseline; gap: var(--s3); margin: 0 0 var(--s4); }
+.mhead h2 { margin: 0; font-size: var(--fs-h2); font-weight: 700; letter-spacing: .01em; }
+.mhead span { margin-left: auto; font-size: var(--fs-sm); color: var(--dim); }
+
+/* 海报 2:3，列宽比番剧 .grid 窄一档、卡片更高 */
+.mgrid { display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.mcard { position: relative; }
+.mcard a { color: inherit; text-decoration: none; }
+.mcard .pw { aspect-ratio: 2 / 3; }
+.mcard .pw img { width: 100%; height: 100%; object-fit: cover; }
+.mcard .t { font-size: var(--fs-sm); }
+.mcard:hover .t { color: var(--accent); }
+/* 占位块：照抄 .ph，字号抬到 28px（海报比番剧卡高一档） */
+.mcard .ph {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%; font-size: 28px; color: #3c3c48;
+  background: linear-gradient(160deg, #1d1d26, var(--bg2));
+}
+
 /* ---------------------------------------------------------------- 首页三级下钻 */
-.home-cols { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: var(--s5); align-items: start; }
+.home-cols { display: grid; grid-template-columns: 268px minmax(0, 1fr); gap: var(--s5); align-items: start; }
 .levels {
   position: sticky; top: calc(var(--header-h) + var(--s3));
-  display: flex; flex-direction: column; gap: var(--s4);
-  padding: var(--s4); border-radius: var(--r);
+  display: flex; flex-direction: column; gap: 0;
+  padding: var(--s4) var(--s4) var(--s5);
+  border-radius: var(--r);
   background: var(--card); border: 1px solid var(--line);
 }
+/* 两组之间用留白 + 细线分开，不要挤在一起 */
+.levels .lv + .lv {
+  margin-top: var(--s4); padding-top: var(--s4);
+  border-top: 1px solid var(--line);
+}
+/* 季度：整行列表，标签在左、数量在右，扫读最快。
+   `.chips` 本身是 display:flex 且在本文件后面，必须写成 `.chips.chips--*`
+   才能压过它（单类选择器会输给后面的同特异性规则）。 */
+.chips.chips--col { display: flex; flex-direction: column; gap: 6px; }
+.chips--col .chip {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 8px var(--s3); border-radius: var(--r-sm);
+}
+.chips--col .lv-n { margin-left: auto; }
+/* 星期：4 列等宽，七加「全部」正好两行 */
+.chips.chips--wd { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.chips--wd .chip { text-align: center; padding: 6px 0; }
 .lv-h { margin: 0 0 var(--s2); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .12em; color: var(--dim2); }
 .lv-select {
   width: 100%; padding: 6px var(--s3); border-radius: var(--r-sm); outline: none; cursor: pointer;
@@ -344,18 +400,32 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 .trailer { position: relative; margin: 0 var(--s5) var(--s5); aspect-ratio: 16 / 9; border-radius: var(--r-sm); overflow: hidden; background: #000; }
 .trailer iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 
-/* 分集磁力 chip（magnet-eps.js 注入，锚点是 .acts 之后） */
-.relhead { margin: 0 0 var(--s2); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .1em; color: var(--dim2); }
+/* 分集磁力区（magnet-eps.js 注入，锚点是 .acts 之后；.relbox 与 #epsbox 是同一个元素） */
+.relbox { margin-top: var(--s5); padding-top: var(--s3); border-top: 1px solid var(--line); }
+/* #epsbox 的 id 选择器带 padding 简写（0 …），会压过 .relbox 的 padding-top，补一条 id+class */
+#epsbox.relbox { padding-top: var(--s3); }
+.relhead { margin: 0 0 var(--s2); font-size: var(--fs-sm); font-weight: 600; letter-spacing: .02em; color: var(--dim); }
 #epsbox { padding: 0 var(--s5) var(--s5); }
 .eps-chip {
   display: inline-flex; align-items: center; gap: 6px; margin: 0 6px 6px 0;
-  padding: 5px var(--s3); border-radius: 999px; cursor: pointer;
+  padding: 4px 10px; border-radius: 999px; cursor: pointer; user-select: none;
   font-size: var(--fs-sm); color: var(--fg); font-variant-numeric: tabular-nums;
   background: var(--card2); border: 1px solid var(--line);
-  transition: border-color .16s ease, color .16s ease, transform .12s ease;
+  transition: background .15s, border-color .15s;
 }
-.eps-chip:hover { border-color: var(--ok); color: var(--ok); transform: translateY(-1px); }
+.eps-chip:hover { border-color: var(--accent); color: var(--fg); }
+.eps-chip:active { transform: scale(.97); }
+.eps-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .eps-none { font-size: var(--fs-sm); color: var(--dim2); padding: var(--s1) 0; }
+/* 复制成功提示：底部居中、不吃点击 */
+.epstoast {
+  position: fixed; left: 50%; bottom: var(--s6); transform: translateX(-50%); z-index: 9999;
+  padding: 8px 14px; border-radius: var(--r-sm);
+  font-size: var(--fs-sm); color: var(--fg);
+  background: rgba(6, 6, 10, .92); box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  pointer-events: none;
+}
+.epstoast.out { opacity: 0; transition: opacity .25s; }
 
 /* ---------------------------------------------------------------- 响应式 */
 /* 平板：下钻面板从左侧竖排改为顶部横排 */
@@ -383,6 +453,7 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
   main { padding: var(--s4) 0 var(--s7); }
   .grid { grid-template-columns: repeat(2, 1fr); gap: var(--s3); }
   .t { font-size: var(--fs-xs); }
+  .mcard .t { font-size: var(--fs-xs); }
   .sub2 { font-size: 10px; }
   .f-hint { margin-left: 0; flex-basis: 100%; }
 
@@ -421,4 +492,9 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 @media (max-width: 760px) {
   .levels { gap: var(--s2) var(--s3); }
   .levels .lv { flex: 1 1 46%; }
+}
+
+/* 窄屏：清晰度按钮缩小一档，但不能隐藏（.cnt 隐藏后这块是唯一状态提示） */
+@media (max-width: 560px) {
+  .psz { padding: 3px var(--s2); font-size: var(--fs-xs); }
 }
