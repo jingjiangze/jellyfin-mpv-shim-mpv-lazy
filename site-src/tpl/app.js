@@ -244,8 +244,7 @@ function renderHome() {
   var ysel = $('#lv-y');
   if (ysel) ysel.onchange = function () { HOME.y = Number(ysel.value); HOME.q = 0; HOME.wd = 0; renderHome(); };
 
-  bindCards(main);
-  return;
+  /* 卡片点击由文件底部的全局事件委托处理，这里不需要再绑定 */
 }
 
 function homeDefaults() {
