@@ -21,7 +21,7 @@ on:
         required: true
         default: "show"
         type: choice
-        options: ["show", "apply", "remove"]
+        options: ["show", "apply", "remove", "diag"]
 
 permissions:
   contents: read
@@ -48,11 +48,35 @@ jobs:
           echo "GET ruleset -> $CODE"
           if [ "$CODE" != "200" ]; then echo '{"result":{"rules":[]}}' > ruleset.json; fi
 
+      - name: Diagnose token
+        if: ${{ inputs.action == 'diag' }}
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          API=https://api.cloudflare.com/client/v4
+          H="authorization: Bearer $CF_TOKEN"
+          echo "== token verify =="
+          curl -s -H "$H" "$API/user/tokens/verify" | head -c 400; echo
+          echo "== zones list =="
+          curl -s -o /dev/null -w "zones=%{http_code}
+" -H "$H" "$API/zones?per_page=5"
+          echo "== rulesets list =="
+          curl -s -o /dev/null -w "rulesets_list=%{http_code}
+" -H "$H" "$API/zones/$ZONE_ID/rulesets"
+          echo "== cache ruleset entrypoint =="
+          curl -s -o /dev/null -w "entrypoint=%{http_code}
+" -H "$H"             "$API/zones/$ZONE_ID/rulesets/phases/http_request_cache_settings/entrypoint"
+          echo "== pages projects =="
+          curl -s -o /dev/null -w "pages=%{http_code}
+" -H "$H" "$API/accounts/$(curl -s -H "$H" "$API/zones?name=jiangjiangze.icu" | python3 -c 'import json,sys;print(json.load(sys.stdin)["result"][0]["account"]["id"])')/pages/projects/media-library"
+
       - name: Build rules
+        if: ${{ inputs.action != 'diag' }}
         run: python3 site-src/cf_cache_rule.py "${{ inputs.action }}" ruleset.json put.json
 
       - name: Apply rules
-        if: ${{ inputs.action != 'show' }}
+        if: ${{ inputs.action != 'show' && inputs.action != 'diag' }}
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
