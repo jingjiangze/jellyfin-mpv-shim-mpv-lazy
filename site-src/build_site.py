@@ -254,7 +254,7 @@ def build_movies():
     return douban, tmdb
 
 
-PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><link rel=stylesheet href="style.css?v=__CV__"></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header><main class="wrap" id=main><div class=loading>加载中…</div></main><div class=mask id=mask><div class=modal id=modal></div></div><script src="app.js?v=__JV__"></script><script defer src="./magnet-eps.js"></script></body></html>"""
+PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><link rel=stylesheet href="style.css?v=__CV__"></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header><main class=wrap id=main><div class=loading>加载中…</div></main><div class=mask id=mask><div class=modal id=modal></div></div><script src="app.js?v=__JV__"></script><script src=magnet-eps.js></script></body></html>"""
 
 PAGES = [
     ("index.html", "home", "番组计划 · 新番表", "搜索番剧…", 'class="is-on"', "", ""),
