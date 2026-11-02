@@ -1,4 +1,4 @@
-/* 三张页面共用一份脚本：首页（今年新番·周/月）、番剧（全量目录）、媒体库。
+/* 三张页面共用一份脚本：首页（今年新番·周/月）、番剧（全量目录）、电影（豆瓣 / TMDB / 剧场版）。
    数据全部走 ./data/*.json，页面本身只是壳。 */
 (function () {
   'use strict';
@@ -31,8 +31,21 @@
     img.dataset.fb = q.join('|');
   };
 
-  var ANI = { poster: '', rows: [], extra: {}, year: 0 };
+  var ANI = { poster: '', posterSd: '', rows: [], extra: {}, year: 0 };
   var shardCache = {};
+
+  /* 海报清晰度：hd 用大图 ANI.poster，sd 用小图 ANI.posterSd（省流量）。
+     sd 图缺失或加载失败时由 data-fb 回落到大图，绝不能出现空白封面。 */
+  var PSZ = { mode: 'hd' };
+  try {
+    var _psz = localStorage.getItem('psz');
+    if (_psz === 'hd' || _psz === 'sd') PSZ.mode = _psz;
+  } catch (e) { /* 隐私模式 / file:// 下 localStorage 可能不可用，忽略 */ }
+
+  function posterSrc(id) {
+    var base = PSZ.mode === 'sd' ? (ANI.posterSd || ANI.poster) : ANI.poster;
+    return base + id + '.jpg';
+  }
 
   /* 卡片标题用：连字符是 CSS 的合法断行点，"Yu-hachi" 会被拆成 "Yu-"/"hachi"。
      在连字符后插 word joiner（U+2060）阻止断行。只用于 .t —— 弹窗里的 h3
@@ -145,24 +158,16 @@ function chip(label, on, attr, val) {
 
 /* 左侧（竖屏顶部）选择面板 */
 function renderLevels() {
-  var ys = {}, qs = {};
-  ANI.rows.forEach(function (r) {
-    if (r[4]) ys[r[4]] = (ys[r[4]] || 0) + 1;
+  var qs = {};
+  yearRows(HOME.y).forEach(function (r) {
     var q = seasonOf(r[5]);
-    if (r[4] === HOME.y && q) qs[q] = (qs[q] || 0) + 1;
+    if (q) qs[q] = (qs[q] || 0) + 1;
   });
-  var ylist = Object.keys(ys).map(Number).sort(function (a, b) { return b - a; });
   var qlist = Object.keys(qs).map(Number).sort();
 
+  /* 首页只留「季度 + 星期」：年份固定为当前年（顶栏计数里已标明是哪一年），
+     少一层选择，季度一眼可选。要看往年去「番剧」页筛。 */
   var h = '<aside class="levels">';
-  h += '<div class="lv"><div class="lv-h">年份</div><div class="chips">'
-    + '<select class="lv-select" id="lv-y">'
-    + ylist.map(function (y) {
-      return '<option value="' + y + '"' + (y === HOME.y ? ' selected' : '') + '>'
-        + y + ' 年（' + ys[y] + '）</option>';
-    }).join('')
-    + '</select></div></div>';
-
   h += '<div class="lv"><div class="lv-h">季度</div><div class="chips">'
     + chip('全部', !HOME.q, 'data-q', 0)
     + qlist.map(function (q) {
@@ -190,8 +195,8 @@ function renderHome() {
   var rows = homeRows();
   var main = $('#main');
 
-  var head = '<div class="bhead"><h2>' + HOME.y + ' 年'
-    + (HOME.q ? '第' + HOME.q + '季度' : '')
+  var head = '<div class="bhead"><h2>'
+    + (HOME.q ? '第' + HOME.q + '季度' : '全部季度')
     + (HOME.wd ? ' · ' + WD[HOME.wd - 1] : '')
     + '</h2><span>' + rows.length + ' 部</span></div>';
 
@@ -239,7 +244,7 @@ function renderHome() {
      x=32（内容列是 x=292）并与左侧 sticky 面板的列重叠，滚动时首列被压住。 */
   main.innerHTML = '<div class="home-cols">' + renderLevels()
     + '<div class="home-main"><div class="home-head">' + head + '</div>' + body
-    + rankBlock('rank-q', HOME.y + ' 年' + (HOME.q ? '第' + HOME.q + '季度' : '') + '榜',
+    + rankBlock('rank-q', (HOME.q ? '第' + HOME.q + '季度' : '全部季度') + '榜',
         '按 Bangumi 排名 Top 12', qPool)
     + rankBlock('rank-all', '总榜', '全站排名 Top 24', allPool)
     + '</div></div>';
@@ -251,8 +256,6 @@ function renderHome() {
   main.querySelectorAll('[data-wd]').forEach(function (b) {
     b.onclick = function () { HOME.wd = Number(b.dataset.wd); renderHome(); };
   });
-  var ysel = $('#lv-y');
-  if (ysel) ysel.onchange = function () { HOME.y = Number(ysel.value); HOME.q = 0; HOME.wd = 0; renderHome(); };
 
   /* 卡片点击由文件底部的全局事件委托处理，这里不需要再绑定 */
 }
