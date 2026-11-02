@@ -198,7 +198,7 @@ def build_movies():
     return douban, tmdb
 
 
-PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><link rel=stylesheet href="style.css?v=__CV__"></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header><main class="wrap" id=main><div class=loading>加载中…</div></main><div class=mask id=mask><div class=modal id=modal></div></div><script src="app.js?v=__JV__"></script></body></html>"""
+PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><link rel=stylesheet href="style.css?v=__CV__"></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header><main class="wrap" id=main><div class=loading>加载中…</div></main><div class=mask id=mask><div class=modal id=modal></div></div><script src="app.js?v=__JV__"></script><script defer src="./magnet-eps.js"></script></body></html>"""
 
 PAGES = [
     ("index.html", "home", "番组计划 · 新番表", "搜索番剧…", 'class="is-on"', "", ""),
@@ -247,6 +247,30 @@ def main():
         except OSError:
             pass
     print(f"shards: {n} (flat, data/s<N>.json)")
+
+    # tag 索引：番剧页按标签筛选用。tags 只在详情分片里有，这里汇总成
+    # {tag: [id...]}，前端选标签时才按需拉（约几百 KB）。
+    tagmap = {}
+    for p2 in sorted((SITE / "anime").glob("*.json")):
+        try:
+            recs = json.loads(p2.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if not isinstance(recs, list):
+            continue
+        for rec in recs:
+            if not isinstance(rec, dict) or not rec.get("id"):
+                continue
+            for t in (rec.get("tags") or [])[:12]:
+                t = str(t).strip()
+                if not t or len(t) > 20:
+                    continue
+                tagmap.setdefault(t, []).append(rec["id"])
+    # 出现 3 次以下的多半是噪音标签，不进筛选器
+    tagmap = {t: ids for t, ids in tagmap.items() if len(ids) >= 3}
+    (ddir / "tags.json").write_text(
+        json.dumps(tagmap, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"tags: {len(tagmap)} 个 / {sum(len(v) for v in tagmap.values())} 条映射")
 
     # 磁力层：把 prior 会话的 magnet-eps.js 一起部署，并在页面里引用
     mj = TPL / "magnet-eps.js"
