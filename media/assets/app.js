@@ -16,6 +16,25 @@ return String(x == null ? '' : x).toLowerCase()
 }
 function hit(hay, q) { return !q || nrm(hay).indexOf(q) !== -1; }
 function j(u) { return fetch(u).then(function (r) { if (!r.ok) throw 0; return r.json(); }); }
+var D_BASES = [
+'./data/',
+'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/data/',
+'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/'
+];
+function jd(name) {
+var i = 0;
+function go() {
+if (i >= D_BASES.length) return Promise.reject(new Error('data ' + name + ' 三源都失败'));
+var u = D_BASES[i++] + name;
+return fetch(u).then(function (r) {
+if (!r.ok) throw 0;
+var ct = (r.headers.get('content-type') || '').toLowerCase();
+if (ct.indexOf('json') < 0 && ct.indexOf('octet-stream') < 0) throw 0;  // CF 兜底 HTML 会命中这里
+return r.json();
+}).catch(go);
+}
+return go();
+}
 function fbAttr(list) {
 var q = list.filter(Boolean);
 return q.length ? ' data-fb="' + esc(q.join('|')) + '" onerror="__fb(this)"' : '';
@@ -101,7 +120,7 @@ m.appendChild(d);
 };
 }
 var sfx = id % 64;
-var pr = shardCache[sfx] || (shardCache[sfx] = j('./data/s' + sfx + '.json').catch(function () { return []; }));
+var pr = shardCache[sfx] || (shardCache[sfx] = jd('s' + sfx + '.json').catch(function () { return []; }));
 pr.then(function (list) {
 var rec = (list || []).find(function (x) { return x.id === id; });
 var plot = $('#plot'), tags = $('#tags');
@@ -354,7 +373,7 @@ renderBrowse(true);
 var TAGS = null;
 function ensureTags() {
 if (TAGS) return Promise.resolve(TAGS);
-return j('./data/tags.json').then(function (d) {
+return jd('tags.json').then(function (d) {
 TAGS = d || {};
 return TAGS;
 }, function () { TAGS = {}; return TAGS; });
@@ -536,7 +555,7 @@ qt = setTimeout(applyMovie, 220);
 });
 }
 applyMovie();
-j('./data/movies.json').then(function (d) {
+jd('movies.json').then(function (d) {
 MOVIE.db = (d && d.douban) || [];
 MOVIE.tm = (d && d.tmdb) || [];
 paintMovieDb();
@@ -588,7 +607,7 @@ host.innerHTML = '<div class="wrap"><a class="brand" href="./"><i></i>番组<b>�
 + '<span class="build" id="build">' + (document.body.dataset.build || '') + '</span></div>';
 }
 function bootAnime() {
-return j('./data/anime.json').then(function (d) {
+return jd('anime.json').then(function (d) {
 ANI.poster = d.poster || ''; ANI.posterSd = d.posterSd || '';
 ANI.rows = d.rows || [];
 ANI.extra = d.extra || {}; ANI.year = d.year || new Date().getFullYear();
