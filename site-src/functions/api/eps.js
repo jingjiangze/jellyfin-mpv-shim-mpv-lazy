@@ -16,7 +16,11 @@
  * 整季包/季号/话数上限规则，否则「按需取的」和「预建的」会出现不一致的结果。
  */
 
-const API = 'http://120.48.56.189/pan/api/search';
+/* 后端地址：默认走「域名形式」的 IP（nip.io 通配 DNS），因为 CF Worker 以
+   IP 作 Host 去取会被判 1003（CF 禁止直连 IP 访问其代理源站）。
+   该域名在 nginx 的 80 端口 pan 块里已加入 server_name。
+   可用 Pages 环境变量 PAN_HUB_API 覆盖。 */
+const API_DEFAULT = 'http://120-48-56-189.nip.io/pan/api/search';
 
 const RE_RANGE = /第\s*(\d{1,4})\s*[-–~〜]\s*(\d{1,4})\s*[話话集]/;
 const RE_SINGLE = /第\s*(\d{1,4})\s*[話话集](?!\d)/;
@@ -151,7 +155,8 @@ async function handle(context) {
     return json({ ok: false, error: 'backend credentials not configured' }, 503);
   }
 
-  const target = API + '?kw=' + encodeURIComponent(name);
+  const api = env.PAN_HUB_API || API_DEFAULT;
+  const target = api + '?kw=' + encodeURIComponent(name);
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 12000);
   let data;
