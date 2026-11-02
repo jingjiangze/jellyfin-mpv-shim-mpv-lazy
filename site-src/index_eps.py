@@ -179,8 +179,7 @@ def build_one(row):
         # 宽范围包（第01-26话 / Batch）不是单片集，直接跳过
         if len(nums) > 3:
             continue
-        if eps_n:
-            nums = {n for n in nums if n <= int(eps_n) + 2}
+        # 不按目录话数截断（连续编号会整片被误杀），剧场版已由 eps_n<=2 规则排除
         for n in nums:
             cand.setdefault(n, []).append(item)
     if not cand:

@@ -165,18 +165,20 @@
     return [];
   }
 
-  function buildEps(name, epsN, results) {
-    var q = norm(name), qs = seasonsOf(name), short = q.length <= 3;
+  function buildEps(name, orig, epsN, results) {
+    var q = norm(name), qo = norm(orig), qs = seasonsOf(name), short = q.length <= 3;
     var cand = {};
     for (var i = 0; i < results.length; i++) {
       var r = results[i];
       var t = String(r.title || r.name || '');
       if (!t || NOISE.test(t) || RE_PACK.test(t)) continue;
-      if (epsN && epsN <= 2) break;                 // 剧场版/OAD 不给分集
+      if (epsN && epsN <= 2) return {};             // 剧场版/OAD 不给分集
       var mg = String(r.magnet || r.m || '');
       if (mg.indexOf('magnet:') !== 0) continue;
       var nt = norm(t);
-      if (!(q && nt.indexOf(q) >= 0)) continue;
+      var hitCn = q && nt.indexOf(q) >= 0;
+      var hitOrig = qo && qo.length >= 4 && nt.indexOf(qo) >= 0;
+      if (!hitCn && !hitOrig) continue;
       if (short) {
         var esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         if (!new RegExp('[\\[\\]【】()（）\\s\\-_/]' + esc + '[\\[\\]【】()（）\\s\\-_/]').test(t)) continue;
@@ -193,7 +195,9 @@
       };
       for (var j = 0; j < nums.length; j++) {
         var n = nums[j];
-        if (epsN && n > epsN + 2) continue;
+        /* 不再用「<= 目录话数 + 2」过滤：很多片用连续编号（黄金神威最终章
+           目录 13 集、发布名是第 60 集），那条上限会把整片判成无结果。
+           「剧场版/OVA 不给分集」已由上面的 epsN<=2 规则兜住。 */
         (cand[n] = cand[n] || []).push(item);
       }
     }
@@ -215,9 +219,10 @@
     }
     return 0;
   }
-  function fetchLive(name, epsN) {
+  function fetchLive(name, epsN, orig) {
     if (LIVE[name]) return Promise.resolve(LIVE[name]);
     var u = LIVE_URL + '?kw=' + encodeURIComponent(name);
+    if (orig) u += '&o=' + encodeURIComponent(orig);
     var ctl = typeof AbortController === 'function' ? new AbortController() : null;
     var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
     return fetch(u, ctl ? { signal: ctl.signal } : undefined).then(function (r) {
@@ -225,7 +230,7 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function (d) {
-      var eps = buildEps(name, epsN, (d && d.results) || []);
+      var eps = buildEps(name, orig, epsN, (d && d.results) || []);
       if (!Object.keys(eps).length) return null;
       var e = { n: name, eps: eps, live: 1 };
       LIVE[name] = e;
@@ -334,7 +339,9 @@
       resolveEntry(name).then(function (e) {
         if (e && e.eps && Object.keys(e.eps).length) return render(m, e);
         box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引里没有，正在向后端查询…</div>';
-        return fetchLive(name, episodeCount(m)).then(function (live) {
+        var origEl = m.querySelector('.orig');
+        var origName = origEl ? origEl.textContent.trim() : '';
+        return fetchLive(name, episodeCount(m), origName).then(function (live) {
           if (live) return render(m, live);
           if (LIVE_DOWN) {                       // 后端连不上：说清楚，别装作"没有"
             box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引里没有，后端暂时连不上</div>';
@@ -358,6 +365,7 @@
     find: findByName,
     norm: norm,
     shardOf: shardOf,
+    buildEps: buildEps,
     hashOf: hashOf,
     setIdx: function (d) { ENTRY = d; return ENTRY; },
   };
