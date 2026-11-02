@@ -205,7 +205,7 @@ PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0b0b0f">
 <title>__TITLE__</title>
-<link rel="stylesheet" href="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/assets/style.css?v=__CV__" onerror="this.onerror=null;this.href='./style.css?v=__CV__'">
+<link rel="stylesheet" href="https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/style.css?v=__CV__" onerror="this.onerror=function(){this.onerror=null;this.href='./style.css?v=__CV__'};this.href='https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/assets/style.css?v=__CV__'">
 </head>
 <body data-page="__PAGE__">
 <header class="site-head"><div class="wrap">
@@ -221,7 +221,7 @@ PAGE = """<!DOCTYPE html>
 </div></header>
 <main class="wrap" id="main"><div class="loading">加载中…</div></main>
 <div class="mask" id="mask"><div class="modal" id="modal"></div></div>
-<script src="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/assets/app.js?v=__JV__" onerror="this.onerror=null;var s=document.createElement('script');s.src='./app.js?v=__JV__';document.body.appendChild(s)"></script>
+<script src="https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/app.js?v=__JV__" onerror="this.onerror=null;var g=document.createElement('script');g.src='https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/assets/app.js?v=__JV__';g.onerror=function(){var l=document.createElement('script');l.src='./app.js?v=__JV__';document.body.appendChild(l)};document.body.appendChild(g)"></script>
 <script defer src="./magnet-eps.js"></script>
 </body>
 </html>

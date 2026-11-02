@@ -15,6 +15,8 @@
   'use strict';
   var ENTRY = null, LOADING = false, LAST_NAME = null, BASE_I = -1, MANIFEST = null;
   var BASES = [
+    /* 数据集为主源：国内 CDN，实测 0.2–0.5s；后续几个只作兜底 */
+    'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/eps/',
     'https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/eps/',
     'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/eps/',
     'https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/eps/'

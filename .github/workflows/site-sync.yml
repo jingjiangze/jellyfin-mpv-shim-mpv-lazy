@@ -239,7 +239,19 @@ jobs:
             cp -f "$f" "$RUNNER_TEMP/ms/assets/"; js_added=$((js_added+1))
           done
           echo "js: copied=$js_added"
-          if [ $((added+updated+js_added)) -eq 0 ]; then echo "dataset already in sync"; exit 0; fi
+          # 站点静态资源（HTML 骨架引用的样式/脚本/加载器）与分集索引分片：
+          # 一律以数据集为主源（国内 CDN，实测 0.2–0.5s），jsDelivr/同源只作兜底。
+          asset_added=0
+          for f in site-src/site/style.css site-src/site/app.js site-src/tpl/magnet-eps.js; do
+            [ -e "$f" ] || continue
+            cp -f "$f" "$RUNNER_TEMP/ms/assets/"; asset_added=$((asset_added+1))
+          done
+          if [ -d media/eps ]; then
+            mkdir -p "$RUNNER_TEMP/ms/assets/eps"
+            cp -f media/eps/*.json "$RUNNER_TEMP/ms/assets/eps/" 2>/dev/null || true
+          fi
+          echo "site assets: copied=$asset_added eps=$(ls -1 "$RUNNER_TEMP/ms/assets/eps" 2>/dev/null | wc -l)"
+          if [ $((added+updated+js_added+asset_added)) -eq 0 ]; then echo "dataset already in sync"; exit 0; fi
           cd "$RUNNER_TEMP/ms"
           git add -A posters assets
           git -c commit.gpgsign=false -c user.name=github-actions               -c user.email=actions@users.noreply.github.com commit -qm "sync posters + js from site repo (+$added ~$updated js=$js_added)"
