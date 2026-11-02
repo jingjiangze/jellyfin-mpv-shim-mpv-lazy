@@ -129,7 +129,13 @@
         .map(function (t) { return '<span class="tagpill">' + esc(t) + '</span>'; }).join('');
       var meta = [];
       if (rec.votes) meta.push(rec.votes + ' 人评分');
-      if (rec.rank) meta.push('排名 #' + rec.rank);
+      if (rec.rank) {
+        /* 排名分位：bgm 那种「评分分布」要每档人数，我们数据里没有（要调
+           Bangumi API，浏览器跨域取不到）；能真算的是排名在全体里的位置。 */
+        var total = ANI.rows.length || 1;
+        var pct = Math.max(0.1, (rec.rank / total) * 100);
+        meta.push('排名 #' + rec.rank + (pct < 20 ? '（前 ' + pct.toFixed(1) + '%）' : ''));
+      }
       var mv = $('#mvotes'); if (mv) mv.textContent = meta.join(' · ');
     });
   }
@@ -331,7 +337,14 @@ function homeDefaults() {
     var y = ($('#f-year') || {}).value || '';
     var t = ($('#f-type') || {}).value || '';
     var sort = ($('#f-sort') || {}).value || 'year';
+    var tg = ($('#f-tag') || {}).value || '';
+    var tgSet = null;
+    if (tg && TAGS && TAGS[tg]) {
+      tgSet = {};
+      TAGS[tg].forEach(function (id) { tgSet[id] = 1; });
+    }
     BROWSE.view = ANI.rows.filter(function (r) {
+      if (tgSet && !tgSet[r[0]]) return false;
       // 有搜索词时不套年份筛选，否则搜老番会被默认年份挡成 0 结果
       if (!q && y && String(r[4] || '') !== y) return false;
       if (t && r[3] !== t) return false;
@@ -339,10 +352,48 @@ function homeDefaults() {
       return true;
     });
     if (sort === 'rating') BROWSE.view.sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
+    else if (sort === 'rank') BROWSE.view.sort(function (a, b) {
+      var ra = a[12] || 0, rb = b[12] || 0;
+      if (ra && rb) return ra - rb;
+      if (ra) return -1;
+      if (rb) return 1;
+      return (b[7] || 0) - (a[7] || 0);
+    });
     else if (sort === 'name') BROWSE.view.sort(function (a, b) { return String(a[2] || a[1]).localeCompare(String(b[2] || b[1]), 'zh'); });
     else BROWSE.view.sort(function (a, b) { return (b[4] || 0) - (a[4] || 0) || (b[7] || 0) - (a[7] || 0); });
     renderBrowse(true);
   }
+  /* 标签索引按需加载：tags.json 只在上万人点开「标签」筛选时才拉，
+     8,851 条的 tag→id 映射有几百 KB，进站不背这个包袱。 */
+  var TAGS = null;
+  function ensureTags() {
+    if (TAGS) return Promise.resolve(TAGS);
+    return j('./data/tags.json').then(function (d) {
+      TAGS = d || {};
+      return TAGS;
+    }, function () { TAGS = {}; return TAGS; });
+  }
+  function mountTagFilter() {
+    var sel = $('#f-tag');
+    if (!sel) return;
+    sel.onchange = function () {
+      if (!TAGS) {
+        ensureTags().then(function () { applyBrowse(); });
+        return;
+      }
+      applyBrowse();
+    };
+    if (sel.getAttribute('data-ready')) return;
+    sel.setAttribute('data-ready', '1');
+    ensureTags().then(function (t) {
+      var names = Object.keys(t).sort(function (a, b) { return t[b].length - t[a].length; });
+      sel.innerHTML = '<option value="">全部</option>'
+        + names.map(function (n) {
+          return '<option value="' + n + '">' + n + '（' + t[n].length + '）</option>';
+        }).join('');
+    });
+  }
+
   function initBrowse() {
     var years = {};
     ANI.rows.forEach(function (r) { if (r[4]) years[r[4]] = (years[r[4]] || 0) + 1; });
@@ -356,13 +407,16 @@ function homeDefaults() {
       + '<option value="ova">OVA</option><option value="web">网络</option></select></label>'
       + '<label class="f-label">排序 <select id="f-sort">'
       + '<option value="year">年份（新→旧）</option><option value="rating">评分（高→低）</option>'
+      + '<option value="rank">排名（前→后）</option>'
       + '<option value="name">标题</option></select></label>'
+      + '<label class="f-label">标签 <select id="f-tag"><option value="">全部</option></select></label>'
       + '<span class="f-hint" id="hint"></span></div>'
       + '<div class="grid" id="grid"></div>'
       + '<div class="morewrap" id="morewrap" hidden><button class="morebtn" id="morebtn" type="button"></button></div>';
     $('#f-year').value = ys[0] ? String(ys[0]) : '';
     $('#morebtn').onclick = function () { renderBrowse(false); };
     ['#f-year', '#f-type', '#f-sort'].forEach(function (s) { $(s).addEventListener('change', applyBrowse); });
+    mountTagFilter();
     applyBrowse();
   }
 
@@ -371,13 +425,16 @@ function homeDefaults() {
 
   /* 豆瓣 / TMDB 卡片刻意用 .mcard（不是 .card）：文件底部的全局委托只看 .card，
      用 .card 会被当成番剧去开弹窗。 */
+  /* 字段取自 data/movies.json 的契约：{n,u,img,r,y}（豆瓣条目没有 y）。
+     兼容 title/url/rating/year 旧写法，免得数据换名就整片空白。 */
   function mcard(x) {
     var img = x.img ? '<img src="' + esc(x.img) + '" loading="lazy" decoding="async" alt="">'
                     : '<div class="ph">🎬</div>';
-    var sub = [(x.rating ? '★ ' + Number(x.rating).toFixed(1) : ''), (x.year || '')]
+    var rate = (x.r != null && x.r !== '') ? x.r : x.rating;
+    var sub = [(rate ? '★ ' + Number(rate).toFixed(1) : ''), (x.y || x.year || '')]
       .filter(Boolean).join(' · ');
-    return '<article class="mcard"><a href="' + esc(x.url || '#') + '" target="_blank" rel="noopener">'
-      + '<div class="pw">' + img + '</div><div class="t">' + esc(x.title || '') + '</div>'
+    return '<article class="mcard"><a href="' + esc(x.u || x.url || '#') + '" target="_blank" rel="noopener">'
+      + '<div class="pw">' + img + '</div><div class="t">' + esc(x.n || x.title || '') + '</div>'
       + '<div class="sub2">' + sub + '</div></a></article>';
   }
 
