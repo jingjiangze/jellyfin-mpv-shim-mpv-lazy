@@ -2,10 +2,10 @@ name: site-sync
 
 # 刮削 + 构建 + 部署全在 GitHub 上跑。数据源已实测可达（AniList/TMDB/豆瓣/B站）。
 # 每个抓取步骤单独设超时 + 单轮上限：卡住会失败而不是无声挂几小时，多跑几轮自然收敛。
+# 触发方式：由 pipeline.yml 每 4 小时触发；也可手动 dispatch。
 
+# 定时统一由 .github/workflows/pipeline.yml 触发（保留 dispatch 供手工重跑）
 on:
-  schedule:
-    - cron: "10 */4 * * *"   # 每 4 小时一轮（北京时间 02:10/06:10/10:10/14:10/18:10/22:10）
   workflow_dispatch:
 
 permissions:
@@ -256,6 +256,21 @@ jobs:
             echo "::error::push to ModelScope failed"; exit 1
           fi
           echo "pushed: +$added ~$updated posters"
+
+      # GitHub 镜像：data JSON（含 64 个详情分片）+ css/js/loader，增量推送
+      # （只推内容变化的 blob，否则每轮 8MB 会把仓库撑爆）。数据集仍是主源。
+      # 必须排在 Sync posters to ModelScope 之后：它读的是本轮构建产物
+      # site-src/site/{data,style.css,app.js,magnet-eps.js}，而 Restore state
+      # + Build pages 才产出这些文件。push_data_cdn.py 用 cwd 的 site/ 读文件
+      # （ROOT = Path.cwd()），所以这里必须给 working-directory: site-src。
+      # 失败不阻断部署（continue-on-error），但要留下 warning 注解。
+      - name: Push data JSON to GitHub CDN
+        timeout-minutes: 10
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -u push_data_cdn.py --yes || { echo "::warning::GitHub CDN 镜像推送失败（非致命，数据集仍是主源）"; exit 1; }
 
       # style.css / app.js 推到 media/assets/，由 jsDelivr(gcore) 分发。
       # 不走 `git add -A media`：实测那条路 media/assets 进不了提交

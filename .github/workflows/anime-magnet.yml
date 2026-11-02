@@ -1,10 +1,9 @@
 name: anime-magnet
 
 # 分集磁力索引：8 分片并行打聚合站，publish 统一合并提交（并发 push 同一文件会互相覆盖）。
+# 定时统一由 .github/workflows/pipeline.yml 触发（保留 dispatch 供手工重跑）
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "15 */3 * * *"
 
 permissions:
   contents: write

@@ -1,0 +1,221 @@
+name: pipeline
+
+# 单一编排入口：按序触发刮削链路各 workflow 并等待其间完成，避免三条 workflow
+# 各带独立 cron 时并发推同一个 ModelScope 数据集仓库。
+# 设计要点：
+#  - 每步一律 if: always()：anime-detail 自 2026-11-01 起在 Report coverage 步骤失败
+#    （JSONDecodeError），其产物 site-src/site/anime/*.json 是陈旧的，但 covers /
+#    site-sync 用旧分片也能构建 —— 绝不能因为 detail 失败就阻断下游。
+#  - 只有 site-sync（部署终点）失败才让整个 job 失败（见文件末尾的收尾步骤）。
+#  - 被触发的 workflow 自带 concurrency group（site-sync / anime-magnet / anime-covers），
+#    与本文件的 group: pipeline 不同组，不会死锁。
+
+on:
+  schedule:
+    - cron: "5 */4 * * *"   # 每 4 小时的第 5 分钟
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Run anime-catalog
+        id: catalog
+        if: always()
+        timeout-minutes: 20
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          wait_wf() {
+            WF="$1"; LIMIT="$2"
+            # 先记下触发前的最后一个 run，再等「出现一个新 run」，否则会拿到上一轮的旧 run
+            PREV=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+            if ! gh workflow run "$WF" --repo "$GITHUB_REPOSITORY"; then
+              echo "::error::$WF 触发失败"; return 1
+            fi
+            ID=""
+            for _ in $(seq 1 18); do
+              sleep 5
+              NEW=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+              if [ -n "$NEW" ] && [ "$NEW" != "0" ] && [ "$NEW" != "$PREV" ]; then ID="$NEW"; break; fi
+            done
+            if [ -z "$ID" ]; then echo "::error::$WF 触发后未发现新 run"; return 1; fi
+            echo "run id=$ID ($WF, prev=$PREV)"
+            for i in $(seq 1 $((LIMIT*6))); do
+              S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
+              case "$S" in
+                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || return 1 ;;
+              esac
+              sleep 10
+            done
+            echo "::warning::$WF 等待超时（${LIMIT}m）"; exit 1
+          }
+          wait_wf anime-catalog.yml 15
+
+      - name: Run anime-detail
+        id: detail
+        if: always()
+        timeout-minutes: 30
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          wait_wf() {
+            WF="$1"; LIMIT="$2"
+            # 先记下触发前的最后一个 run，再等「出现一个新 run」，否则会拿到上一轮的旧 run
+            PREV=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+            if ! gh workflow run "$WF" --repo "$GITHUB_REPOSITORY"; then
+              echo "::error::$WF 触发失败"; return 1
+            fi
+            ID=""
+            for _ in $(seq 1 18); do
+              sleep 5
+              NEW=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+              if [ -n "$NEW" ] && [ "$NEW" != "0" ] && [ "$NEW" != "$PREV" ]; then ID="$NEW"; break; fi
+            done
+            if [ -z "$ID" ]; then echo "::error::$WF 触发后未发现新 run"; return 1; fi
+            echo "run id=$ID ($WF, prev=$PREV)"
+            for i in $(seq 1 $((LIMIT*6))); do
+              S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
+              case "$S" in
+                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || return 1 ;;
+              esac
+              sleep 10
+            done
+            echo "::warning::$WF 等待超时（${LIMIT}m）"; exit 1
+          }
+          wait_wf anime-detail.yml 25
+
+      - name: Run anime-covers
+        id: covers
+        if: always()
+        timeout-minutes: 30
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          wait_wf() {
+            WF="$1"; LIMIT="$2"
+            # 先记下触发前的最后一个 run，再等「出现一个新 run」，否则会拿到上一轮的旧 run
+            PREV=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+            if ! gh workflow run "$WF" --repo "$GITHUB_REPOSITORY"; then
+              echo "::error::$WF 触发失败"; return 1
+            fi
+            ID=""
+            for _ in $(seq 1 18); do
+              sleep 5
+              NEW=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+              if [ -n "$NEW" ] && [ "$NEW" != "0" ] && [ "$NEW" != "$PREV" ]; then ID="$NEW"; break; fi
+            done
+            if [ -z "$ID" ]; then echo "::error::$WF 触发后未发现新 run"; return 1; fi
+            echo "run id=$ID ($WF, prev=$PREV)"
+            for i in $(seq 1 $((LIMIT*6))); do
+              S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
+              case "$S" in
+                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || return 1 ;;
+              esac
+              sleep 10
+            done
+            echo "::warning::$WF 等待超时（${LIMIT}m）"; exit 1
+          }
+          wait_wf anime-covers.yml 25
+
+      - name: Run anime-magnet
+        id: magnet
+        if: always()
+        timeout-minutes: 35
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          wait_wf() {
+            WF="$1"; LIMIT="$2"
+            # 先记下触发前的最后一个 run，再等「出现一个新 run」，否则会拿到上一轮的旧 run
+            PREV=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+            if ! gh workflow run "$WF" --repo "$GITHUB_REPOSITORY"; then
+              echo "::error::$WF 触发失败"; return 1
+            fi
+            ID=""
+            for _ in $(seq 1 18); do
+              sleep 5
+              NEW=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+              if [ -n "$NEW" ] && [ "$NEW" != "0" ] && [ "$NEW" != "$PREV" ]; then ID="$NEW"; break; fi
+            done
+            if [ -z "$ID" ]; then echo "::error::$WF 触发后未发现新 run"; return 1; fi
+            echo "run id=$ID ($WF, prev=$PREV)"
+            for i in $(seq 1 $((LIMIT*6))); do
+              S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
+              case "$S" in
+                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || return 1 ;;
+              esac
+              sleep 10
+            done
+            echo "::warning::$WF 等待超时（${LIMIT}m）"; exit 1
+          }
+          wait_wf anime-magnet.yml 30
+
+      - name: Run site-sync
+        id: sync
+        if: always()
+        timeout-minutes: 40
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          wait_wf() {
+            WF="$1"; LIMIT="$2"
+            # 先记下触发前的最后一个 run，再等「出现一个新 run」，否则会拿到上一轮的旧 run
+            PREV=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+            if ! gh workflow run "$WF" --repo "$GITHUB_REPOSITORY"; then
+              echo "::error::$WF 触发失败"; return 1
+            fi
+            ID=""
+            for _ in $(seq 1 18); do
+              sleep 5
+              NEW=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+              if [ -n "$NEW" ] && [ "$NEW" != "0" ] && [ "$NEW" != "$PREV" ]; then ID="$NEW"; break; fi
+            done
+            if [ -z "$ID" ]; then echo "::error::$WF 触发后未发现新 run"; return 1; fi
+            echo "run id=$ID ($WF, prev=$PREV)"
+            for i in $(seq 1 $((LIMIT*6))); do
+              S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
+              case "$S" in
+                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || return 1 ;;
+              esac
+              sleep 10
+            done
+            echo "::warning::$WF 等待超时（${LIMIT}m）"; exit 1
+          }
+          wait_wf site-sync.yml 35
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## pipeline 结果"
+            echo ""
+            echo "| 步骤 | 结论 |"
+            echo "|---|---|"
+            echo "| anime-catalog | ${{ steps.catalog.outcome }} |"
+            echo "| anime-detail | ${{ steps.detail.outcome }} |"
+            echo "| anime-covers | ${{ steps.covers.outcome }} |"
+            echo "| anime-magnet | ${{ steps.magnet.outcome }} |"
+            echo "| site-sync | ${{ steps.sync.outcome }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 收尾：只有部署终点 site-sync 失败才让 job 失败；其余步骤失败仅记录。
+      - name: Fail if site-sync failed
+        if: always() && steps.sync.outcome != 'success'
+        run: |
+          echo "::error::site-sync 未成功（outcome=${{ steps.sync.outcome }}），部署链路失败"
+          exit 1
