@@ -250,6 +250,11 @@ jobs:
             mkdir -p "$RUNNER_TEMP/ms/assets/eps"
             cp -f media/eps/*.json "$RUNNER_TEMP/ms/assets/eps/" 2>/dev/null || true
           fi
+          # 页面 HTML 也镜像一份：数据集是主存，GitHub 是次存（构建产物本身不进仓，
+          # 只有 dist 里的这份镜像能让人从数据集完整取回一个可跑的站点）。
+          mkdir -p "$RUNNER_TEMP/ms/assets/site"
+          cp -f site-src/site/index.html site-src/site/anime.html site-src/site/library.html                 "$RUNNER_TEMP/ms/assets/site/" 2>/dev/null || true
+          echo "html: $(ls -1 "$RUNNER_TEMP/ms/assets/site" 2>/dev/null | wc -l) 页"
           echo "site assets: copied=$asset_added eps=$(ls -1 "$RUNNER_TEMP/ms/assets/eps" 2>/dev/null | wc -l)"
           if [ $((added+updated+js_added+asset_added)) -eq 0 ]; then echo "dataset already in sync"; exit 0; fi
           cd "$RUNNER_TEMP/ms"
