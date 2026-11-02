@@ -115,46 +115,144 @@
   }
   function close() { $('#mask').classList.remove('on'); }
 
-  /* ---------------- 首页：今年新番，按周 / 按月 ---------------- */
-  function renderHome(mode) {
-    var y = ANI.year;
-    var list = ANI.rows.filter(function (r) { return r[4] === y; });
-    $('#cnt').textContent = y + ' 年 · ' + list.length + ' 部';
-    var main = $('#main');
-    var html = '<div class="tabs"><button class="tabbtn' + (mode === 'week' ? ' on' : '')
-      + '" data-mode="week" type="button">按周</button><button class="tabbtn'
-      + (mode === 'month' ? ' on' : '') + '" data-mode="month" type="button">按月</button></div>';
+/* ---------------- 首页：年 → 季度 → 周几（三级下钻）+ 榜单 ---------------- */
+var HOME = { y: 0, q: 0, wd: 0 };
+var QS = [1, 2, 3, 4];
 
-    if (mode === 'week') {
-      for (var w = 1; w <= 7; w++) {
-        var g = list.filter(function (r) { return r[6] === w; })
-          .sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
-        if (!g.length) continue;
-        html += '<section class="block"><div class="bhead"><h2>' + WD[w - 1] + '</h2><span>'
-          + g.length + ' 部</span></div><div class="grid">'
-          + g.map(function (r) { return animeCard(r, { showYear: 0 }); }).join('') + '</div></section>';
-      }
-      var nowd = list.filter(function (r) { return !r[6]; });
-      if (nowd.length) {
-        html += '<section class="block"><div class="bhead"><h2>放送日未知</h2><span>'
-          + nowd.length + ' 部</span></div><div class="grid">'
-          + nowd.map(function (r) { return animeCard(r); }).join('') + '</div></section>';
-      }
-    } else {
-      for (var mo = 1; mo <= 12; mo++) {
-        var gm = list.filter(function (r) { return r[5] === mo; })
-          .sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
-        if (!gm.length) continue;
-        html += '<section class="block"><div class="bhead"><h2>' + mo + ' 月</h2><span>'
-          + gm.length + ' 部</span></div><div class="grid">'
-          + gm.map(function (r) { return animeCard(r); }).join('') + '</div></section>';
-      }
+function seasonOf(m) { return m ? Math.ceil(m / 3) : 0; }
+
+function yearRows(y) { return ANI.rows.filter(function (r) { return r[4] === y; }); }
+
+function homeRows() {
+  return yearRows(HOME.y).filter(function (r) {
+    if (HOME.q && seasonOf(r[5]) !== HOME.q) return false;
+    if (HOME.wd && r[6] !== HOME.wd) return false;
+    return true;
+  }).sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
+}
+
+function chip(label, on, attr, val) {
+  return '<button class="chip' + (on ? ' on' : '') + '" type="button" ' + attr + '="' + val + '">'
+    + label + '</button>';
+}
+
+/* 左侧（竖屏顶部）选择面板 */
+function renderLevels() {
+  var ys = {}, qs = {};
+  ANI.rows.forEach(function (r) {
+    if (r[4]) ys[r[4]] = (ys[r[4]] || 0) + 1;
+    var q = seasonOf(r[5]);
+    if (r[4] === HOME.y && q) qs[q] = (qs[q] || 0) + 1;
+  });
+  var ylist = Object.keys(ys).map(Number).sort(function (a, b) { return b - a; });
+  var qlist = Object.keys(qs).map(Number).sort();
+
+  var h = '<aside class="levels">';
+  h += '<div class="lv"><div class="lv-h">年份</div><div class="chips">'
+    + '<select class="lv-select" id="lv-y">'
+    + ylist.map(function (y) {
+      return '<option value="' + y + '"' + (y === HOME.y ? ' selected' : '') + '>'
+        + y + ' 年（' + ys[y] + '）</option>';
+    }).join('')
+    + '</select></div></div>';
+
+  h += '<div class="lv"><div class="lv-h">季度</div><div class="chips">'
+    + chip('全部', !HOME.q, 'data-q', 0)
+    + qlist.map(function (q) {
+      return chip('第' + q + '季<span class="lv-n">' + qs[q] + '</span>', q === HOME.q, 'data-q', q);
+    }).join('')
+    + '</div></div>';
+
+  h += '<div class="lv"><div class="lv-h">星期</div><div class="chips">'
+    + chip('全部', !HOME.wd, 'data-wd', 0)
+    + WD.map(function (d, i) { return chip(d.slice(1), HOME.wd === i + 1, 'data-wd', i + 1); }).join('')
+    + '</div></div>';
+  return h + '</aside>';
+}
+
+function rankBlock(id, title, sub, rows) {
+  if (!rows.length) return '';
+  return '<section class="block"><div class="bhead"><h2>' + title + '</h2><span>' + sub + '</span>'
+    + '</div><div class="grid" id="' + id + '">'
+    + rows.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('')
+    + '</div></section>';
+}
+
+function renderHome() {
+  if (!HOME.y) homeDefaults();
+  var rows = homeRows();
+  var main = $('#main');
+
+  var head = '<div class="bhead"><h2>' + HOME.y + ' 年'
+    + (HOME.q ? ' 第' + HOME.q + ' 季度' : '')
+    + (HOME.wd ? ' · ' + WD[HOME.wd - 1] : '')
+    + '</h2><span>' + rows.length + ' 部</span></div>';
+
+  var body = '';
+  if (rows.length && !HOME.wd) {
+    /* 没指定星期：按周一到周日分组，周一~周日固定顺序（和 bgm 一致） */
+    for (var w = 1; w <= 7; w++) {
+      var g = rows.filter(function (r) { return r[6] === w; });
+      if (!g.length) continue;
+      body += '<section class="block"><div class="bhead lv2"><h2>' + WD[w - 1] + '</h2><span>'
+        + g.length + ' 部</span></div><div class="grid">'
+        + g.map(function (r) { return animeCard(r, { showYear: 0 }); }).join('') + '</div></section>';
     }
-    main.innerHTML = html;
-    main.querySelectorAll('.tabbtn').forEach(function (b) {
-      b.onclick = function () { renderHome(b.dataset.mode); };
-    });
+    var unknown = rows.filter(function (r) { return !r[6]; });
+    if (unknown.length) {
+      body += '<section class="block"><div class="bhead lv2"><h2>放送日未知</h2><span>'
+        + unknown.length + ' 部</span></div><div class="grid">'
+        + unknown.map(function (r) { return animeCard(r); }).join('') + '</div></section>';
+    }
+  } else if (rows.length) {
+    body = '<div class="grid">' + rows.map(function (r) {
+      return animeCard(r, { showYear: 0 });
+    }).join('') + '</div>';
+  } else {
+    body = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
   }
+
+  /* 榜单：季度榜取当前季度评分 Top 12；总榜取全站 Top 24（跨年份） */
+  var qPool = yearRows(HOME.y).filter(function (r) {
+    return !HOME.q || seasonOf(r[5]) === HOME.q;
+  }).sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); }).slice(0, 12);
+  var allPool = ANI.rows.filter(function (r) { return r[7]; })
+    .sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); }).slice(0, 24);
+
+  main.innerHTML = '<div class="home-cols">' + renderLevels()
+    + '<div class="home-main"><div class="home-head">' + head + '</div>' + body + '</div></div>'
+    + rankBlock('rank-q', (HOME.y) + ' 年' + (HOME.q ? ' 第' + HOME.q + ' 季度' : '')
+      + '榜', '按评分 Top 12', qPool)
+    + rankBlock('rank-all', '总榜', '全站 Top 24', allPool);
+
+  /* 交互 */
+  main.querySelectorAll('[data-q]').forEach(function (b) {
+    b.onclick = function () { HOME.q = Number(b.dataset.q); HOME.wd = 0; renderHome(); };
+  });
+  main.querySelectorAll('[data-wd]').forEach(function (b) {
+    b.onclick = function () { HOME.wd = Number(b.dataset.wd); renderHome(); };
+  });
+  var ysel = $('#lv-y');
+  if (ysel) ysel.onchange = function () { HOME.y = Number(ysel.value); HOME.q = 0; HOME.wd = 0; renderHome(); };
+
+  bindCards(main);
+  return;
+}
+
+function homeDefaults() {
+  var y = ANI.year || new Date().getFullYear();
+  var inY = yearRows(y);
+  if (!inY.length) {
+    var ys = {};
+    ANI.rows.forEach(function (r) { if (r[4]) ys[r[4]] = 1; });
+    y = Math.max.apply(null, Object.keys(ys).map(Number));
+    inY = yearRows(y);
+  }
+  /* 默认落在「最新季度」；没有月份信息的则不限季度 */
+  var q = 0;
+  inY.forEach(function (r) { var s = seasonOf(r[5]); if (s > q) q = s; });
+  HOME = { y: y, q: q, wd: 0 };
+}
 
   /* ---------------- 番剧：全量目录 ---------------- */
   var BROWSE = { view: [], shown: 0, page: 120 };
@@ -273,14 +371,14 @@
         qt = setTimeout(applyBrowse, 220);
       });
     } else {
-      renderHome('week');
+      renderHome();
       $('#q').addEventListener('input', (function () {
         var t = 0;
         return function () {
           clearTimeout(t);
           var q = nrm(this.value.trim());
           t = setTimeout(function () {
-            if (!q) { renderHome('week'); return; }
+            if (!q) { renderHome(); return; }
             var hit = ANI.rows.filter(function (r) {
               return (r[1] + ' ' + (r[2] || '')).toLowerCase().indexOf(q) !== -1;
             }).slice(0, 120);
