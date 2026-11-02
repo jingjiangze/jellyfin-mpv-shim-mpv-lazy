@@ -188,6 +188,8 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
   margin: var(--s2) 0 2px; min-height: 2.84em;
   font-size: var(--fs-sm); font-weight: 600; line-height: 1.42;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  /* 英文按整词换行：之前 break-all 会把 "Yu-hachi" 拆成 "Yu-" / "hachi" */
+  word-break: normal; overflow-wrap: break-word;
 }
 .sub2 { font-size: var(--fs-xs); color: var(--dim); line-height: 1.5; }
 
