@@ -58,11 +58,11 @@
     var id = r[0], name = r[2] || r[1];
     var ex = ANI.extra[id] || [];
     var alCover = ex[1] || '';
-    var src = ANI.poster + id + '.jpg';
+    var src = posterSrc(id);
+    var fb = PSZ.mode === 'sd' ? [alCover, ANI.poster + id + '.jpg'] : [alCover];
     var h = '<article class="card" data-id="' + id + '"><div class="pw">'
-      + '<img src="' + esc(src) + '"' + fbAttr([alCover]) + ' loading="lazy" decoding="async" alt="">'
+      + '<img src="' + esc(src) + '"' + fbAttr(fb) + ' loading="lazy" decoding="async" alt="">'
       + (r[7] ? '<span class="rate">★ ' + Number(r[7]).toFixed(1) + '</span>' : '')
-      + (r[10] ? '<span class="mag">磁力</span>' : '')
       + (r[8] ? '<span class="ep">' + r[8] + ' 集</span>' : '')
       + '</div><div class="t">' + titleHTML(name) + '</div><div class="sub2">'
       + [(opt && opt.showYear ? (r[4] || '') : ''), TYPE[r[3]] || r[3] || ''].filter(Boolean).join(' · ')
@@ -168,14 +168,14 @@ function renderLevels() {
   /* 首页只留「季度 + 星期」：年份固定为当前年（顶栏计数里已标明是哪一年），
      少一层选择，季度一眼可选。要看往年去「番剧」页筛。 */
   var h = '<aside class="levels">';
-  h += '<div class="lv"><div class="lv-h">季度</div><div class="chips">'
+  h += '<div class="lv"><div class="lv-h">季度</div><div class="chips chips--col">'
     + chip('全部', !HOME.q, 'data-q', 0)
     + qlist.map(function (q) {
-      return chip('第' + q + '季<span class="lv-n">' + qs[q] + '</span>', q === HOME.q, 'data-q', q);
+      return chip('第' + q + '季度<span class="lv-n">' + qs[q] + '</span>', q === HOME.q, 'data-q', q);
     }).join('')
     + '</div></div>';
 
-  h += '<div class="lv"><div class="lv-h">星期</div><div class="chips">'
+  h += '<div class="lv"><div class="lv-h">星期</div><div class="chips chips--wd">'
     + chip('全部', !HOME.wd, 'data-wd', 0)
     + WD.map(function (d, i) { return chip(d, HOME.wd === i + 1, 'data-wd', i + 1); }).join('')
     + '</div></div>';
@@ -239,6 +239,10 @@ function renderHome() {
   }).sort(rankSort).slice(0, 12);
   var allPool = ANI.rows.filter(function (r) { return r[12] || r[7]; })
     .sort(rankSort).slice(0, 24);
+  /* 剧场版精选：只在电影里按同一套排名排序，右侧入口指向独立的电影页 */
+  var movieAll = ANI.rows.filter(function (r) { return r[3] === 'movie'; });
+  var moviePool = movieAll.filter(function (r) { return r[12] || r[7]; })
+    .sort(rankSort).slice(0, 12);
 
   /* 榜单必须落在 .home-main 里：之前拼在 .home-cols 外面，导致左边线跑到
      x=32（内容列是 x=292）并与左侧 sticky 面板的列重叠，滚动时首列被压住。 */
@@ -247,6 +251,11 @@ function renderHome() {
     + rankBlock('rank-q', (HOME.q ? '第' + HOME.q + '季度' : '全部季度') + '榜',
         '按 Bangumi 排名 Top 12', qPool)
     + rankBlock('rank-all', '总榜', '全站排名 Top 24', allPool)
+    + (moviePool.length ? '<section class="block"><div class="bhead"><h2>剧场版 · 精选</h2><span>'
+        + '<a class="morelink" href="movie">全部 ' + movieAll.length + ' 部 ›</a></span></div>'
+        + '<div class="grid">'
+        + moviePool.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('')
+        + '</div></section>' : '')
     + '</div></div>';
 
   /* 交互 */
@@ -331,39 +340,146 @@ function homeDefaults() {
     applyBrowse();
   }
 
-  /* ---------------- 媒体库 ---------------- */
-  function initLibrary() {
-    j('./data/library.json').then(function (d) {
-      var rows = d.rows || [];
-      var base = d.poster || '';
-      $('#cnt').textContent = rows.length + ' 部';
-      function card(r) {
-        var id = r[0], name = r[1], isSeries = r[2], year = r[3], rating = r[4], eps = r[5], bv = r[6], hposter = r[7];
-        var img = hposter ? '<img src="' + esc(base + id + '.jpg') + '" loading="lazy" decoding="async" alt="">'
-                          : '<div class="ph">🎬</div>';
-        return '<article class="card" data-id="' + esc(id) + '"><div class="pw">' + img
-          + (rating ? '<span class="rate">★ ' + Number(rating).toFixed(1) + '</span>' : '')
-          + (eps ? '<span class="ep">' + eps + ' 集</span>' : '')
-          + (bv ? '<span class="badge-bili">B站</span>' : '')
-          + '</div><div class="t">' + titleHTML(name) + '</div><div class="sub2">'
-          + [year, isSeries ? '剧集' : '电影'].filter(Boolean).join(' · ') + '</div></article>';
-      }
-      function paint(q) {
-        var list = rows.filter(function (r) {
-          return !q || (r[1] || '').toLowerCase().indexOf(q) !== -1;
-        });
-        $('#main').innerHTML = '<div class="grid">' + list.map(card).join('') + '</div>';
-        $('#hint') && ($('#hint').textContent = list.length + ' 部');
-      }
-      paint('');
-      $('#q').addEventListener('input', function () { paint(this.value.trim().toLowerCase()); });
+  /* ---------------- 电影：豆瓣新片 / TMDB 热门 / 剧场版全收录 ---------------- */
+  var MOVIE = { all: [], view: [], shown: 0, page: 120, db: [], tm: [] };
+
+  /* 豆瓣 / TMDB 卡片刻意用 .mcard（不是 .card）：文件底部的全局委托只看 .card，
+     用 .card 会被当成番剧去开弹窗。 */
+  function mcard(x) {
+    var img = x.img ? '<img src="' + esc(x.img) + '" loading="lazy" decoding="async" alt="">'
+                    : '<div class="ph">🎬</div>';
+    var sub = [(x.rating ? '★ ' + Number(x.rating).toFixed(1) : ''), (x.year || '')]
+      .filter(Boolean).join(' · ');
+    return '<article class="mcard"><a href="' + esc(x.url || '#') + '" target="_blank" rel="noopener">'
+      + '<div class="pw">' + img + '</div><div class="t">' + esc(x.title || '') + '</div>'
+      + '<div class="sub2">' + sub + '</div></a></article>';
+  }
+
+  function msec(title, list) {
+    return '<section class="msect"><div class="mhead"><h2>' + title + '</h2><span>'
+      + list.length + ' 部</span></div><div class="grid mgrid">'
+      + list.map(function (x) { return mcard(x); }).join('') + '</div></section>';
+  }
+
+  function paintMovieDb() {
+    var box = $('#mdb');
+    if (!box) return;
+    box.innerHTML = msec('豆瓣新片', MOVIE.db) + msec('TMDB 热门', MOVIE.tm);
+  }
+
+  function renderMovie(reset) {
+    var grid = $('#mgrid');
+    if (!grid) return;
+    if (reset) { grid.innerHTML = ''; MOVIE.shown = 0; }
+    var end = Math.min(MOVIE.shown + MOVIE.page, MOVIE.view.length);
+    var html = '';
+    for (var i = MOVIE.shown; i < end; i++) html += animeCard(MOVIE.view[i], { showYear: 1 });
+    grid.insertAdjacentHTML('beforeend', html);
+    MOVIE.shown = end;
+    var left = MOVIE.view.length - MOVIE.shown;
+    var wrap = $('#mmorewrap');
+    if (wrap) wrap.hidden = left <= 0;
+    var btn = $('#mmore');
+    if (btn) {
+      btn.hidden = left <= 0;
+      if (left > 0) btn.textContent = '加载更多 · 还剩 ' + left + ' 部';
+    }
+    var hint = $('#mhint');
+    if (hint) hint.textContent = '筛出 ' + MOVIE.view.length + ' 部，已显示 ' + MOVIE.shown;
+  }
+
+  function applyMovie() {
+    var q = nrm((($('#q') || {}).value || '').trim());
+    var y = ($('#m-year') || {}).value || '';
+    var sort = ($('#m-sort') || {}).value || 'year';
+    MOVIE.view = MOVIE.all.filter(function (r) {
+      /* 和番剧页一致：有搜索词时不套年份筛选，否则搜老片会被年份挡成 0 结果 */
+      if (!q && y && String(r[4] || '') !== y) return false;
+      if (q && !hit(r[1] + ' ' + (r[2] || ''), q)) return false;
+      return true;
     });
+    if (sort === 'rating') MOVIE.view.sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
+    else if (sort === 'name') MOVIE.view.sort(function (a, b) { return String(a[2] || a[1]).localeCompare(String(b[2] || b[1]), 'zh'); });
+    else MOVIE.view.sort(function (a, b) { return (b[4] || 0) - (a[4] || 0) || (b[7] || 0) - (a[7] || 0); });
+    renderMovie(true);
+  }
+
+  function initMovie() {
+    MOVIE.all = ANI.rows.filter(function (r) { return r[3] === 'movie'; });
+    var years = {};
+    MOVIE.all.forEach(function (r) { if (r[4]) years[r[4]] = (years[r[4]] || 0) + 1; });
+    var ys = Object.keys(years).map(Number).sort(function (a, b) { return b - a; });
+    $('#main').innerHTML = '<div id="mdb"></div>'
+      + '<section class="block"><div class="bhead"><h2>剧场版 / 电影全收录</h2>'
+      + '<span class="f-hint" id="mhint"></span></div>'
+      + '<div class="filters">'
+      + '<label class="f-label">年份 <select id="m-year"><option value="">全部</option>'
+      + ys.map(function (v) { return '<option value="' + v + '">' + v + '（' + years[v] + '）</option>'; }).join('')
+      + '</select></label>'
+      + '<label class="f-label">排序 <select id="m-sort">'
+      + '<option value="year">年份（新→旧）</option><option value="rating">评分（高→低）</option>'
+      + '<option value="name">标题</option></select></label></div>'
+      + '<div class="grid" id="mgrid"></div>'
+      + '<div class="morewrap" id="mmorewrap" hidden><button class="morebtn" id="mmore" type="button"></button></div>'
+      + '</section>';
+    var more = $('#mmore');
+    if (more) more.onclick = function () { renderMovie(false); };
+    ['#m-year', '#m-sort'].forEach(function (s) { if ($(s)) $(s).addEventListener('change', applyMovie); });
+    var q = $('#q');
+    if (q) {
+      q.placeholder = '在 ' + MOVIE.all.length + ' 部剧场版里搜…';
+      var qt = 0;
+      q.addEventListener('input', function () {
+        clearTimeout(qt);
+        qt = setTimeout(applyMovie, 220);
+      });
+    }
+    applyMovie();
+    j('./data/movies.json').then(function (d) {
+      MOVIE.db = (d && d.douban) || [];
+      MOVIE.tm = (d && d.tmdb) || [];
+      paintMovieDb();
+    }).catch(function () { paintMovieDb(); });
+  }
+
+  /* 只重画，不重建 DOM：清晰度切换时保留当前筛选与搜索词（状态都在 select / input 上） */
+  function refreshMovie() {
+    if (!$('#mgrid')) return;
+    paintMovieDb();
+    applyMovie();
+  }
+
+  /* ---------------- 海报清晰度开关（#psz 按钮由生成器输出） ---------------- */
+  function repaint() {
+    if (PAGE === 'anime') applyBrowse();
+    else if (PAGE === 'movie') refreshMovie();
+    else renderHome();
+  }
+
+  function syncPsz(btn) {
+    var hd = PSZ.mode === 'hd';
+    btn.textContent = hd ? '高清' : '标准';
+    btn.setAttribute('aria-pressed', hd ? 'false' : 'true');
+  }
+
+  function initPsz() {
+    var btn = document.getElementById('psz');
+    if (!btn) return;
+    syncPsz(btn);
+    btn.onclick = function () {
+      PSZ.mode = PSZ.mode === 'hd' ? 'sd' : 'hd';
+      try { localStorage.setItem('psz', PSZ.mode); } catch (e) { /* 忽略 */ }
+      syncPsz(btn);
+      if ($('#mask')) close();
+      repaint();
+    };
   }
 
   /* ---------------- boot ---------------- */
   function bootAnime() {
     return j('./data/anime.json').then(function (d) {
-      ANI.poster = d.poster || ''; ANI.rows = d.rows || [];
+      ANI.poster = d.poster || ''; ANI.posterSd = d.posterSd || '';
+      ANI.rows = d.rows || [];
       ANI.extra = d.extra || {}; ANI.year = d.year || new Date().getFullYear();
     });
   }
@@ -371,17 +487,11 @@ function homeDefaults() {
   document.addEventListener('click', function (e) {
     var c = e.target.closest && e.target.closest('.card');
     if (!c) return;
-    if (PAGE === 'library') {
-      var id = c.dataset.id;
-      window.open('http://127.0.0.1:8100/web/#/details?id=' + encodeURIComponent(id), '_blank');
-      return;
-    }
     openModal(Number(c.dataset.id));
   });
   $('#mask') && $('#mask').addEventListener('click', function (e) { if (e.target.id === 'mask') close(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
 
-  if (PAGE === 'library') { initLibrary(); return; }
   bootAnime().then(function () {
     if (PAGE === 'anime') {
       $('#q').placeholder = '在 ' + ANI.rows.length + ' 部里搜…';
@@ -391,6 +501,8 @@ function homeDefaults() {
         clearTimeout(qt);
         qt = setTimeout(applyBrowse, 220);
       });
+    } else if (PAGE === 'movie') {
+      initMovie();
     } else {
       renderHome();
       $('#q').addEventListener('input', (function () {
@@ -410,6 +522,8 @@ function homeDefaults() {
         };
       })());
     }
+    /* #psz 必须在数据就位之后再绑：它的 repaint 依赖 ANI.rows */
+    initPsz();
   }).catch(function (e) {
     $('#main').innerHTML = '<div class="loading">数据加载失败：' + esc(e.message || e) + '</div>';
   });
