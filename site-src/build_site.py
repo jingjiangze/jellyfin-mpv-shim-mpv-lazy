@@ -205,7 +205,7 @@ PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0b0b0f">
 <title>__TITLE__</title>
-<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./style.css?v=__CV__">
 </head>
 <body data-page="__PAGE__">
 <header class="site-head"><div class="wrap">
@@ -221,7 +221,7 @@ PAGE = """<!DOCTYPE html>
 </div></header>
 <main class="wrap" id="main"><div class="loading">加载中…</div></main>
 <div class="mask" id="mask"><div class="modal" id="modal"></div></div>
-<script src="./app.js"></script>
+<script src="./app.js?v=__JV__"></script>
 <script defer src="./magnet-eps.js"></script>
 </body>
 </html>
@@ -245,9 +245,16 @@ def main():
     # 404；改用「短 max-age + must-revalidate」（见 tpl/_headers）。
     (SITE / "style.css").write_text(css, encoding="utf-8")
     (SITE / "app.js").write_text(js, encoding="utf-8")
+    # 内容版本号：这两个文件名固定（带哈希会让缓存了旧页的浏览器 404），
+    # 靠 ?v= 换 URL 来绕过缓存。历史坑：早先 /style.css 不存在却标了
+    # immutable，浏览器把 404 兜底的 HTML 永久缓存成 CSS/JS，页面直接白屏。
+    import hashlib as _h
+    cv = _h.sha1(css.encode("utf-8")).hexdigest()[:10]
+    jv = _h.sha1(js.encode("utf-8")).hexdigest()[:10]
     for name, page, title, ph, on_home, on_anime, on_lib in PAGES:
         html = (PAGE.replace("__TITLE__", title).replace("__PAGE__", page)
-                .replace("__CSS__", css).replace("__JS__", js).replace("__BUILD__", BUILD_TAG)
+                .replace("__CV__", cv).replace("__JV__", jv)
+                .replace("__BUILD__", BUILD_TAG)
                 .replace("__PH__", ph)
                 .replace("__ON_HOME__", on_home).replace("__ON_ANIME__", on_anime)
                 .replace("__ON_LIBRARY__", on_lib))
