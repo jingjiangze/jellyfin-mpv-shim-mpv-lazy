@@ -34,6 +34,13 @@
   var ANI = { poster: '', rows: [], extra: {}, year: 0 };
   var shardCache = {};
 
+  /* 卡片标题用：连字符是 CSS 的合法断行点，"Yu-hachi" 会被拆成 "Yu-"/"hachi"。
+     在连字符后插 word joiner（U+2060）阻止断行。只用于 .t —— 弹窗里的 h3
+     要拿去做磁力匹配，绝不能掺入不可见字符。 */
+  function titleHTML(s) {
+    return esc(s).replace(/-/g, '-⁠');
+  }
+
   function animeCard(r, opt) {
     var id = r[0], name = r[2] || r[1];
     var ex = ANI.extra[id] || [];
@@ -44,7 +51,7 @@
       + (r[7] ? '<span class="rate">★ ' + Number(r[7]).toFixed(1) + '</span>' : '')
       + (r[10] ? '<span class="mag">磁力</span>' : '')
       + (r[8] ? '<span class="ep">' + r[8] + ' 集</span>' : '')
-      + '</div><div class="t">' + esc(name) + '</div><div class="sub2">'
+      + '</div><div class="t">' + titleHTML(name) + '</div><div class="sub2">'
       + [(opt && opt.showYear ? (r[4] || '') : ''), TYPE[r[3]] || r[3] || ''].filter(Boolean).join(' · ')
       + '</div></article>';
     return h;
@@ -335,7 +342,7 @@ function homeDefaults() {
           + (rating ? '<span class="rate">★ ' + Number(rating).toFixed(1) + '</span>' : '')
           + (eps ? '<span class="ep">' + eps + ' 集</span>' : '')
           + (bv ? '<span class="badge-bili">B站</span>' : '')
-          + '</div><div class="t">' + esc(name) + '</div><div class="sub2">'
+          + '</div><div class="t">' + titleHTML(name) + '</div><div class="sub2">'
           + [year, isSeries ? '剧集' : '电影'].filter(Boolean).join(' · ') + '</div></article>';
       }
       function paint(q) {
