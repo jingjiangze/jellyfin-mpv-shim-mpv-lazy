@@ -213,17 +213,26 @@ function renderHome() {
   }
 
   /* 榜单：季度榜取当前季度评分 Top 12；总榜取全站 Top 24（跨年份） */
+  /* 榜单排序：有 bgm 排名就按排名（人气+评分综合），没有才退回评分。
+     只按评分排会被「1 人打 10 分」的冷门片霸榜。 */
+  function rankSort(a, b) {
+    var ra = a[12] || 0, rb = b[12] || 0;
+    if (ra && rb) return ra - rb;
+    if (ra) return -1;
+    if (rb) return 1;
+    return (b[7] || 0) - (a[7] || 0);
+  }
   var qPool = yearRows(HOME.y).filter(function (r) {
-    return !HOME.q || seasonOf(r[5]) === HOME.q;
-  }).sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); }).slice(0, 12);
-  var allPool = ANI.rows.filter(function (r) { return r[7]; })
-    .sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); }).slice(0, 24);
+    return (!HOME.q || seasonOf(r[5]) === HOME.q) && (r[12] || r[7]);
+  }).sort(rankSort).slice(0, 12);
+  var allPool = ANI.rows.filter(function (r) { return r[12] || r[7]; })
+    .sort(rankSort).slice(0, 24);
 
   main.innerHTML = '<div class="home-cols">' + renderLevels()
     + '<div class="home-main"><div class="home-head">' + head + '</div>' + body + '</div></div>'
     + rankBlock('rank-q', (HOME.y) + ' 年' + (HOME.q ? ' 第' + HOME.q + ' 季度' : '')
-      + '榜', '按评分 Top 12', qPool)
-    + rankBlock('rank-all', '总榜', '全站 Top 24', allPool);
+      + '榜', '按 Bangumi 排名 Top 12', qPool)
+    + rankBlock('rank-all', '总榜', '全站排名 Top 24', allPool);
 
   /* 交互 */
   main.querySelectorAll('[data-q]').forEach(function (b) {

@@ -131,8 +131,11 @@ def build_anime():
         key = norm(cn or name)
         has_mag = 1 if (str(sid) in eps_ids or key in eps_names
                       or (len(key) >= 4 and any(key in t for t in mag_titles))) else 0
+        # r[12] = bgm 排名：榜单要用「人气+评分综合」排序，
+        # 只按评分排会让「1 人打 10 分」的冷门片霸榜
         rows.append([sid, name, cn, (it.get("t") or "").lower(), y, month, wd,
-                     d.get("rating"), d.get("episodes") or 0, 1 if d else 0, has_mag, day])
+                     d.get("rating"), d.get("episodes") or 0, 1 if d else 0, has_mag, day,
+                     (d or {}).get("rank") or 0])
 
         # 只给能匹配到 AniList 的条目挂补充字段，避免索引膨胀
         a = al.get(norm(cn)) or al.get(norm(name))
