@@ -131,7 +131,7 @@
       /* 评分分布：10 根柱子（1…10 分），高度按各档人数归一 */
       if (Array.isArray(rec.rc) && rec.rc.length === 10 && !document.querySelector('#rdist')) {
         var host = document.querySelector('#modal .mrate');
-        if (host) {
+        if (host && host.parentNode) {
           var mx = Math.max.apply(null, rec.rc);
           var sum = rec.rc.reduce(function (a, b) { return a + b; }, 0);
           var bars = rec.rc.map(function (n, i) {
