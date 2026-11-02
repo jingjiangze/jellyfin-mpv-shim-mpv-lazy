@@ -162,6 +162,16 @@ def build_anime():
 
 def build_movies():
     """电影页数据：豆瓣（fresh.json 的 movies）+ TMDB（fetch_tmdb.py 的 tmdb.json）。"""
+    # 豆瓣条目简介：movies-intro.json 由单独脚本抓（按豆瓣 subject_id 索引）。
+    # 文件缺失 / 解析失败一律当空，不影响构建。
+    intros = {}
+    ip = SITE / "movies-intro.json"
+    if ip.is_file():
+        try:
+            intros = (json.loads(ip.read_text(encoding="utf-8")).get("items") or {})
+        except (ValueError, OSError):
+            intros = {}
+
     douban = []
     fp = SITE / "fresh.json"
     if fp.is_file():
@@ -170,9 +180,18 @@ def build_movies():
             for x in (fresh.get("movies") or []):
                 if not isinstance(x, dict) or not x.get("n"):
                     continue
-                douban.append({"n": x["n"], "u": x.get("u") or "",
+                u = x.get("u") or ""
+                m = re.search(r"/subject/(\d+)", u)
+                subj_id = m.group(1) if m else ""
+                info = intros.get(subj_id)
+                if not isinstance(info, dict):
+                    info = {}
+                douban.append({"n": x["n"], "u": u,
                                "img": x.get("img") or "", "r": x.get("r"),
-                               "k": x.get("k") or ""})
+                               "k": x.get("k") or "",
+                               "id": subj_id,
+                               "intro": info.get("intro") or "",
+                               "sub": info.get("sub") or ""})
         except (ValueError, OSError):
             pass
 
@@ -185,7 +204,9 @@ def build_movies():
                     continue
                 tmdb.append({"n": x["n"], "u": x.get("u") or "",
                              "img": x.get("img") or "", "r": x.get("r"),
-                             "y": x.get("y"), "id": x.get("id")})
+                             "y": x.get("y"), "id": x.get("id"),
+                             "ov": x.get("ov") or "",
+                             "ot": x.get("ot") or ""})
         except (ValueError, OSError):
             pass
 
@@ -194,7 +215,10 @@ def build_movies():
     (out / "movies.json").write_text(
         json.dumps({"built": BUILD_TAG, "douban": douban, "tmdb": tmdb},
                    ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"movies: douban {len(douban)} / tmdb {len(tmdb)}")
+    n_intro = sum(1 for d in douban if d["intro"])
+    n_ov = sum(1 for t in tmdb if t["ov"])
+    print(f"movies: douban {len(douban)} / tmdb {len(tmdb)} / "
+          f"有简介 {n_intro}（豆瓣）+ {n_ov}（TMDB）")
     return douban, tmdb
 
 

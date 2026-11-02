@@ -11,7 +11,9 @@
       build_site 读到的 img 前缀与海报目录一致，走 ModelScope 分发。
 
 输出：site/tmdb.json
-  {"built":"MM-DD HH:MM","items":[{"id","n","u","img","r","y"}]}
+  {"built":"MM-DD HH:MM","items":[{"id","n","u","img","r","y","ov","ot"}]}
+  ov = 中文剧情简介（TMDB overview，language=zh-CN 下已是中文）；
+  ot = 原始标题（original_title）。
   下载失败（或没有 poster_path）的条目**不写 img 字段**，前端显示占位。
 
 容错：单条失败 continue；接口全挂就打印后退出（exit 0），CI 不变红，
@@ -108,7 +110,9 @@ def main():
                "u": f"https://www.themoviedb.org/movie/{mid}",
                "img": f"{MODELSCOPE}/posters/tmdb-{mid}.jpg" if ok else "",
                "r": round(float(m.get("vote_average") or 0), 1),
-               "y": int(rel[:4]) if rel[:4].isdigit() else None}
+               "y": int(rel[:4]) if rel[:4].isdigit() else None,
+               "ov": (m.get("overview") or "").strip(),
+               "ot": (m.get("original_title") or "").strip()}
         if not ok:
             rec.pop("img")          # 没下到海报就不给 URL，省得前端全挂空图
         items.append(rec)

@@ -441,31 +441,85 @@ function homeDefaults() {
   /* ---------------- 电影：豆瓣新片 / TMDB 热门 / 剧场版全收录 ---------------- */
   var MOVIE = { all: [], view: [], shown: 0, page: 120, db: [], tm: [] };
 
-  /* 豆瓣 / TMDB 卡片刻意用 .mcard（不是 .card）：文件底部的全局委托只看 .card，
-     用 .card 会被当成番剧去开弹窗。 */
-  /* 字段取自 data/movies.json 的契约：{n,u,img,r,y}（豆瓣条目没有 y）。
-     兼容 title/url/rating/year 旧写法，免得数据换名就整片空白。 */
-  function mcard(x) {
+  /* 豆瓣 / TMDB 卡片刻意用 .mcard（不是 .card）：两种卡走两条弹窗路径 —
+     .card 进 Bangumi 弹窗，.mcard 由 openExtModal 就地展开详情，不直接跳外站。 */
+  /* 字段取自 data/movies.json 的契约：douban {n,u,img,r,k,id,intro,sub}、
+     tmdb {n,u,img,r,y,id,ov,ot}（豆瓣条目没有 y，intro/ov 可能为空串）。
+     兼容 title/url/rating/year 旧写法，免得数据换名就整片空白。
+     data-ext / data-i 供全局委托定位到 MOVIE.db / MOVIE.tm 的下标；
+     不能挂内联 onclick —— paintMovieDb() 每次整块重写 innerHTML，内联绑定会丢。 */
+  function mcard(x, kind, idx) {
     var img = x.img ? '<img src="' + esc(x.img) + '" loading="lazy" decoding="async" alt="">'
                     : '<div class="ph">🎬</div>';
     var rate = (x.r != null && x.r !== '') ? x.r : x.rating;
     var sub = [(rate ? '★ ' + Number(rate).toFixed(1) : ''), (x.y || x.year || '')]
       .filter(Boolean).join(' · ');
-    return '<article class="mcard"><a href="' + esc(x.u || x.url || '#') + '" target="_blank" rel="noopener">'
+    return '<article class="mcard" data-ext="' + esc(kind || '') + '" data-i="'
+      + (idx == null ? '' : idx) + '"><a href="' + esc(x.u || x.url || '#') + '" target="_blank" rel="noopener">'
       + '<div class="pw">' + img + '</div><div class="t">' + esc(x.n || x.title || '') + '</div>'
       + '<div class="sub2">' + sub + '</div></a></article>';
   }
 
-  function msec(title, list) {
+  function msec(title, list, kind) {
     return '<section class="msect"><div class="mhead"><h2>' + title + '</h2><span>'
       + list.length + ' 部</span></div><div class="grid mgrid">'
-      + list.map(function (x) { return mcard(x); }).join('') + '</div></section>';
+      + list.map(function (x, i) { return mcard(x, kind, i); }).join('') + '</div></section>';
+  }
+
+  /* 豆瓣 / TMDB 条目详情弹窗：在本站看剧情简介，想跳外站点里面的按钮。
+     复用 #mask / #modal 外壳与既有的 close()、mask 点击、Esc 关闭。
+     结构契约同 openModal：h3 与 .acts 必须保留（magnet-eps.js 靠 h3 取片名、
+     靠 .acts 定位插入点），本函数不走 Bangumi 那套分片 / 评分分布逻辑。 */
+  function openExtModal(kind, i) {
+    var list = kind === 'tm' ? MOVIE.tm : MOVIE.db;
+    var x = list && list[i];
+    if (!x) return;
+    var m = $('#modal');
+    if (!m) return;
+    var isTm = kind === 'tm';
+    var title = x.n || x.title || '';
+    var orig = isTm ? (x.ot || '') : (x.sub || '');
+    var rate = (x.r != null && x.r !== '') ? x.r : x.rating;
+    var year = x.y || x.year || '';
+    var src = isTm ? 'TMDB' : '豆瓣';
+    var intro = isTm ? x.ov : x.intro;
+    var sub2 = x.sub || '';
+    m.innerHTML = '<span class="x" aria-label="关闭">×</span>'
+      + '<div class="mhd">'
+      +   '<div class="mposter">'
+      +     (x.img ? '<img src="' + esc(x.img) + '" loading="lazy" decoding="async" alt="">'
+                   : '<div class="ph">🎬</div>')
+      +   '</div>'
+      +   '<div class="mb">'
+      +     '<h3>' + esc(title) + '</h3>'
+      +     (orig ? '<div class="orig">' + esc(orig) + '</div>' : '')
+      +     '<div class="mrate">'
+      +       (rate ? '<b class="num">★ ' + Number(rate).toFixed(1) + '</b>' : '<b class="num dim">暂无评分</b>')
+      +       '<span class="mvotes">' + esc([year, src].filter(Boolean).join(' · ')) + '</span>'
+      +     '</div>'
+      +     '<dl class="infobox">'
+      +       (year ? '<dt>年份</dt><dd>' + esc(year) + '</dd>' : '')
+      +       (sub2 ? '<dt>地区 / 类型</dt><dd>' + esc(sub2) + '</dd>' : '')
+      +       '<dt>来源</dt><dd>' + esc(src) + '</dd>'
+      +     '</dl>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="mbody"><h4>简介</h4><p class="plot">'
+      +   (intro ? esc(intro) : '暂无简介') + '</p></div>'
+      + '<div class="acts">'
+      +   '<a class="btn pri" href="' + esc(x.u || x.url || '#') + '" target="_blank" rel="noopener">'
+      +     esc(src) + ' 页面</a>'
+      +   '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
+      +     encodeURIComponent(title) + '">B 站搜索</a>'
+      + '</div>';
+    $('#mask').classList.add('on');
+    m.querySelector('.x').onclick = close;
   }
 
   function paintMovieDb() {
     var box = $('#mdb');
     if (!box) return;
-    box.innerHTML = msec('豆瓣新片', MOVIE.db) + msec('TMDB 热门', MOVIE.tm);
+    box.innerHTML = msec('豆瓣新片', MOVIE.db, 'db') + msec('TMDB 热门', MOVIE.tm, 'tm');
   }
 
   function renderMovie(reset) {
@@ -606,6 +660,15 @@ function homeDefaults() {
   }
 
   document.addEventListener('click', function (e) {
+    /* 豆瓣 / TMDB 卡片：就地开详情弹窗，不跳外站。必须 preventDefault，
+       否则弹窗与 <a target="_blank"> 跳转会同时发生；⌘/Ctrl/中键 放行原行为。 */
+    var mc = e.target.closest && e.target.closest('.mcard');
+    if (mc) {
+      if (e.metaKey || e.ctrlKey || e.button !== 0) return;
+      e.preventDefault();
+      openExtModal(mc.dataset.ext, Number(mc.dataset.i));
+      return;
+    }
     var c = e.target.closest && e.target.closest('.card');
     if (!c) return;
     openModal(Number(c.dataset.id));

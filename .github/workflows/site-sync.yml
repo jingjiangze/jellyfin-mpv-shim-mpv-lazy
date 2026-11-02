@@ -126,6 +126,15 @@ jobs:
           POSTER_DIR: ../media/posters
         run: python -u fetch_tmdb.py
 
+      # 豆瓣剧情简介：电影页点开卡片要显示简介。
+      # 豆瓣有 IP 级风控（subject_ip_rate_limit），失败时脚本保留上一轮数据，
+      # 所以这里 continue-on-error 不会把已抓到的简介冲掉。
+      - name: Fetch Douban intros
+        timeout-minutes: 15
+        continue-on-error: true
+        working-directory: site-src
+        run: python -u fetch_douban_intro.py
+
       - name: Build pages
         timeout-minutes: 6
         working-directory: site-src
@@ -158,57 +167,6 @@ jobs:
           # 分片少于 60 个说明构建没产出，直接失败而不是悄悄发个坏版
           if [ "$N" -lt 60 ]; then echo "::error::data files only $N, expected >=60"; exit 1; fi
 
-      # style.css / app.js 推到 media/assets/，由 jsDelivr(gcore) 分发。
-      # 不走 `git add -A media`：实测那条路 media/assets 进不了提交
-      # （publish 步骤 success 但仓库里没有该目录），原因未查清；
-      # 这里用 Git Data API 直推，与 magnet_publish.py 同一条可靠路径。
-      - name: Push style/app to CDN
-        timeout-minutes: 5
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -u site-src/push_site_assets.py
-
-      # 每轮只提交+推送一次：数据 JSON、海报、站点状态一起进仓库。
-      # 必须排在 Build pages 之后 —— build_site 每轮用内容哈希生成新的
-      # index-<hash>.json / library-<hash>.json，HTML 里外链的就是这些名字。
-      # 走 git 协议而不是 Git Data API：CI 的 GITHUB_TOKEN 经常被
-      # "API rate limit exceeded for installation" 卡死（实测整步挂满 18 分钟）。
-      - name: Publish data + posters + state
-        timeout-minutes: 8
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          # index-*.json / library-*.json 已由上面的 `Push data JSON to CDN`
-          # （push_assets.py --data-only，走 Git Data API）推到 media/；
-          # 这里再 cp 一遍等于两边改同一批文件，是非快进冲突的来源，故删掉。
-          if [ -d site-src/site/posters ]; then
-            mkdir -p media/posters
-            cp -f site-src/site/posters/*.jpg media/posters/ 2>/dev/null || true
-          fi
-          cp -f site-src/site/data.json site-src/site/bili.json site-src/site/magnet.json site-src/site/magnet-eps.json site-src/data/ || true
-          cp -f site-src/poster_cache.json site-src/data/ || true
-          cp -f site-src/site/years_state.json site-src/data/ || true
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A media site-src/data site-src/site site-src/poster_cache.json
-          if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
-          git commit -m "data: site payloads + state [skip ci]"
-          # 仓库里部分文本文件是以 CRLF 提交的（历史 API 推送留下），检出后 git 的
-          # 换行归一化会把它们算成「已修改」，rebase 于是报 "You have unstaged
-          # changes" 并 skip push —— 线上 index-<hash>.json 一直 404 就是这么来的。
-          # checkout / sed 都治不了（差异是索引侧算出来的），最稳的办法是
-          # 把这些改动直接并进本次提交，让索引和工作树彻底一致。
-          git add -u || true
-          git commit --amend --no-edit -q || true
-          git fetch origin "${GITHUB_REF_NAME}"
-          git status --short | head -20 || true
-          git -c rebase.autoStash=true rebase FETCH_HEAD || {
-            echo "rebase conflict, skip push"; git status --short | head -20 || true
-            git rebase --abort || true; exit 0
-          }
-          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "push failed (non-fatal)"
-
       # 新增/变更的海报自动同步到 ModelScope 数据集（站点海报主源）。
       # 历史教训：这步曾在 6a4cae6 加过，7 分钟后被 a0434128（CRLF 归一化那次）连带冲掉，
       # 之后所有运行都不再有它 —— 数据集从此停更。这里保留并加固：
@@ -216,13 +174,13 @@ jobs:
       #   ② 不再用 `2>&1 | sed` 包住 git push（管道会吞掉退出码，失败也被判成功）；
       #   ③ 跳过 ms-revert-blocklist.txt 里的文件（ModelScope 审核会撤销，重传无意义）。
       - name: Sync posters to ModelScope
+        id: ms
         timeout-minutes: 12
-        continue-on-error: true
         env:
           MS_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "${MS_TOKEN:-}" ]; then echo "no MODELSCOPE_TOKEN, skip"; exit 0; fi
+          if [ -z "${MS_TOKEN:-}" ]; then echo "::error::MODELSCOPE_TOKEN 未配置 —— 数据集是主源，缺它不允许继续部署"; exit 1; fi
           MS_URL="https://oauth2:${MS_TOKEN}@www.modelscope.cn/datasets/jingjiangze/Anime-JPG.git"
           BLOCK="site-src/ms-revert-blocklist.txt"
           rm -rf "$RUNNER_TEMP/ms"
@@ -279,7 +237,9 @@ jobs:
           cp -f site-src/site/index.html site-src/site/anime.html site-src/site/movie.html                 "$RUNNER_TEMP/ms/assets/site/" 2>/dev/null || true
           echo "html: $(ls -1 "$RUNNER_TEMP/ms/assets/site" 2>/dev/null | wc -l) 页"
           echo "site assets: copied=$asset_added eps=$(ls -1 "$RUNNER_TEMP/ms/assets/eps" 2>/dev/null | wc -l)"
-          if [ $((added+updated+js_added+asset_added)) -eq 0 ]; then echo "dataset already in sync"; exit 0; fi
+          if [ -z "$(git -C "$RUNNER_TEMP/ms" status --porcelain -- posters assets)" ]; then
+            echo "dataset already in sync"; exit 0
+          fi
           cd "$RUNNER_TEMP/ms"
           git add -A posters assets
           git -c commit.gpgsign=false -c user.name=github-actions               -c user.email=actions@users.noreply.github.com commit -qm "sync posters + js from site repo (+$added ~$updated js=$js_added)"
@@ -289,8 +249,60 @@ jobs:
           fi
           echo "pushed: +$added ~$updated posters"
 
+      # style.css / app.js 推到 media/assets/，由 jsDelivr(gcore) 分发。
+      # 不走 `git add -A media`：实测那条路 media/assets 进不了提交
+      # （publish 步骤 success 但仓库里没有该目录），原因未查清；
+      # 这里用 Git Data API 直推，与 magnet_publish.py 同一条可靠路径。
+      - name: Push style/app to CDN
+        timeout-minutes: 5
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -u site-src/push_site_assets.py
+
+      # 每轮只提交+推送一次：数据 JSON、海报、站点状态一起进仓库。
+      # 必须排在 Build pages 之后 —— build_site 每轮用内容哈希生成新的
+      # index-<hash>.json / library-<hash>.json，HTML 里外链的就是这些名字。
+      # 走 git 协议而不是 Git Data API：CI 的 GITHUB_TOKEN 经常被
+      # "API rate limit exceeded for installation" 卡死（实测整步挂满 18 分钟）。
+      - name: Publish data + posters + state
+        timeout-minutes: 8
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # index-*.json / library-*.json 已由上面的 `Push data JSON to CDN`
+          # （push_assets.py --data-only，走 Git Data API）推到 media/；
+          # 这里再 cp 一遍等于两边改同一批文件，是非快进冲突的来源，故删掉。
+          if [ -d site-src/site/posters ]; then
+            mkdir -p media/posters
+            cp -f site-src/site/posters/*.jpg media/posters/ 2>/dev/null || true
+          fi
+          cp -f site-src/site/data.json site-src/site/bili.json site-src/site/magnet.json site-src/site/magnet-eps.json site-src/data/ || true
+          cp -f site-src/poster_cache.json site-src/data/ || true
+          cp -f site-src/site/years_state.json site-src/data/ || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A media site-src/data site-src/site site-src/poster_cache.json
+          if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
+          git commit -m "data: site payloads + state [skip ci]"
+          # 仓库里部分文本文件是以 CRLF 提交的（历史 API 推送留下），检出后 git 的
+          # 换行归一化会把它们算成「已修改」，rebase 于是报 "You have unstaged
+          # changes" 并 skip push —— 线上 index-<hash>.json 一直 404 就是这么来的。
+          # checkout / sed 都治不了（差异是索引侧算出来的），最稳的办法是
+          # 把这些改动直接并进本次提交，让索引和工作树彻底一致。
+          git add -u || true
+          git commit --amend --no-edit -q || true
+          git fetch origin "${GITHUB_REF_NAME}"
+          git status --short | head -20 || true
+          git -c rebase.autoStash=true rebase FETCH_HEAD || {
+            echo "rebase conflict, skip push"; git status --short | head -20 || true
+            git rebase --abort || true; exit 0
+          }
+          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "push failed (non-fatal)"
+
       # 部署只认 build-out/ 快照
       - name: Deploy to Cloudflare Pages
+        if: steps.ms.outcome == 'success'
         timeout-minutes: 10
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

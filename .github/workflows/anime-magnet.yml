@@ -25,6 +25,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install deps
+        run: pip install --quiet zhconv
       # 把已发布的索引还原成 resume 的种子。没有这一步，每个分片每轮都从空的
       # 结果集开始 → --resume 无事可跳 → 永远重查同一批 top-150（实测：
       # merged 3066 -> 3066，一条没新增）。magnet_publish.py 只写 media/ 和
@@ -77,3 +79,26 @@ jobs:
           PAN_HUB_USER: ${{ secrets.PAN_HUB_USER }}
           PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
         run: python -u site-src/magnet_publish.py
+
+      # 数据集优先：分片一发布就镜像过去，不等下一个 site-sync（最长滞后 4h）。
+      - name: Sync eps shards to ModelScope
+        timeout-minutes: 10
+        continue-on-error: true
+        env:
+          MS_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MS_TOKEN:-}" ]; then echo "::warning::MODELSCOPE_TOKEN 未配置，跳过数据集镜像"; exit 0; fi
+          MS_URL="https://oauth2:${MS_TOKEN}@www.modelscope.cn/datasets/jingjiangze/Anime-JPG.git"
+          rm -rf "$RUNNER_TEMP/ms" && GIT_LFS_SKIP_SMUDGE=1 git clone -q "$MS_URL" "$RUNNER_TEMP/ms"
+          mkdir -p "$RUNNER_TEMP/ms/assets/eps"
+          cp -f media/eps/*.json "$RUNNER_TEMP/ms/assets/eps/"
+          cd "$RUNNER_TEMP/ms"
+          if [ -z "$(git status --porcelain -- assets/eps)" ]; then echo "eps 分片已是最新"; exit 0; fi
+          git -c commit.gpgsign=false -c user.name=github-actions \
+              -c user.email=actions@users.noreply.github.com commit -qm "sync eps shards from anime-magnet [skip ci]"
+          for i in 1 2 3; do
+            if git push origin HEAD:master >/dev/null 2>&1; then echo "PUSHED eps -> dataset"; exit 0; fi
+            echo "push 失败，第 $i 次重试"; git pull --rebase -q origin master || true; sleep $((i*3))
+          done
+          echo "::error::eps 分片推数据集失败"; exit 1
