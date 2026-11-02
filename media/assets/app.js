@@ -165,7 +165,7 @@ function renderLevels() {
 
   h += '<div class="lv"><div class="lv-h">星期</div><div class="chips">'
     + chip('全部', !HOME.wd, 'data-wd', 0)
-    + WD.map(function (d, i) { return chip(d.slice(1), HOME.wd === i + 1, 'data-wd', i + 1); }).join('')
+    + WD.map(function (d, i) { return chip(d, HOME.wd === i + 1, 'data-wd', i + 1); }).join('')
     + '</div></div>';
   return h + '</aside>';
 }
@@ -184,7 +184,7 @@ function renderHome() {
   var main = $('#main');
 
   var head = '<div class="bhead"><h2>' + HOME.y + ' 年'
-    + (HOME.q ? ' 第' + HOME.q + ' 季度' : '')
+    + (HOME.q ? '第' + HOME.q + '季度' : '')
     + (HOME.wd ? ' · ' + WD[HOME.wd - 1] : '')
     + '</h2><span>' + rows.length + ' 部</span></div>';
 
@@ -228,11 +228,14 @@ function renderHome() {
   var allPool = ANI.rows.filter(function (r) { return r[12] || r[7]; })
     .sort(rankSort).slice(0, 24);
 
+  /* 榜单必须落在 .home-main 里：之前拼在 .home-cols 外面，导致左边线跑到
+     x=32（内容列是 x=292）并与左侧 sticky 面板的列重叠，滚动时首列被压住。 */
   main.innerHTML = '<div class="home-cols">' + renderLevels()
-    + '<div class="home-main"><div class="home-head">' + head + '</div>' + body + '</div></div>'
-    + rankBlock('rank-q', (HOME.y) + ' 年' + (HOME.q ? ' 第' + HOME.q + ' 季度' : '')
-      + '榜', '按 Bangumi 排名 Top 12', qPool)
-    + rankBlock('rank-all', '总榜', '全站排名 Top 24', allPool);
+    + '<div class="home-main"><div class="home-head">' + head + '</div>' + body
+    + rankBlock('rank-q', HOME.y + ' 年' + (HOME.q ? '第' + HOME.q + '季度' : '') + '榜',
+        '按 Bangumi 排名 Top 12', qPool)
+    + rankBlock('rank-all', '总榜', '全站排名 Top 24', allPool)
+    + '</div></div>';
 
   /* 交互 */
   main.querySelectorAll('[data-q]').forEach(function (b) {
