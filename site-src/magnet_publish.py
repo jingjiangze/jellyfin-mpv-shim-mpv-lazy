@@ -5,10 +5,20 @@ BR = "main"
 TOK = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
 API = "https://api.github.com"
 
+# 合并 base 必须读 data/ 里的「状态文件」，不能读 media/ 里的载荷：
+# media/ 那份已经按分片发布、并被我删掉，读它会让 base 恒为空 ——
+# 那样每一轮都会用「本轮 2400 条」覆盖整个索引（实测已经踩到：删完
+# media/magnet-eps.json 后下一轮 publish 直接失败）。
 base = {}
-p = pathlib.Path("media/magnet-eps.json")
-if p.is_file():
-    base = json.loads(p.read_text(encoding="utf-8"))
+for cand in ("site-src/data/magnet-eps.json", "media/magnet-eps.json"):
+    p = pathlib.Path(cand)
+    if p.is_file():
+        try:
+            base = json.loads(p.read_text(encoding="utf-8"))
+            print(f"base <- {cand} ({len(base)} 部)", flush=True)
+            break
+        except ValueError as e:
+            print(f"base skip {cand}: {e}", flush=True)
 before = len(base)
 # 合并规则：空结果（eps 为空，来自 --mark-miss 的「查过但没结果」）不能覆盖
 # 已有的非空结果 —— 否则每一轮抓空的分片都会把上一轮建好的分集磁力抹掉
@@ -125,7 +135,7 @@ def push_once(files, msg):
 files = sorted(p.as_posix() for p in pathlib.Path("media/eps").glob("*.json"))
 files.append("site-src/data/magnet-eps.json")
 # 旧的整份 monolith 从仓库里删掉：浏览器已改读分片，留着等于每轮多推 7.5MB
-DELETES = ["media/magnet-eps.json"]
+DELETES = []
 msg = f"magnet-eps: index {len(base)} titles [skip ci]"
 for attempt in range(4):
     if push_once(files, msg):
