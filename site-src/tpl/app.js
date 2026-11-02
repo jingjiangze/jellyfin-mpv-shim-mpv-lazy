@@ -203,6 +203,10 @@ function renderLevels() {
     + chip('全部', !HOME.wd, 'data-wd', 0)
     + WD.map(function (d, i) { return chip(d, HOME.wd === i + 1, 'data-wd', i + 1); }).join('')
     + '</div></div>';
+
+  /* 榜单单独成页：左侧给一个跳转入口，移动端会自动并进顶部横排 */
+  h += '<div class="lv"><div class="lv-h">榜单</div>'
+    + '<div class="chips chips--col"><a class="lv-link" href="rank">排行榜 ›</a></div></div>';
   return h + '</aside>';
 }
 
@@ -292,20 +296,11 @@ function renderHome() {
     body = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
   }
 
-  /* 榜单：季度榜取当前季度评分 Top 12；总榜取全站 Top 24（跨年份） */
-  var movieAll = ANI.rows.filter(function (r) { return r[3] === 'movie'; });
-
-  /* 榜单必须落在 .home-main 里：之前拼在 .home-cols 外面，导致左边线跑到
-     x=32（内容列是 x=292）并与左侧 sticky 面板的列重叠，滚动时首列被压住。 */
+  /* 榜单已搬到独立页（rank.html）：首页只放本周分组网格。
+     左侧面板由 renderLevels() 给出「排行榜」入口。 */
   main.innerHTML = '<div class="home-cols">' + renderLevels()
     + '<div class="home-main"><div class="home-head">' + head + '</div>' + body
-    + rankBlock('rank-q', (HOME.q ? '第' + HOME.q + '季度' : '全部季度') + '榜',
-        '按 Bangumi 排名 Top 12')
-    + rankBlock('rank-all', '总榜', '全站排名 Top 24')
-    + (movieAll.length ? rankBlock('rank-movie', '剧场版 · 精选', '',
-        '<a class="morelink" href="movie">全部 ' + movieAll.length + ' 部 ›</a>') : '')
     + '</div></div>';
-  mountRanks();
 
   /* 交互 */
   main.querySelectorAll('[data-q]').forEach(function (b) {
@@ -332,6 +327,45 @@ function homeDefaults() {
   inY.forEach(function (r) { var s = seasonOf(r[5]); if (s > q) q = s; });
   /* 默认显示「今天」这一周：getDay() 0=周日…6=周六，站点 WD 1=周一…7=周日 */
   HOME = { y: y, q: q, wd: ((new Date().getDay() + 6) % 7) + 1 };
+}
+
+/* 首页 / 排行榜共用的搜索绑定：输入即筛番剧，清空后回到调用方指定的页面。
+   两页共用一份实现，避免各写一套后行为漂移。 */
+function bindSearch(empty) {
+  $('#q').addEventListener('input', (function () {
+    var t = 0;
+    return function () {
+      clearTimeout(t);
+      var q = nrm(this.value.trim());
+      t = setTimeout(function () {
+        if (!q) { empty(); return; }
+        var found = ANI.rows.filter(function (r) {
+          return (r[1] + ' ' + (r[2] || '')).toLowerCase().indexOf(q) !== -1;
+        }).slice(0, 120);
+        $('#main').innerHTML = '<section class="block"><div class="bhead"><h2>搜索</h2><span>'
+          + found.length + ' 部</span></div><div class="grid">'
+          + found.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('') + '</div></section>';
+      }, 220);
+    };
+  })());
+}
+
+/* ---------------- 排行榜（独立页）：季度榜 / 总榜 / 剧场版精选 ---------------- */
+function renderRank() {
+  if (!HOME.y) homeDefaults();
+  var main = $('#main');
+  var head = '<div class="bhead"><h2>' + HOME.y + ' 年排行榜</h2><span>按 Bangumi 排名</span></div>';
+  /* rankPool('rank-q') 读 HOME.y / HOME.q，所以上面必须先 homeDefaults() */
+  var movieAll = ANI.rows.filter(function (r) { return r[3] === 'movie' && (r[12] || r[7]); });
+  main.innerHTML = '<div class="home-head">' + head + '</div>'
+    + rankBlock('rank-q', (HOME.q ? '第' + HOME.q + '季度' : '全部季度') + '榜',
+        '按 Bangumi 排名 Top 12')
+    + rankBlock('rank-all', '总榜', '全站排名 Top 24')
+    + (movieAll.length
+        ? rankBlock('rank-movie', '剧场版 · 精选', '',
+            '<a class="morelink" href="movie">全部 ' + movieAll.length + ' 部 ›</a>')
+        : '');
+  mountRanks();
 }
 
   /* ---------------- 番剧：全量目录 ---------------- */
@@ -608,6 +642,7 @@ function homeDefaults() {
   function repaint() {
     if (PAGE === 'anime') applyBrowse();
     else if (PAGE === 'movie') refreshMovie();
+    else if (PAGE === 'rank') renderRank();
     else renderHome();
   }
 
@@ -635,8 +670,10 @@ function homeDefaults() {
      注意：必须在任何 $('#q') / $('#psz') 绑定之前调用。 */
   function bootHeader() {
     var P = PAGE;
-    var ph = P === 'anime' ? '搜索番剧…' : (P === 'movie' ? '搜索电影…' : '搜索番剧…');
-    var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影']]
+    /* 首页 / 番剧 / 排行榜都搜番剧，只有电影页搜电影 */
+    var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
+    var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
+      ['rank', 'rank', '排行榜']]
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');
@@ -688,24 +725,12 @@ function homeDefaults() {
       });
     } else if (PAGE === 'movie') {
       initMovie();
+    } else if (PAGE === 'rank') {
+      renderRank();
+      bindSearch(renderRank);
     } else {
       renderHome();
-      $('#q').addEventListener('input', (function () {
-        var t = 0;
-        return function () {
-          clearTimeout(t);
-          var q = nrm(this.value.trim());
-          t = setTimeout(function () {
-            if (!q) { renderHome(); return; }
-            var hit = ANI.rows.filter(function (r) {
-              return (r[1] + ' ' + (r[2] || '')).toLowerCase().indexOf(q) !== -1;
-            }).slice(0, 120);
-            $('#main').innerHTML = '<section class="block"><div class="bhead"><h2>搜索</h2><span>'
-              + hit.length + ' 部</span></div><div class="grid">'
-              + hit.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('') + '</div></section>';
-          }, 220);
-        };
-      })());
+      bindSearch(renderHome);
     }
     /* #psz 必须在数据就位之后再绑：它的 repaint 依赖 ANI.rows */
     initPsz();

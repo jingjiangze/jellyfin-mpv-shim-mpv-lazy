@@ -42,6 +42,32 @@ def min_css(text):
     return " ".join(text.split())
 
 
+def min_js(text):
+    """保守压缩：只去「整行注释 / 行首缩进 / 行尾空白 / 空行」。
+
+    不合并行 —— 合并会踩 ASI（自动分号插入）的坑；不动行内 `//` 与字符串内容。
+    """
+    out = []
+    in_block = False
+    for line in text.splitlines():
+        s = line.strip()
+        if in_block:
+            if "*/" in s:
+                s = s.split("*/", 1)[1].strip()
+                in_block = False
+            else:
+                continue
+        if s.startswith("/*"):
+            if "*/" not in s:
+                in_block = True
+                continue
+            s = s.split("*/", 1)[1].strip()
+        if not s or s.startswith("//"):
+            continue
+        out.append(s)
+    return "\n".join(out)
+
+
 def norm(s):
     s = str(s or "").lower()
     s = re.sub(r"[\s\-_.·・:：!！?？,，。'\"()\[\]【】（）]", "", s)
@@ -186,8 +212,14 @@ def build_movies():
                 info = intros.get(subj_id)
                 if not isinstance(info, dict):
                     info = {}
+                # 本地有抓下来的豆瓣封面就用数据集地址（豆瓣图有防盗链，外链在浏览器里 403），
+                # 没有就回退原外链，至少境外/直连场景还能出图。
+                local_pic = SITE / "posters" / f"db-{subj_id}.jpg" if subj_id else None
+                img = (f"{MODELSCOPE}/posters/db-{subj_id}.jpg"
+                       if local_pic is not None and local_pic.is_file()
+                       else (x.get("img") or ""))
                 douban.append({"n": x["n"], "u": u,
-                               "img": x.get("img") or "", "r": x.get("r"),
+                               "img": img, "r": x.get("r"),
                                "k": x.get("k") or "",
                                "id": subj_id,
                                "intro": info.get("intro") or "",
@@ -228,6 +260,7 @@ PAGES = [
     ("index.html", "home", "番组计划 · 新番表", "搜索番剧…", 'class="is-on"', "", ""),
     ("anime.html", "anime", "番剧全收录 · 番组计划", "在 8,000+ 部里搜…", "", 'class="is-on"', ""),
     ("movie.html", "movie", "电影 · 番组计划", "搜索电影…", "", "", 'class="is-on"'),
+    ("rank.html", "rank", "排行榜 · 番组计划", "搜索番剧…", "", "", ""),
 ]
 
 
@@ -236,12 +269,15 @@ def main():
     build_movies()
 
     css = min_css((TPL / "style.css").read_text(encoding="utf-8"))
-    js = (TPL / "app.js").read_text(encoding="utf-8")
+    raw_js = (TPL / "app.js").read_text(encoding="utf-8")
+    js = min_js(raw_js)
     # HTML 只留骨架：CSS/JS 落成独立文件由浏览器并行取，且能被 _headers 缓存。
     # 文件名不带哈希 —— 带哈希后每次部署旧文件名消失，缓存了旧 HTML 的浏览器会
     # 404；改用「短 max-age + must-revalidate」（见 tpl/_headers）。
     (SITE / "style.css").write_text(css, encoding="utf-8")
     (SITE / "app.js").write_text(js, encoding="utf-8")
+    print(f"  app.js: {len(raw_js.encode('utf-8'))} -> "
+          f"{len(js.encode('utf-8'))} B")
     # 内容版本号：这两个文件名固定（带哈希会让缓存了旧页的浏览器 404），
     # 靠 ?v= 换 URL 来绕过缓存。历史坑：早先 /style.css 不存在却标了
     # immutable，浏览器把 404 兜底的 HTML 永久缓存成 CSS/JS，页面直接白屏。
@@ -257,6 +293,8 @@ def main():
                 .replace("__ON_MOVIE__", on_movie))
         (SITE / name).write_text(html, encoding="utf-8")
         print(f"  {name}: {len(html.encode('utf-8'))/1024:.0f} KB")
+    print(f"pages: {len(PAGES)} 个"
+          f"（{'/'.join(p[0].replace('.html', '') for p in PAGES)}）")
 
     # 分片给详情弹窗按需拉
     ddir = SITE / "data"
@@ -302,8 +340,12 @@ def main():
     # 磁力层：把 prior 会话的 magnet-eps.js 一起部署，并在页面里引用
     mj = TPL / "magnet-eps.js"
     if mj.is_file():
-        shutil.copy2(mj, SITE / "magnet-eps.js")
-        print("magnet-eps.js: copied")
+        raw_me = mj.read_text(encoding="utf-8")
+        mep = min_js(raw_me)
+        (SITE / "magnet-eps.js").write_text(mep, encoding="utf-8")
+        print(f"  magnet-eps.js: {len(raw_me.encode('utf-8'))} -> "
+              f"{len(mep.encode('utf-8'))} B")
+        print("magnet-eps.js: minified")
 
     # 媒体库页已下线：清掉旧产物，避免又被快照发布出去
     try:

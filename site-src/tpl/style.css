@@ -273,6 +273,14 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
   background: var(--card2); border: 1px solid var(--line);
 }
 .lv-select:hover { border-color: var(--accent-line); }
+/* 排行榜入口：整行可点，框线/圆角/字号逐项对齐 .lv-select（箭头是文本内容，跟随行内流） */
+.lv-link {
+  display: block; width: 100%; padding: 6px var(--s3); border-radius: var(--r-sm);
+  font-size: var(--fs-sm); color: var(--fg); text-decoration: none; cursor: pointer;
+  background: var(--card2); border: 1px solid var(--line);
+}
+.lv-link:hover { color: var(--accent); border-color: var(--accent); }
+.lv-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   padding: 4px 10px; border-radius: 999px; cursor: pointer;
