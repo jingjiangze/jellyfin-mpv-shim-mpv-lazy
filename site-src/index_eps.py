@@ -25,6 +25,8 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
+import eps_filter as EF
+
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = pathlib.Path(__file__).resolve().parent
@@ -79,8 +81,9 @@ def norm(s):
     return re.sub(r"[\s\-_.·・:：!！?？,，。'\"()\[\]（）【】～~]", "", str(s or "").lower())
 RE_VOLUME = re.compile(r"\d+\s*[巻卷]")
 # 整季包：[01-11] / 01-26 / 第01-26话 —— 这是合集不是单片集
-RE_PACK = re.compile(r"[\[\(【]\s*\d{1,3}\s*[-–~〜]\s*\d{1,3}\s*[\]\)】]|"
-                     r"\d{1,3}\s*[-–~〜]\s*\d{1,3}\s*[话話集]|")
+RE_PACK = re.compile(
+    r"[\[\(【]\s*\d{1,3}\s*[-–~〜]\s*\d{1,3}"          # [1-3 / [01-12 之类，不要求紧跟右括号
+    r"|\b\d{1,3}\s*[-–~〜]\s*\d{1,3}\s*[话話集]")
 
 
 def parse_eps(title):
@@ -111,9 +114,9 @@ def search(kw):
 
 
 def pick(r):
-    """从聚合结果里取磁力与体积。"""
-    m = r.get("magnet") or r.get("m") or ""
-    if not isinstance(m, str) or not m.startswith("magnet:"):
+    """从聚合结果里取磁力与体积。磁力缺失时用 magnet_of 合成（mikan 场景）。"""
+    m = magnet_of(r)
+    if not m:
         return None
     return {
         "m": m,
@@ -124,71 +127,76 @@ def pick(r):
     }
 
 
+def magnet_of(r):
+    """取可复制的下载链接。
+
+    坑：pan-hub 返回的 mikan 结果 **magnet 字段是空的**，只有 url 和 torrent。
+    而 mikan 的 url 末尾正好是 40 位 infohash（/Home/Episode/<infohash>），
+    可以直接合成 magnet。不补这一步，中文新番（几乎全在 mikan）会一条都取不到
+    —— 之前「新番查不到磁力」的主因就是这个，不是搜索词问题。
+    """
+    m = str(r.get("magnet") or "")
+    if m.startswith("magnet:"):
+        return m
+    u = str(r.get("url") or "")
+    tail = u.rstrip("/").split("/")[-1].split("?")[0]
+    if re.fullmatch(r"[0-9a-fA-F]{40}", tail or ""):
+        return "magnet:?xt=urn:btih:" + tail
+    t = str(r.get("torrent") or "")
+    if t.startswith("http"):
+        return t          # 实在没有磁力就用种子直链，仍可复制到下载器
+    return ""
+
+
+AG_API = os.environ.get("AG_API", "https://api.animes.garden/resources")
+AG_PAGE = int(os.environ.get("AG_PAGE_SIZE", "100"))
+
+
+def ag_subject(sid, timeout=25):
+    """按 Bangumi 条目 id 从 AnimeGarden 直取资源。
+
+    社区实践 + 我们的审计都表明：关键词搜索漏得厉害（发布名常用繁体译名或
+    罗马字），而 AnimeGarden 的资源对象带 subjectId，能用条目 id 精确过滤。
+    """
+    url = "%s?page=1&pageSize=%d&subject=%s" % (AG_API, AG_PAGE, sid)
+    try:
+        req = urllib.request.Request(url, headers={"user-agent": "anime-eps-index"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            d = json.loads(r.read().decode("utf-8", "replace"))
+        return (d.get("resources") or [])
+    except Exception:
+        return []
+
+
 def build_one(row):
     aid, orig, cn, eps_n = row
     name = cn or orig
     if not name:
         return aid, None, "noname"
-    if not USER or not PASS:
-        return aid, None, "nocred"
-    try:
-        d = search(name)
-    except Exception as e:
-        return aid, None, f"err:{type(e).__name__}"
-    res = d.get("results") or []
-    if not res and orig and orig != name:
-        try:
-            res = (search(orig).get("results") or [])
-        except Exception:
-            res = []
 
-    q = norm(name)
-    qo = norm(orig)
-    qs = seasons(name)
-    short = len(q) <= 3            # 「乒乓」「虫师」这类短名，子串匹配必错
+    # ① id 优先：AnimeGarden 按 Bangumi 条目 id 直取（准确、免别名问题）
+    res, src = ag_subject(aid), "ag"
+    # ② 兜底：关键词多变体（全名 → 去季/章后缀 → 原名）
+    if not res:
+        if not USER or not PASS:
+            return aid, None, "nocred"
+        for kw in EF.kw_variants(name, orig):
+            try:
+                d = search(kw)
+            except Exception:
+                continue
+            res = d.get("results") or []
+            if res:
+                src = "kw:" + kw[:12]
+                break
 
-    cand = {}
-    for r in res:
-        t = str(r.get("title") or r.get("name") or "")
-        if not t or NOISE.search(t):
-            continue
-        item = pick(r)
-        if not item:
-            continue
-        nt = norm(t)
-        # 剧场版（目录话数 <= 2）不给分集 chip：同名片子的 TV 版集数会被误抓，
-        # 「有一个错的」比「没有」更坏
-        if eps_n and int(eps_n) <= 2:
-            continue
-        # 整季包 / 合集跳过
-        if RE_PACK.search(t):
-            continue
-        # 发布名必须真含本片名（中文名或原名），否则是别片的磁力
-        if not ((q and q in nt) or (qo and len(qo) >= 4 and qo in nt)):
-            continue
-        # 短标题要求词边界，避免「乒乓」吃到「灼热的乒乓妹」
-        if short and not re.search(r"[\[\]【】()（）\s\-_/]%s[\[\]【】()（）\s\-_/]" % re.escape(name), t):
-            continue
-        # 季/部必须对得上：S3 的磁力不能挂到 S1 条目上
-        rs = seasons(t)
-        if qs != rs and (qs or rs):
-            continue
-        nums = parse_eps(t)
-        if not nums:
-            continue
-        # 宽范围包（第01-26话 / Batch）不是单片集，直接跳过
-        if len(nums) > 3:
-            continue
-        # 不按目录话数截断（连续编号会整片被误杀），剧场版已由 eps_n<=2 规则排除
-        for n in nums:
-            cand.setdefault(n, []).append(item)
-    if not cand:
+    eps, packs = EF.split_results(name, orig, int(eps_n or 0), res)
+    if not eps and not packs:
         return aid, None, "noep"
-    eps = {}
-    for n, lst in cand.items():
-        lst.sort(key=lambda x: (x["sd"], x["s"]), reverse=True)
-        eps[str(n)] = lst[:PER_EP]
-    return aid, {"n": name, "eps": eps}, f"eps={len(eps)}"
+    out = {"n": name, "eps": eps, "src": src}
+    if packs:
+        out["batch"] = packs
+    return aid, out, "eps=%d%s" % (len(eps), ("+b%d" % len(packs)) if packs else "")
 
 
 def load_catalog(a):
