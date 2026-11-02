@@ -401,3 +401,22 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
   .trailer { margin-left: var(--s4); margin-right: var(--s4); }
   .modal .x { top: var(--s2); right: var(--s2); }
 }
+
+/* ---------------- 首页三级下钻（年→季度→周几） ---------------- */
+.home-head > .bhead { margin-bottom: var(--s4); }
+/* 星期分组的小标题：比一级区块标题小一档，避免和周几混淆 */
+.bhead.lv2 { margin: var(--s5) 0 var(--s3); }
+.bhead.lv2 h2 { font-size: var(--fs-lg); padding-left: 0; }
+.bhead.lv2 h2::before { display: none; }
+.bhead.lv2 span { font-size: var(--fs-xs); }
+/* 季度 chip 里的计数 */
+.lv-n {
+  margin-left: 4px; font-size: var(--fs-xs); color: var(--dim2);
+  font-variant-numeric: tabular-nums;
+}
+.chip.on .lv-n { color: inherit; opacity: .75; }
+/* 手机端：选择面板两列铺开，避免七个月期 chip 挤成两行半 */
+@media (max-width: 760px) {
+  .levels { gap: var(--s2) var(--s3); }
+  .levels .lv { flex: 1 1 46%; }
+}
