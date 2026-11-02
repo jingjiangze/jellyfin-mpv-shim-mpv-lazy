@@ -230,7 +230,11 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function (d) {
-      var eps = buildEps(name, orig, epsN, (d && d.results) || []);
+      /* 服务端现在优先查 SQLite，命中就直接回 {eps}；未命中才走上游并回 {eps}。
+         两种形状都兼容：有 eps 就用，没有就退回本地过滤（旧版 responses）。 */
+      var eps = (d && d.eps && Object.keys(d.eps).length)
+        ? d.eps
+        : buildEps(name, orig, epsN, (d && d.results) || []);
       if (!Object.keys(eps).length) return null;
       var e = { n: name, eps: eps, live: 1 };
       LIVE[name] = e;
