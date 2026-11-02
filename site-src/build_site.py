@@ -205,7 +205,7 @@ PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0b0b0f">
 <title>__TITLE__</title>
-<link rel="stylesheet" href="./style.css?v=__CV__">
+<link rel="stylesheet" href="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/assets/style.css?v=__CV__" onerror="this.onerror=null;this.href='./style.css?v=__CV__'">
 </head>
 <body data-page="__PAGE__">
 <header class="site-head"><div class="wrap">
@@ -221,7 +221,7 @@ PAGE = """<!DOCTYPE html>
 </div></header>
 <main class="wrap" id="main"><div class="loading">加载中…</div></main>
 <div class="mask" id="mask"><div class="modal" id="modal"></div></div>
-<script src="./app.js?v=__JV__"></script>
+<script src="https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/assets/app.js?v=__JV__" onerror="this.onerror=null;var s=document.createElement('script');s.src='./app.js?v=__JV__';document.body.appendChild(s)"></script>
 <script defer src="./magnet-eps.js"></script>
 </body>
 </html>

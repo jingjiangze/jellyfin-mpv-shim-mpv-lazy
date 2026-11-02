@@ -122,6 +122,11 @@ jobs:
           cp site-src/site/index.html site-src/site/anime.html site-src/site/library.html build-out/
           # HTML 现在是骨架，样式与脚本拆成独立文件（由 build_site 写出）
           cp -f site-src/site/style.css site-src/site/app.js build-out/
+          # 同一份也进仓库 media/assets/，由 jsDelivr(gcore) 走 CDN 分发；
+          # HTML 里优先引用 CDN，onerror 回落到同源。?v=<内容哈希> 保证
+          # jsDelivr 的 @main 12h 缓存不会给出旧文件。
+          mkdir -p media/assets
+          cp -f site-src/site/style.css site-src/site/app.js media/assets/
           cp site-src/tpl/_headers build-out/_headers
           # 逐个 glob 拷贝，不用 `cp -r 目录 目录`（目标已存在时会多套一层）
           cp -f site-src/site/data/*.json build-out/data/
