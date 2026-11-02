@@ -4,16 +4,15 @@
 三张页面：
   index.html    首页 —— 今年新番，按「本周 / 本月」两种排列
   anime.html    番剧 —— 全量目录（8.8k），年份/类型/排序 + 搜索 + 加载更多
-  library.html  媒体库 —— 你夸克/Jellyfin 里已有的那 243 部
+  movie.html    电影 —— 豆瓣 + TMDB 双源海报墙
 
 前后端分离：页面只是壳，数据全部走 site/data/*.json，前端按需拉。
 
 数据来源：
   catalog.json          bangumi-data 索引（id / 原名 / 中文名 / 类型 / 年份）
   site/anime/*.json     64 个分片（评分 / 话数 / 简介 / 标签 / 封面原图）
-  data/fresh.json       AniList 当季（banner / 预告 / 倒计时）—— 只做补充与回退
-  data/data.json        媒体库（243 条数组）
-  data/bili.json        媒体库的 B 站 bvid
+  data/fresh.json       AniList 当季（banner / 预告 / 倒计时）+ 豆瓣电影
+  site/tmdb.json        TMDB 热门 / 正在上映（fetch_tmdb.py 产出）
 """
 import datetime as dt
 import json
@@ -137,23 +136,20 @@ def build_anime():
                      d.get("rating"), d.get("episodes") or 0, 1 if d else 0, has_mag, day,
                      (d or {}).get("rank") or 0])
 
-        # 只给能匹配到 AniList 的条目挂补充字段，避免索引膨胀
+        # 只给能匹配到 AniList 的条目挂补充字段，避免索引膨胀。
+        # 固定槽位 [banner, img, trailer, next_at]，缺项填 null —— 前端按 ex[1]
+        # 取封面、ex[2] 取预告。以前是「有才 append」，缺 banner 时整体前移，
+        # 实测 32 条（名侦探柯南 / 海贼王等）把 next_at 时间戳当成了 YouTube id。
         a = al.get(norm(cn)) or al.get(norm(name))
         if a:
-            ex = []
-            if a.get("banner"):
-                ex.append(a["banner"])
-            if a.get("img"):
-                ex.append(a["img"])
-            if a.get("trailer"):
-                ex.append(a["trailer"])
-            if a.get("next_at"):
-                ex.append(a["next_at"])
-            if ex:
+            ex = [a.get("banner") or None, a.get("img") or None,
+                  a.get("trailer") or None, a.get("next_at") or None]
+            if any(v is not None for v in ex):
                 extra[str(sid)] = ex
 
     rows.sort(key=lambda r: (-(r[4] or 0), -(r[7] or 0)))
     payload = {"built": BUILD_TAG, "poster": f"{MODELSCOPE}/posters/bgm-",
+               "posterSd": f"{MODELSCOPE}/posters-c/bgm-",
                "year": TODAY.year, "extra": extra, "rows": rows}
     out = SITE / "data"
     out.mkdir(parents=True, exist_ok=True)
@@ -164,82 +160,56 @@ def build_anime():
     return rows
 
 
-def build_library():
-    lib_path = SITE / "data.json"
-    rows = []
-    if lib_path.is_file():
-        raw = json.loads(lib_path.read_text(encoding="utf-8"))
-        blocked = set()
-        bp = BASE / "library_blocklist.json"
-        if bp.is_file():
-            try:
-                blocked = {e["id"] for e in json.loads(bp.read_text(encoding="utf-8")).get("entries") or []}
-            except (ValueError, OSError):
-                pass
-        bili = {}
-        bp2 = SITE / "bili.json"
-        if bp2.is_file():
-            try:
-                bili = json.loads(bp2.read_text(encoding="utf-8"))
-            except (ValueError, OSError):
-                pass
-        for a in raw:
-            if not isinstance(a, list) or len(a) < 2 or a[0] in blocked:
-                continue
-            bv = bili.get(a[0])
-            if isinstance(bv, dict):
-                bv = bv.get("bvid")
-            rows.append([a[0], a[1], 1 if a[2] else 0, a[3] or "", a[4] or None,
-                         a[6] or 0, (bv if isinstance(bv, str) else "")[:20],
-                         1 if (a[5] if len(a) > 5 else 0) else 0])
+def build_movies():
+    """电影页数据：豆瓣（fresh.json 的 movies）+ TMDB（fetch_tmdb.py 的 tmdb.json）。"""
+    douban = []
+    fp = SITE / "fresh.json"
+    if fp.is_file():
+        try:
+            fresh = json.loads(fp.read_text(encoding="utf-8"))
+            for x in (fresh.get("movies") or []):
+                if not isinstance(x, dict) or not x.get("n"):
+                    continue
+                douban.append({"n": x["n"], "u": x.get("u") or "",
+                               "img": x.get("img") or "", "r": x.get("r"),
+                               "k": x.get("k") or ""})
+        except (ValueError, OSError):
+            pass
+
+    tmdb = []
+    tp = SITE / "tmdb.json"
+    if tp.is_file():
+        try:
+            for x in (json.loads(tp.read_text(encoding="utf-8")).get("items") or []):
+                if not isinstance(x, dict) or not x.get("n"):
+                    continue
+                tmdb.append({"n": x["n"], "u": x.get("u") or "",
+                             "img": x.get("img") or "", "r": x.get("r"),
+                             "y": x.get("y"), "id": x.get("id")})
+        except (ValueError, OSError):
+            pass
+
     out = SITE / "data"
     out.mkdir(parents=True, exist_ok=True)
-    (out / "library.json").write_text(
-        json.dumps({"built": BUILD_TAG, "poster": f"{MODELSCOPE}/posters/", "rows": rows},
+    (out / "movies.json").write_text(
+        json.dumps({"built": BUILD_TAG, "douban": douban, "tmdb": tmdb},
                    ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"library: {len(rows)} 条")
-    return rows
+    print(f"movies: douban {len(douban)} / tmdb {len(tmdb)}")
+    return douban, tmdb
 
 
-PAGE = """<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0b0b0f">
-<title>__TITLE__</title>
-<link rel="stylesheet" href="https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/style.css?v=__CV__" onerror="this.onerror=function(){this.onerror=null;this.href='./style.css?v=__CV__'};this.href='https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/assets/style.css?v=__CV__'">
-</head>
-<body data-page="__PAGE__">
-<header class="site-head"><div class="wrap">
-  <a class="brand" href="./">番组<b>计划</b></a>
-  <nav class="mainnav">
-    <a href="./" __ON_HOME__>首页</a>
-    <a href="anime" __ON_ANIME__>番剧</a>
-    <a href="library" __ON_LIBRARY__>媒体库</a>
-  </nav>
-  <div class="searchbox"><input id="q" type="search" placeholder="__PH__" autocomplete="off"></div>
-  <span class="cnt" id="cnt"></span>
-  <span class="build" id="build">__BUILD__</span>
-</div></header>
-<main class="wrap" id="main"><div class="loading">加载中…</div></main>
-<div class="mask" id="mask"><div class="modal" id="modal"></div></div>
-<script src="https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/app.js?v=__JV__" onerror="this.onerror=null;var g=document.createElement('script');g.src='https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/assets/app.js?v=__JV__';g.onerror=function(){var l=document.createElement('script');l.src='./app.js?v=__JV__';document.body.appendChild(l)};document.body.appendChild(g)"></script>
-<script defer src="./magnet-eps.js"></script>
-</body>
-</html>
-"""
+PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><link rel=stylesheet href="style.css?v=__CV__"></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header><main class="wrap" id=main><div class=loading>加载中…</div></main><div class=mask id=mask><div class=modal id=modal></div></div><script src="app.js?v=__JV__"></script></body></html>"""
 
 PAGES = [
     ("index.html", "home", "番组计划 · 新番表", "搜索番剧…", 'class="is-on"', "", ""),
     ("anime.html", "anime", "番剧全收录 · 番组计划", "在 8,000+ 部里搜…", "", 'class="is-on"', ""),
-    ("library.html", "library", "媒体库 · 番组计划", "搜索我的媒体库…", "", "", 'class="is-on"'),
+    ("movie.html", "movie", "电影 · 番组计划", "搜索电影…", "", "", 'class="is-on"'),
 ]
 
 
 def main():
     build_anime()
-    build_library()
+    build_movies()
 
     css = min_css((TPL / "style.css").read_text(encoding="utf-8"))
     js = (TPL / "app.js").read_text(encoding="utf-8")
@@ -254,13 +224,13 @@ def main():
     import hashlib as _h
     cv = _h.sha1(css.encode("utf-8")).hexdigest()[:10]
     jv = _h.sha1(js.encode("utf-8")).hexdigest()[:10]
-    for name, page, title, ph, on_home, on_anime, on_lib in PAGES:
+    for name, page, title, ph, on_home, on_anime, on_movie in PAGES:
         html = (PAGE.replace("__TITLE__", title).replace("__PAGE__", page)
                 .replace("__CV__", cv).replace("__JV__", jv)
                 .replace("__BUILD__", BUILD_TAG)
                 .replace("__PH__", ph)
                 .replace("__ON_HOME__", on_home).replace("__ON_ANIME__", on_anime)
-                .replace("__ON_LIBRARY__", on_lib))
+                .replace("__ON_MOVIE__", on_movie))
         (SITE / name).write_text(html, encoding="utf-8")
         print(f"  {name}: {len(html.encode('utf-8'))/1024:.0f} KB")
 
@@ -283,6 +253,12 @@ def main():
     if mj.is_file():
         shutil.copy2(mj, SITE / "magnet-eps.js")
         print("magnet-eps.js: copied")
+
+    # 媒体库页已下线：清掉旧产物，避免又被快照发布出去
+    try:
+        (SITE / "data" / "library.json").unlink()
+    except OSError:
+        pass
 
 
 if __name__ == "__main__":

@@ -440,7 +440,19 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 
 /* 手机 */
 @media (max-width: 760px) {
-  :root { --header-h: 52px; --fs-h1: 18px; --fs-h2: 17px; }
+  /* 两行顶栏：品牌+导航+高清 / 搜索独占一行。
+     390px 下品牌76+导航150+搜索96+高清40 = 362 > 可用358，
+     单行必溢出（实测 `.psz` 右缘到 415）。 */
+  :root { --header-h: 96px; --fs-h1: 18px; --fs-h2: 17px; }
+  .site-head { height: auto; }
+  .site-head .wrap {
+    flex-wrap: wrap; height: auto; padding: 8px var(--s4); gap: 8px;
+    align-content: center;
+  }
+  .head-spacer { display: none; }
+  .searchbox { flex: 1 0 100%; order: 9; min-width: 0; }
+  .searchbox input { width: 100%; max-width: none; }
+  .psz { margin-left: auto; }
   .wrap { padding: 0 var(--s4); }
   .site-head .wrap { gap: var(--s3); }
   .brand { font-size: var(--fs-md); }

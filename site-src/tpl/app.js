@@ -182,12 +182,56 @@ function renderLevels() {
   return h + '</aside>';
 }
 
-function rankBlock(id, title, sub, rows) {
-  if (!rows.length) return '';
-  return '<section class="block"><div class="bhead"><h2>' + title + '</h2><span>' + sub + '</span>'
-    + '</div><div class="grid" id="' + id + '">'
-    + rows.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('')
-    + '</div></section>';
+/* 榜单默认不渲染：先放空壳，滚到附近才排序 + 填卡。
+   三块榜单要各排一遍 8,851 条再渲染 48 张卡，进站白算很不值。 */
+function rankBlock(id, title, sub, extra) {
+  return '<section class="block rank-block" data-rank="' + id + '">'
+    + '<div class="bhead"><h2>' + title + '</h2><span>' + (extra || sub) + '</span></div>'
+    + '<div class="grid" id="' + id + '"></div></section>';
+}
+
+function rankSort(a, b) {
+  var ra = a[12] || 0, rb = b[12] || 0;
+  if (ra && rb) return ra - rb;
+  if (ra) return -1;
+  if (rb) return 1;
+  return (b[7] || 0) - (a[7] || 0);
+}
+
+function rankPool(id) {
+  if (id === 'rank-q') {
+    return yearRows(HOME.y).filter(function (r) {
+      return (!HOME.q || seasonOf(r[5]) === HOME.q) && (r[12] || r[7]);
+    }).sort(rankSort).slice(0, 12);
+  }
+  if (id === 'rank-movie') {
+    return ANI.rows.filter(function (r) { return r[3] === 'movie' && (r[12] || r[7]); })
+      .sort(rankSort).slice(0, 12);
+  }
+  return ANI.rows.filter(function (r) { return r[12] || r[7]; }).sort(rankSort).slice(0, 24);
+}
+
+function mountRanks() {
+  var blocks = [].slice.call(document.querySelectorAll('.rank-block'));
+  if (!blocks.length) return;
+  var done = {};
+  function fill(el) {
+    var id = el.getAttribute('data-rank');
+    if (done[id]) return;
+    done[id] = 1;
+    var box = el.querySelector('.grid');
+    var rows = rankPool(id);
+    if (box) box.innerHTML = rows.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('');
+  }
+  if (!window.IntersectionObserver) { blocks.forEach(fill); return; }
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      fill(e.target);
+      io.unobserve(e.target);
+    });
+  }, { rootMargin: '300px' });
+  blocks.forEach(function (b) { io.observe(b); });
 }
 
 function renderHome() {
@@ -225,38 +269,19 @@ function renderHome() {
   }
 
   /* 榜单：季度榜取当前季度评分 Top 12；总榜取全站 Top 24（跨年份） */
-  /* 榜单排序：有 bgm 排名就按排名（人气+评分综合），没有才退回评分。
-     只按评分排会被「1 人打 10 分」的冷门片霸榜。 */
-  function rankSort(a, b) {
-    var ra = a[12] || 0, rb = b[12] || 0;
-    if (ra && rb) return ra - rb;
-    if (ra) return -1;
-    if (rb) return 1;
-    return (b[7] || 0) - (a[7] || 0);
-  }
-  var qPool = yearRows(HOME.y).filter(function (r) {
-    return (!HOME.q || seasonOf(r[5]) === HOME.q) && (r[12] || r[7]);
-  }).sort(rankSort).slice(0, 12);
-  var allPool = ANI.rows.filter(function (r) { return r[12] || r[7]; })
-    .sort(rankSort).slice(0, 24);
-  /* 剧场版精选：只在电影里按同一套排名排序，右侧入口指向独立的电影页 */
   var movieAll = ANI.rows.filter(function (r) { return r[3] === 'movie'; });
-  var moviePool = movieAll.filter(function (r) { return r[12] || r[7]; })
-    .sort(rankSort).slice(0, 12);
 
   /* 榜单必须落在 .home-main 里：之前拼在 .home-cols 外面，导致左边线跑到
      x=32（内容列是 x=292）并与左侧 sticky 面板的列重叠，滚动时首列被压住。 */
   main.innerHTML = '<div class="home-cols">' + renderLevels()
     + '<div class="home-main"><div class="home-head">' + head + '</div>' + body
     + rankBlock('rank-q', (HOME.q ? '第' + HOME.q + '季度' : '全部季度') + '榜',
-        '按 Bangumi 排名 Top 12', qPool)
-    + rankBlock('rank-all', '总榜', '全站排名 Top 24', allPool)
-    + (moviePool.length ? '<section class="block"><div class="bhead"><h2>剧场版 · 精选</h2><span>'
-        + '<a class="morelink" href="movie">全部 ' + movieAll.length + ' 部 ›</a></span></div>'
-        + '<div class="grid">'
-        + moviePool.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('')
-        + '</div></section>' : '')
+        '按 Bangumi 排名 Top 12')
+    + rankBlock('rank-all', '总榜', '全站排名 Top 24')
+    + (movieAll.length ? rankBlock('rank-movie', '剧场版 · 精选', '',
+        '<a class="morelink" href="movie">全部 ' + movieAll.length + ' 部 ›</a>') : '')
     + '</div></div>';
+  mountRanks();
 
   /* 交互 */
   main.querySelectorAll('[data-q]').forEach(function (b) {
@@ -281,7 +306,8 @@ function homeDefaults() {
   /* 默认落在「最新季度」；没有月份信息的则不限季度 */
   var q = 0;
   inY.forEach(function (r) { var s = seasonOf(r[5]); if (s > q) q = s; });
-  HOME = { y: y, q: q, wd: 0 };
+  /* 默认显示「今天」这一周：getDay() 0=周日…6=周六，站点 WD 1=周一…7=周日 */
+  HOME = { y: y, q: q, wd: ((new Date().getDay() + 6) % 7) + 1 };
 }
 
   /* ---------------- 番剧：全量目录 ---------------- */
@@ -475,6 +501,26 @@ function homeDefaults() {
     };
   }
 
+  /* ---------------- 顶栏（HTML 壳里只有一个空 <header>，内容由这里生成） ----------------
+     把导航/搜索/计数放进 JS，是为了让每页 HTML 控制在 1KB 以内。
+     注意：必须在任何 $('#q') / $('#psz') 绑定之前调用。 */
+  function bootHeader() {
+    var P = PAGE;
+    var ph = P === 'anime' ? '搜索番剧…' : (P === 'movie' ? '搜索电影…' : '搜索番剧…');
+    var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影']]
+      .map(function (x) {
+        return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
+      }).join('');
+    var host = document.getElementById('topbar');
+    if (!host) return;
+    host.innerHTML = '<div class="wrap"><a class="brand" href="./"><i></i>番组<b>计划</b></a>'
+      + '<nav class="mainnav">' + nav + '</nav><div class="head-spacer"></div>'
+      + '<div class="searchbox"><input id="q" type="search" placeholder="' + ph + '" autocomplete="off"></div>'
+      + '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
+      + '<span class="cnt" id="cnt"></span>'
+      + '<span class="build" id="build">' + (document.body.dataset.build || '') + '</span></div>';
+  }
+
   /* ---------------- boot ---------------- */
   function bootAnime() {
     return j('./data/anime.json').then(function (d) {
@@ -492,6 +538,7 @@ function homeDefaults() {
   $('#mask') && $('#mask').addEventListener('click', function (e) { if (e.target.id === 'mask') close(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
 
+  bootHeader();
   bootAnime().then(function () {
     if (PAGE === 'anime') {
       $('#q').placeholder = '在 ' + ANI.rows.length + ' 部里搜…';
