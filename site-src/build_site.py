@@ -205,7 +205,7 @@ PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0b0b0f">
 <title>__TITLE__</title>
-<style>__CSS__</style>
+<link rel="stylesheet" href="./style.css">
 </head>
 <body data-page="__PAGE__">
 <header class="site-head"><div class="wrap">
@@ -221,7 +221,7 @@ PAGE = """<!DOCTYPE html>
 </div></header>
 <main class="wrap" id="main"><div class="loading">加载中…</div></main>
 <div class="mask" id="mask"><div class="modal" id="modal"></div></div>
-<script>__JS__</script>
+<script src="./app.js"></script>
 <script defer src="./magnet-eps.js"></script>
 </body>
 </html>
@@ -240,6 +240,11 @@ def main():
 
     css = min_css((TPL / "style.css").read_text(encoding="utf-8"))
     js = (TPL / "app.js").read_text(encoding="utf-8")
+    # HTML 只留骨架：CSS/JS 落成独立文件由浏览器并行取，且能被 _headers 缓存。
+    # 文件名不带哈希 —— 带哈希后每次部署旧文件名消失，缓存了旧 HTML 的浏览器会
+    # 404；改用「短 max-age + must-revalidate」（见 tpl/_headers）。
+    (SITE / "style.css").write_text(css, encoding="utf-8")
+    (SITE / "app.js").write_text(js, encoding="utf-8")
     for name, page, title, ph, on_home, on_anime, on_lib in PAGES:
         html = (PAGE.replace("__TITLE__", title).replace("__PAGE__", page)
                 .replace("__CSS__", css).replace("__JS__", js).replace("__BUILD__", BUILD_TAG)
