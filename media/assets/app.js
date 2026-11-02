@@ -128,6 +128,24 @@
       tags.innerHTML = (rec.tags || []).slice(0, 12)
         .map(function (t) { return '<span class="tagpill">' + esc(t) + '</span>'; }).join('');
       var meta = [];
+      /* 评分分布：10 根柱子（1…10 分），高度按各档人数归一 */
+      if (Array.isArray(rec.rc) && rec.rc.length === 10 && !document.querySelector('#rdist')) {
+        var host = document.querySelector('#modal .mrate');
+        if (host) {
+          var mx = Math.max.apply(null, rec.rc);
+          var sum = rec.rc.reduce(function (a, b) { return a + b; }, 0);
+          var bars = rec.rc.map(function (n, i) {
+            var h = mx ? Math.max(2, Math.round((n / mx) * 100)) : 2;
+            return '<i style="height:' + h + '%" title="' + (i + 1) + ' 分 · ' + n + ' 人">'
+              + '<b>' + (i + 1) + '</b></i>';
+          }).join('');
+          var div = document.createElement('div');
+          div.className = 'rdist';
+          div.id = 'rdist';
+          div.innerHTML = bars + '<em>' + sum + ' 人评分</em>';
+          host.parentNode.insertBefore(div, host.nextSibling);
+        }
+      }
       if (rec.votes) meta.push(rec.votes + ' 人评分');
       if (rec.rank) {
         /* 排名分位：bgm 那种「评分分布」要每档人数，我们数据里没有（要调
