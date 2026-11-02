@@ -248,7 +248,7 @@
         fetch(LIVE_URL + '-save', {
           method: 'POST',
           headers: { 'content-type': 'text/plain;charset=UTF-8' },
-          body: JSON.stringify({ n: name, eps: eps }),
+          body: JSON.stringify({ n: name, eps: eps, batch: (e && e.batch) || [] }),
           signal: ctl2 ? ctl2.signal : undefined
         }).then(function () { clearTimeout(t2); }, function () { clearTimeout(t2); });
       } catch (err) { /* 忽略：只是入库，不影响展示 */ }
@@ -299,29 +299,38 @@
     return (v >= 100 ? v.toFixed(0) : v.toFixed(1)) + u[i] || '';
   }
 
+  function chipOf(c, label) {
+    var mg = String(c.m).replace(/"/g, '&quot;').replace(/&/g, '&amp;');
+    var bits = [];
+    if (c.s) bits.push(fmtSize(c.s));
+    if (c.sd) bits.push(c.sd + ' 种');
+    if (c.sub) bits.push(c.sub);
+    return '<span class="eps-chip" data-m="' + mg + '" title="' +
+      String(c.t || '').replace(/"/g, '&quot;') + '">' + label +
+      (bits.length ? ' · ' + bits.join(' · ') : '') + '</span>';
+  }
+
   function render(m, e) {
     var box = m.querySelector('#epsbox');
     if (!box) return;
-    if (!e || !e.eps) {
-      box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">暂无按集索引</div>';
-      return;
+    var eps = (e && e.eps) || {};
+    var batch = (e && e.batch) || [];
+    var nums = Object.keys(eps).map(Number).sort(function (a, b) { return a - b; });
+    var h = '';
+    if (nums.length) {
+      h += '<div class="relhead">分集磁力 · ' + nums.length + ' 集（点击复制）</div>';
+      nums.forEach(function (n) {
+        var arr = eps[n] || [];
+        if (arr.length) h += chipOf(arr[0], '第 ' + n + ' 集');
+      });
     }
-    var nums = Object.keys(e.eps).map(Number).sort(function (a, b) { return a - b; });
-    var h = '<div class="relhead">分集磁力 · ' + nums.length + ' 集（点击复制）</div>';
-    nums.forEach(function (n) {
-      var arr = e.eps[n] || [];
-      if (!arr.length) return;
-      var c = arr[0];
-      var mg = String(c.m).replace(/"/g, '&quot;').replace(/&/g, '&amp;');
-      var bits = [];
-      if (c.s) bits.push(fmtSize(c.s));
-      if (c.sd) bits.push(c.sd + ' 种');
-      if (c.sub) bits.push(c.sub);
-      h += '<span class="eps-chip" data-m="' + mg + '" title="' +
-        String(c.t || '').replace(/"/g, '&quot;') + '">第 ' + n + ' 集' +
-        (bits.length ? ' · ' + bits.join(' · ') : '') + '</span>';
-    });
-    box.innerHTML = h;
+    /* 整季/合集：以前这些包（[01-12]、第01-26话、Batch）是被直接丢掉的，
+       实际它们往往是新番早期唯一能拿到的资源，单独成一组。 */
+    if (batch.length) {
+      h += '<div class="relhead" style="margin-top:10px">整季 / 合集 · ' + batch.length + ' 个（点击复制）</div>';
+      batch.forEach(function (c, i) { h += chipOf(c, '合集 ' + (i + 1)); });
+    }
+    box.innerHTML = h || '<div class="relhead">分集磁力</div><div class="eps-none">暂无按集索引</div>';
   }
 
   function arm() {
