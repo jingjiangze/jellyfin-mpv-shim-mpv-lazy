@@ -46,7 +46,7 @@ def pull_queue():
     if not user or not pw:
         print("queue: 无凭据，跳过", flush=True)
         return {}
-    url = "https://120.48.56.189/eps-queue?clear=1"
+    url = "https://120.48.56.189/eps-queue"
     auth = "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()
     try:
         req = urllib.request.Request(url, headers={"authorization": auth, "user-agent": "eps-queue-puller"})
@@ -64,7 +64,10 @@ qi = pull_queue()
 # 队列结构是 {片名: {集号: [磁力...]}}（前端 POST /eps-save 时就是这个形状）
 # 索引按 id 存，队列只有片名 —— 用 "q:<片名>" 当键，n 字段仍是片名，
 # 客户端 findByName 按 n 匹配，与 id 无关。
-known = {v.get("n") for v in base.values() if isinstance(v, dict)}
+# 只按「已经有分集」的条目去重：索引里有大量 mark-miss 的空条目，
+# 拿它们的 n 去重会把真正查到的结果永久挡在门外（上一轮就是这么丢的）。
+known = {v.get("n") for v in base.values()
+         if isinstance(v, dict) and (v.get("eps") or {})}
 added = 0
 for k, v in qi.items():
     if not isinstance(v, dict) or not v:
