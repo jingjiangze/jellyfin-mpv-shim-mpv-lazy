@@ -468,12 +468,14 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
   .mcard .t { font-size: var(--fs-xs); }
   .sub2 { font-size: 10px; }
   .f-hint { margin-left: 0; flex-basis: 100%; }
+  /* 提示占满一整行时必须允许换行，否则 h2 被挤窄折行（电影页第三块实测折成两行） */
+  .bhead { flex-wrap: wrap; }
 
   /* 弹窗：海报 88px 与片名同排，其余整宽下沉；不再纵向堆叠 */
   .mask { padding: 0; align-items: stretch; }
   .modal { width: 100%; max-height: none; min-height: 100%; border: 0; border-radius: 0; }
   .mhd { grid-template-columns: 88px minmax(0, 1fr); gap: 6px var(--s3); padding: var(--s5) var(--s4) 0; }
-  .mposter { grid-column: 1; grid-row: 1; }
+  .mposter { grid-column: 1; grid-row: 1 / span 2; }
   .mb { display: contents; }
   .mb h3 { grid-column: 2; grid-row: 1; align-self: start; padding-right: var(--s6); margin: 0; }
   .orig { grid-column: 2; grid-row: 2; margin: 0; }
