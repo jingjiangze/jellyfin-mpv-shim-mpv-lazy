@@ -1,0 +1,273 @@
+  /* 弹窗代号：每次 openModal 自增，异步回调拿它判断自己这一代是否已被后来打开的番取代 */
+  var MODAL_GEN = 0;
+
+  /* 标签胶囊：分片里的 tag 会重复（如《攻壳机动队 SSS》的「神山健治」同时带/不带计数出现），
+     先去重再截 12 个，否则重复项会挤掉真实标签。计数表可能晚到（见 ensureTagCounts），
+     所以抽成函数，供首次渲染与计数到位后的重绘共用。 */
+  function renderTags(rec, el) {
+    if (!el) return;
+    el.innerHTML = (rec.tags || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; }).slice(0, 12).map(function (t) {
+      var n = TAGCNT[t];
+      return '<span class="tagpill">' + esc(t) + (n ? '<em>' + n + '</em>' : '') + '</span>';
+    }).join('');
+  }
+
+  function openModal(id) {
+    var r = ANI.rows.find(function (x) { return x[0] === id; });
+    if (!r) return;
+    var ex = ANI.extra[id] || [];
+    var title = r[2] || r[1];
+    var m = $('#modal');
+    if (!m) return;                              // 页面没有 #modal 壳时别抛引用错
+    var host = m, gen = ++MODAL_GEN;             // 这一代弹窗的容器引用与代号
+    /* 结构契约：magnet-eps.js 靠 h3 取片名、靠 .acts 定位插入点，别改这两个 */
+    m.innerHTML = '<span class="x" aria-label="关闭">×</span>'
+      + '<div class="mhd">'
+      +   '<div class="mposter"><img src="' + esc(ANI.poster + id + '.jpg') + '"' + fbAttr([ex[1]]) + ' alt=""></div>'
+      +   '<div class="mb">'
+      +     '<h3>' + esc(title) + '</h3>'
+      +     (r[1] !== title ? '<div class="orig">' + esc(r[1]) + '</div>' : '')
+      +     '<div class="mbadges">'
+      +       (r[4] ? '<span class="mbadge">' + r[4] + (r[5] ? ' 年 ' + r[5] + ' 月' : ' 年') + '</span>' : '')
+      +       (r[3] ? '<span class="mbadge">' + esc(TYPE[r[3]] || r[3]) + '</span>' : '')
+      +       (r[8] ? '<span class="mbadge">' + r[8] + ' 话</span>' : '')
+      +     '</div>'
+      +     '<div class="mrate">'
+      +       (r[7] ? '<i class="stars" style="--p:' + Math.max(0, Math.min(10, Math.round(r[7])))
+                 + '"></i><b class="num">' + Number(r[7]).toFixed(1) + '</b>' : '<b class="num dim">暂无评分</b>')
+      +       '<span class="mvotes" id="mvotes"></span>'
+      +     '</div>'
+      +     '<dl class="infobox" id="minfo">'
+      +       (r[4] ? '<dt>放送</dt><dd>' + r[4] + (r[5] ? '.' + String(r[5]).padStart(2, '0') : '') + '</dd>' : '')
+      +       (r[6] ? '<dt>星期</dt><dd>' + WD[r[6] - 1] + '</dd>' : '')
+      +       (r[8] ? '<dt>话数</dt><dd>' + r[8] + ' 集</dd>' : '')
+      +       (r[3] ? '<dt>类型</dt><dd>' + esc(TYPE[r[3]] || r[3]) + '</dd>' : '')
+      +     '</dl>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="mtabs">'
+      +   '<button class="mtab on" data-p="detail" type="button">详情</button>'
+      +   '<button class="mtab" data-p="rt" type="button">评价</button>'
+      +   '<button class="mtab" data-p="dm" type="button">弹幕</button>'
+      +   '<button class="mtab" data-p="rp" type="button">评论</button>'
+      + '</div>'
+      + '<div class="mbody" data-p="detail"><h4>简介</h4><p class="plot" id="plot">加载中…</p>'
+      +   '<div class="tags" id="tags"></div></div>'
+      + '<div class="mbody" id="prt" data-p="rt" hidden></div>'
+      + '<div class="mbody" id="pdm" data-p="dm" hidden></div>'
+      + '<div class="mbody" id="prp" data-p="rp" hidden></div>'
+      + '<div class="acts">'
+      +   '<span class="btn pri" id="watch" type="button">开始观看</span>'
+      +   '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
+      +   '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
+      +   (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
+      +   '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
+      +   '<button class="btn" id="mgopen" type="button">磁力详情</button>'
+      +   '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
+      +     encodeURIComponent(title) + '">B 站搜索</a>'
+      + '</div>';
+    $('#mask').classList.add('on');
+    m.querySelector('.x').onclick = close;
+
+    /* 开始观看：优先跳分集磁力（真能下载），其次 B 站弹幕播放，最后开 Bangumi 页 */
+    var wb = m.querySelector('#watch');
+    if (wb) wb.onclick = function () {
+      var box = host.querySelector('#epsbox');
+      if (box && box.querySelector('.eps-chip')) {
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        box.classList.add('flash');
+        setTimeout(function () { box.classList.remove('flash'); }, 1200);
+        return;
+      }
+      var bp = host.querySelector('#bplay');
+      if (bp) { bp.click(); return; }
+      window.open('https://bgm.tv/subject/' + id, '_blank');
+    };
+
+    /* 追番：复用卡片星标同一套存储（key 用条目 id） */
+    var fb = m.querySelector('#favbtn');
+    if (fb) {
+      var fk = String(id);
+      fb.textContent = isFollowed(fk) ? '★ 已追' : '☆ 追番';
+      fb.classList.toggle('on', isFollowed(fk));
+      fb.onclick = function () {
+        var now = toggleFollow(fk);
+        fb.textContent = now ? '★ 已追' : '☆ 追番';
+        fb.classList.toggle('on', now);
+      };
+    }
+
+    /* 磁力详情：同一个弹窗内整屏切到该番的分集 / 合集磁力视图（见 openMagView） */
+    var mgb = m.querySelector('#mgopen');
+    if (mgb) mgb.onclick = function () { openMagView(id, title, r[8] || 0); };
+
+    if (ex[2]) {
+      $('#play').onclick = function () {
+        if (host.querySelector('.trailer')) return;
+        var d = document.createElement('div');
+        d.className = 'trailer';
+        d.innerHTML = '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(ex[2])
+          + '?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
+        m.appendChild(d);
+      };
+    }
+
+    /* 计数表首次可能晚到：数据到位后若这一代弹窗还活着就用它重绘标签。
+       rec 由下面的 pr.then 填；还没到位时直接跳过（那时的首次渲染会读到已就绪的 TAGCNT）。 */
+    var rec = null;
+    ensureTagCounts(function () {
+      if (gen !== MODAL_GEN || !rec) return;
+      renderTags(rec, host.querySelector('#tags'));
+    });
+    bindBili(id, title, r[4] || '');
+    var sfx = id % 64;
+    var pr = shardCache[sfx];
+    if (!pr) {
+      pr = jd('s' + sfx + '.json').then(function (d) { return d; }, function () {
+        delete shardCache[sfx];          // 失败不缓存，下次还能重试
+        return null;
+      });
+      shardCache[sfx] = pr;
+    }
+    pr.then(function (list) {
+      if (gen !== MODAL_GEN) return;      // 这一代已被新打开的番取代：数据与 DOM 都不再属于它
+      var plot = host.querySelector('#plot');
+      if (!plot) return;      // close() 已清空 / 已切到磁力视图：这一代内容没了，别再往空节点写
+      if (list === null) { plot.textContent = '简介加载失败，请重试'; return; }  // 分片拉不到，与「记录不存在」区分
+      rec = (list || []).find(function (x) { return x.id === id; });
+      if (!rec) { plot.textContent = '暂无详细资料'; return; }
+      plot.textContent = rec.overview || '暂无简介';
+      renderTags(rec, host.querySelector('#tags'));
+      var meta = [];
+      /* 评分分布放进「评价」tab（10 根柱子，高度按各档人数归一） */
+      if (Array.isArray(rec.rc) && rec.rc.length === 10 && !host.querySelector('#rdist')) {
+        var prt = host.querySelector('#prt');
+        if (prt) {
+          var mx = Math.max.apply(null, rec.rc);
+          var sum = rec.rc.reduce(function (a, b) { return a + b; }, 0);
+          var bars = rec.rc.map(function (n, i) {
+            var h = mx ? Math.max(2, Math.round((n / mx) * 100)) : 2;
+            return '<i style="height:' + h + '%" title="' + (i + 1) + ' 分 · ' + n + ' 人">'
+              + '<b>' + (i + 1) + '</b></i>';
+          }).join('');
+          var div = document.createElement('div');
+          div.className = 'rdist';
+          div.id = 'rdist';
+          div.innerHTML = '<div class="rdhead">星级分布合计 <b>' + sum + '</b> 人'
+            + (rec.rank ? ' · 排名 <b>#' + rec.rank + '</b>' : '')
+            + (rec.votes ? ' · Bangumi 共 ' + rec.votes + ' 人评分' : '') + '</div>' + bars;
+          prt.appendChild(div);
+        }
+      }
+      /* 角色（两列卡）/ 制作（胶囊）/ 收藏统计 —— 数据来自 CI 抓的 ch/st/co */
+      if (Array.isArray(rec.ch) && rec.ch.length) {
+        var cb = document.createElement('div');
+        cb.className = 'relbox';
+        cb.innerHTML = '<div class="relhead">角色</div><div class="chgrid">'
+          + rec.ch.map(function (c) {
+            var av = avatarSrc(c[2]);
+            var nm = esc(c[0]);
+            /* 首字常驻在下、图片叠在上：图 404 时 onerror 把 img 摘掉，首字自然露出 */
+            return '<div class="chcard"><span class="ph">'
+              + '<span class="chin">' + esc(Array.from(String(c[0] == null ? '' : c[0]))[0] || '?') + '</span>'
+              + (av ? '<img class="chav" src="' + esc(av) + '" alt="" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.remove()">' : '')
+              + '</span>'
+              + '<div class="chinfo"><b>' + nm + '</b><em>' + esc(c[1]) + '</em></div></div>';
+          }).join('') + '</div>';
+        var tbox = host.querySelector('#tags');
+        if (tbox && tbox.parentNode) tbox.parentNode.insertBefore(cb, tbox.nextSibling);
+      }
+      if (Array.isArray(rec.st) && rec.st.length) {
+        var sb = document.createElement('div');
+        sb.className = 'relbox';
+        sb.innerHTML = '<div class="relhead">制作人员</div><div class="staffrow">'
+          + rec.st.map(function (p2) {
+            return '<span class="tagpill">' + esc(p2[0])
+              + (p2[1] ? '<em class="strole">' + esc(p2[1]) + '</em>' : '') + '</span>';
+          }).join('') + '</div>';
+        var cbn = host.querySelector('.chgrid');
+        var anchorEl = cbn ? cbn.parentNode : host.querySelector('#tags');
+        if (anchorEl && anchorEl.parentNode) anchorEl.parentNode.insertBefore(sb, anchorEl.nextSibling);
+      }
+      if (Array.isArray(rec.co) && rec.co.some(Boolean)) {
+        var mb = host.querySelector('.mbadges');
+        if (mb) mb.insertAdjacentHTML('beforeend',
+          '<span class="mbadge">想看 ' + rec.co[0] + ' · 在看 ' + rec.co[1] + ' · 看过 ' + rec.co[2] + '</span>');
+      }
+      if (rec.votes) meta.push(rec.votes + ' 人评分');
+      if (rec.rank) {
+        /* 排名分位：bgm 那种「评分分布」要每档人数，我们数据里没有（要调
+           Bangumi API，浏览器跨域取不到）；能真算的是排名在全体里的位置。 */
+        var total = ANI.rows.length || 1;
+        var pct = Math.max(0.1, (rec.rank / total) * 100);
+        meta.push('排名 #' + rec.rank + (pct < 20 ? '（前 ' + pct.toFixed(1) + '%）' : ''));
+      }
+      var mv = host.querySelector('#mvotes'); if (mv) mv.textContent = meta.join(' · ');
+    });
+  }
+  /* 关弹窗要把内容一起清掉：旧实现只摘 #mask 的 on，预告 iframe 会在后台继续播放，
+     下次打开还留着上一次的残留节点。容器 #modal 本身保留（openMagView 复用它当外壳）。 */
+  function close() {
+    var m = $('#modal');
+    if (m) {
+      var tr = m.querySelectorAll('.trailer');
+      for (var i = 0; i < tr.length; i++) { if (tr[i].parentNode) tr[i].parentNode.removeChild(tr[i]); }
+      m.innerHTML = '';
+    }
+    $('#mask').classList.remove('on');
+  }
+
+  /* ---------------- 详情内磁力视图（「磁力详情」按钮进来，不跳首页标签） ----------------
+     复用同一个 #modal 外壳整体换内容：.acts 里的 #mgopen 触发，‹ 返回详情 重新走
+     openModal（.mtabs / #epsbox 那套绑定与注入随之重建）。分集与合集都交给
+     magnet-eps.js 的 __epsApi（epsListHtml 同集多线路分组、batchLabel 出集数范围），
+     点击复制由 arm() 挂在 #modal 上的委托接管（.eps-chip[data-m]），这里不绑。 */
+  function openMagView(id, name, epsN) {
+    var m = $('#modal');
+    var api = window.__epsApi;
+    if (!m || !api) return;
+    m.innerHTML = '<span class="x" aria-label="关闭">×</span>'
+      + '<div class="bhead lv2"><h2>' + esc(name) + ' · 磁力</h2><span>'
+      +   '<button class="mgback" id="mgback" type="button">‹ 返回详情</button>'
+      + '</span></div>'
+      + '<div id="mgbody"><div class="loading">磁力索引加载中…</div></div>';
+    $('#mask').classList.add('on');
+    m.querySelector('.x').onclick = close;
+    var back = m.querySelector('#mgback');
+    if (back) back.onclick = function () { openModal(id); };   // 回详情：重跑 openModal 重建绑定
+
+    var body = m.querySelector('#mgbody');
+    /* 用户可能在这几秒里点了返回 / 关闭：节点已离开文档就不再写 */
+    function alive() { return body && body.isConnected; }
+    var fail = function () {
+      if (!alive()) return;
+      body.innerHTML = '<div class="eps-none">这部暂无磁力索引</div>';
+    };
+
+    api.loadShard(api.shardOf(name)).then(function (store) {
+      if (!store) return null;
+      return store[String(id)] || (api.findByName ? api.findByName(store, name) : null);
+    }, function () { return null; }).then(function (entry) {
+      if (entry) return entry;
+      return api.live(name, epsN || 0, '');
+    }).then(function (entry) {
+      if (!alive()) return;
+      if (!entry) return fail();
+      var eps = entry.eps || {}, batch = entry.batch || [];
+      var nums = Object.keys(eps).map(Number).sort(function (a, b) { return a - b; });
+      var h = '';
+      if (nums.length) {
+        h += '<div class="relhead">分集磁力 · ' + nums.length + ' 集（点击复制）</div>'
+          + '<div class="epsgrid">' + api.epsListHtml(eps) + '</div>';
+      }
+      if (batch.length) {
+        h += '<div class="relhead">整季 / 合集 · ' + batch.length + ' 个（点击复制）</div>'
+          + '<div class="epsgrid">' + batch.map(function (c, i) {
+              var lb = api.batchLabel(c, i);
+              var bd = api.descOf ? api.descOf(c, 46) : '';
+              return api.chipOf(c, lb + (bd ? ' · ' + bd : ''));
+            }).join('') + '</div>';
+      }
+      body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';
+    }).catch(fail);
+  }

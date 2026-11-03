@@ -203,61 +203,6 @@ def shard_of(title, n=16):
     return h % n
 
 
-def build_magnet_index():
-    """磁力列表页用：把整份 magnet-eps.json 收成一份轻量索引。
-
-    原来列表得按片名逐片拉 16 个分片（合计 7.5MB），这里直接给出
-    (id, 片名, 集数, 合集数, 片号)，单文件即可渲染整个列表。
-    """
-    ep = SITE / "magnet-eps.json"
-    if not ep.is_file():
-        print("magnet-index: 跳过（site/magnet-eps.json 不存在）")
-        return
-    try:
-        full = json.loads(ep.read_text(encoding="utf-8")) or {}
-    except (ValueError, OSError):
-        print("magnet-index: 跳过（site/magnet-eps.json 解析失败）")
-        return
-
-    # 兜底命名：索引里 n 缺失时用 anime.json 的中文名（build_anime 已落盘）
-    names = {}
-    ap = SITE / "data" / "anime.json"
-    if ap.is_file():
-        try:
-            for r in (json.loads(ap.read_text(encoding="utf-8")).get("rows") or []):
-                if isinstance(r, list) and len(r) > 2:
-                    names[str(r[0])] = r[2] or r[1] or ""
-        except (ValueError, OSError):
-            pass
-
-    items = []
-    for k, v in full.items():
-        if not isinstance(v, dict):
-            continue
-        # 键可能是 "305" 或 "bgm305"；老 179 条索引的键是种子哈希，跳过
-        kk = k[3:] if isinstance(k, str) and k.startswith("bgm") else str(k)
-        if not kk.isdigit():
-            continue
-        nm = str(v.get("n") or names.get(kk) or "").strip()
-        if not nm:
-            continue
-        eps = v.get("eps") or {}
-        batch = v.get("batch") or []
-        items.append({"id": int(kk), "n": nm,
-                      "e": len(eps) if isinstance(eps, dict) else 0,
-                      "b": len(batch) if isinstance(batch, list) else 0,
-                      "s": shard_of(nm)})
-    items.sort(key=lambda x: (-(x["e"] + x["b"]), x["id"]))
-    items = items[:4000]          # 控体积（实测 2469 条约 134KB）
-    out = SITE / "data"
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "magnet-index.json").write_text(
-        json.dumps({"built": BUILD_TAG, "count": len(items), "items": items},
-                   ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"magnet-index: {len(items)} 条 / 分集 "
-          f"{sum(1 for x in items if x['e'])} / 合集 {sum(1 for x in items if x['b'])}")
-
-
 def _nm(s):
     return "".join(ch for ch in str(s or "").lower()
                    if ch not in " \t\r\n-_.·・:：!！?？,，。'\"()[]【】（）～~")
@@ -367,17 +312,22 @@ PAGES = [
     ("anime.html", "anime", "番剧全收录 · 番组计划", "在 8,000+ 部里搜…", "", 'class="is-on"', ""),
     ("movie.html", "movie", "电影 · 番组计划", "搜索电影…", "", "", 'class="is-on"'),
     ("rank.html", "rank", "排行榜 · 番组计划", "搜索番剧…", "", "", ""),
-    ("magnet.html", "magnet", "磁力 · 番组计划", "搜索磁力…", "", "", ""),
 ]
 
 
 def main():
     build_anime()
-    build_magnet_index()
     build_movies()
 
     css = min_css((TPL / "style.css").read_text(encoding="utf-8"))
-    raw_js = (TPL / "app.js").read_text(encoding="utf-8")
+    # 前端源码按文件名排序拼接（NN-*.js 的数字前缀就是拼接顺序），
+    # 外壳只在这里包一次；各模块靠同一个 IIFE 作用域共享变量。
+    src_dir = TPL / "src"
+    parts = sorted(src_dir.glob("*.js"))
+    if not parts:
+        raise SystemExit("tpl/src 为空：前端源码缺失")
+    raw_js = "(function () {\n'use strict';\n" + "\n".join(
+        p.read_text(encoding="utf-8") for p in parts) + "\n})();\n"
     js = min_js(raw_js)
     # HTML 只留骨架：CSS/JS 落成独立文件由浏览器并行取，且能被 _headers 缓存。
     # 文件名不带哈希 —— 带哈希后每次部署旧文件名消失，缓存了旧 HTML 的浏览器会
