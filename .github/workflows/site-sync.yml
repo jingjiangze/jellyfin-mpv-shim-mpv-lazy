@@ -257,10 +257,10 @@ jobs:
             [ -e "$f" ] || continue
             cp -f "$f" "$RUNNER_TEMP/ms/assets/"; asset_added=$((asset_added+1))
           done
-          if [ -d media/eps ]; then
-            mkdir -p "$RUNNER_TEMP/ms/assets/eps"
-            cp -f media/eps/*.json "$RUNNER_TEMP/ms/assets/eps/" 2>/dev/null || true
-          fi
+          # eps 分片由 anime-magnet 自己镜像进数据集（它 publish 完立刻推）。
+          # 这里不能再拷：site-sync 的 checkout 通常比刚跑完的 magnet 旧，
+          # 拷一次就把新版覆盖回旧版（实测数据集 count 4490 -> 被盖成 4279，
+          # 纯合集条目 16 -> 0）。
           # 页面 HTML 也镜像一份：数据集是主存，GitHub 是次存（构建产物本身不进仓，
           # 只有 dist 里的这份镜像能让人从数据集完整取回一个可跑的站点）。
           mkdir -p "$RUNNER_TEMP/ms/assets/site"
