@@ -15,7 +15,10 @@ return String(x == null ? '' : x).toLowerCase()
 .replace(/[\s\-_.·・:!?,.'"()\[\]{}<>【】（）~〜]/g, '');
 }
 function hit(hay, q) { return !q || nrm(hay).indexOf(q) !== -1; }
-function j(u) { return fetch(u).then(function (r) { if (!r.ok) throw 0; return r.json(); }); }
+function chip(label, on, attr, val) {
+return '<button class="chip' + (on ? ' on' : '') + '" type="button" ' + attr + '="' + val + '">'
++ label + '</button>';
+}
 var D_BASES = [
 'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/data/',
 'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/',
@@ -38,18 +41,21 @@ return r.json();
 }
 return go();
 }
-function fbAttr(list) {
-var q = list.filter(Boolean);
-return q.length ? ' data-fb="' + esc(q.join('|')) + '" onerror="__fb(this)"' : '';
-}
-window.__fb = function (img) {
-var q = (img.dataset.fb || '').split('|').filter(Boolean);
-if (!q.length) { img.onerror = null; img.style.visibility = 'hidden'; return; }
-img.src = q.shift();
-img.dataset.fb = q.join('|');
-};
 var ANI = { poster: '', posterSd: '', rows: [], extra: {}, year: 0 };
 var shardCache = {};
+var TAGCNT = {}, TAGCNT_LOADING = false, TAGCNT_WAIT = [];
+function ensureTagCounts(done) {
+if (done) TAGCNT_WAIT.push(done);
+if (TAGCNT_LOADING) return;
+if (Object.keys(TAGCNT).length) { flushTagCounts(); return; }
+TAGCNT_LOADING = true;
+jd('tagcounts.json').then(function (d) { TAGCNT = d || {}; }, function () { /* 失败保持空表，允许下次重试 */ })
+.then(function () { TAGCNT_LOADING = false; flushTagCounts(); });
+}
+function flushTagCounts() {
+var w = TAGCNT_WAIT; TAGCNT_WAIT = [];
+w.forEach(function (f) { try { f(); } catch (e) { /* 单个回调失败不影响其它 */ } });
+}
 var FAV_KEY = 'follow';
 function favList() {
 try {
@@ -64,17 +70,21 @@ if (i >= 0) a.splice(i, 1); else a.push(k);
 try { localStorage.setItem(FAV_KEY, JSON.stringify(a)); } catch (e) { /* 忽略 */ }
 return i < 0;
 }
-var TAGCNT = {}, TAGCNT_LOADING = false;
-function ensureTagCounts() {
-if (TAGCNT_LOADING || Object.keys(TAGCNT).length) return;
-TAGCNT_LOADING = true;
-jd('tagcounts.json').then(function (d) { TAGCNT = d || {}; }, function () { TAGCNT_LOADING = false; });
-}
 var PSZ = { mode: 'hd' };
 try {
 var _psz = localStorage.getItem('psz');
 if (_psz === 'hd' || _psz === 'sd') PSZ.mode = _psz;
 } catch (e) { /* 隐私模式 / file:// 下 localStorage 可能不可用，忽略 */ }
+function fbAttr(list) {
+var q = list.filter(Boolean);
+return q.length ? ' data-fb="' + esc(q.join('|')) + '" onerror="__fb(this)"' : '';
+}
+window.__fb = function (img) {
+var q = (img.dataset.fb || '').split('|').filter(Boolean);
+if (!q.length) { img.onerror = null; img.style.visibility = 'hidden'; return; }
+img.src = q.shift();
+img.dataset.fb = q.join('|');
+};
 function posterSrc(id) {
 var base = PSZ.mode === 'sd' ? (ANI.posterSd || ANI.poster) : ANI.poster;
 return base + id + '.jpg';
@@ -101,180 +111,22 @@ var h = '<article class="card" data-id="' + id + '"><div class="pw">'
 + '</div></article>';
 return h;
 }
-function openModal(id) {
-var r = ANI.rows.find(function (x) { return x[0] === id; });
-if (!r) return;
-var ex = ANI.extra[id] || [];
-var title = r[2] || r[1];
-var m = $('#modal');
-m.innerHTML = '<span class="x" aria-label="关闭">×</span>'
-+ '<div class="mhd">'
-+   '<div class="mposter"><img src="' + esc(ANI.poster + id + '.jpg') + '"' + fbAttr([ex[1]]) + ' alt=""></div>'
-+   '<div class="mb">'
-+     '<h3>' + esc(title) + '</h3>'
-+     (r[1] !== title ? '<div class="orig">' + esc(r[1]) + '</div>' : '')
-+     '<div class="mbadges">'
-+       (r[4] ? '<span class="mbadge">' + r[4] + (r[5] ? ' 年 ' + r[5] + ' 月' : ' 年') + '</span>' : '')
-+       (r[3] ? '<span class="mbadge">' + esc(TYPE[r[3]] || r[3]) + '</span>' : '')
-+       (r[8] ? '<span class="mbadge">' + r[8] + ' 话</span>' : '')
-+     '</div>'
-+     '<div class="mrate">'
-+       (r[7] ? '<i class="stars" style="--p:' + Math.max(0, Math.min(10, Math.round(r[7])))
-+ '"></i><b class="num">' + Number(r[7]).toFixed(1) + '</b>' : '<b class="num dim">暂无评分</b>')
-+       '<span class="mvotes" id="mvotes"></span>'
-+     '</div>'
-+     '<dl class="infobox" id="minfo">'
-+       (r[4] ? '<dt>放送</dt><dd>' + r[4] + (r[5] ? '.' + String(r[5]).padStart(2, '0') : '') + '</dd>' : '')
-+       (r[6] ? '<dt>星期</dt><dd>' + WD[r[6] - 1] + '</dd>' : '')
-+       (r[8] ? '<dt>话数</dt><dd>' + r[8] + ' 集</dd>' : '')
-+       (r[3] ? '<dt>类型</dt><dd>' + esc(TYPE[r[3]] || r[3]) + '</dd>' : '')
-+     '</dl>'
-+   '</div>'
-+ '</div>'
-+ '<div class="mtabs">'
-+   '<button class="mtab on" data-p="detail" type="button">详情</button>'
-+   '<button class="mtab" data-p="rt" type="button">评价</button>'
-+   '<button class="mtab" data-p="dm" type="button">弹幕</button>'
-+   '<button class="mtab" data-p="rp" type="button">评论</button>'
-+ '</div>'
-+ '<div class="mbody" data-p="detail"><h4>简介</h4><p class="plot" id="plot">加载中…</p>'
-+   '<div class="tags" id="tags"></div></div>'
-+ '<div class="mbody" id="prt" data-p="rt" hidden></div>'
-+ '<div class="mbody" id="pdm" data-p="dm" hidden></div>'
-+ '<div class="mbody" id="prp" data-p="rp" hidden></div>'
-+ '<div class="acts">'
-+   '<span class="btn pri" id="watch" type="button">开始观看</span>'
-+   '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
-+   '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
-+   (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
-+   '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
-+   '<button class="btn" id="mgopen" type="button">磁力详情</button>'
-+   '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
-+     encodeURIComponent(title) + '">B 站搜索</a>'
-+ '</div>';
-$('#mask').classList.add('on');
-m.querySelector('.x').onclick = close;
-var wb = m.querySelector('#watch');
-if (wb) wb.onclick = function () {
-var box = m.querySelector('#epsbox');
-if (box && box.querySelector('.eps-chip')) {
-box.scrollIntoView({ behavior: 'smooth', block: 'center' });
-box.classList.add('flash');
-setTimeout(function () { box.classList.remove('flash'); }, 1200);
-return;
+function mcard(x, kind, idx) {
+var img = x.img ? '<img src="' + esc(x.img) + '" loading="lazy" decoding="async" alt="">'
+: '<div class="ph">🎬</div>';
+var rate = (x.r != null && x.r !== '') ? x.r : x.rating;
+var sub = [(rate ? '★ ' + Number(rate).toFixed(1) : ''), (x.y || x.year || '')]
+.filter(Boolean).join(' · ');
+return '<article class="mcard" data-ext="' + esc(kind || '') + '" data-i="'
++ (idx == null ? '' : idx) + '"><a href="' + esc(x.u || x.url || '#') + '" target="_blank" rel="noopener">'
++ '<div class="pw">' + img + '</div><div class="t">' + esc(x.n || x.title || '') + '</div>'
++ '<div class="sub2">' + sub + '</div></a></article>';
 }
-var bp = m.querySelector('#bplay');
-if (bp) { bp.click(); return; }
-window.open('https://bgm.tv/subject/' + id, '_blank');
-};
-var fb = m.querySelector('#favbtn');
-if (fb) {
-var fk = String(id);
-fb.textContent = isFollowed(fk) ? '★ 已追' : '☆ 追番';
-fb.classList.toggle('on', isFollowed(fk));
-fb.onclick = function () {
-var now = toggleFollow(fk);
-fb.textContent = now ? '★ 已追' : '☆ 追番';
-fb.classList.toggle('on', now);
-};
+function msec(title, list, kind) {
+return '<section class="msect"><div class="mhead"><h2>' + title + '</h2><span>'
++ list.length + ' 部</span></div><div class="grid mgrid">'
++ list.map(function (x, i) { return mcard(x, kind, i); }).join('') + '</div></section>';
 }
-var mgb = m.querySelector('#mgopen');
-if (mgb) mgb.onclick = function () { openMagView(id, title, r[8] || 0); };
-if (ex[2]) {
-$('#play').onclick = function () {
-if (m.querySelector('.trailer')) return;
-var d = document.createElement('div');
-d.className = 'trailer';
-d.innerHTML = '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(ex[2])
-+ '?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
-m.appendChild(d);
-};
-}
-ensureTagCounts();
-bindBili(id, title, r[4] || '');
-var sfx = id % 64;
-var pr = shardCache[sfx];
-if (!pr) {
-pr = jd('s' + sfx + '.json').then(function (d) { return d; }, function () {
-delete shardCache[sfx];          // 失败不缓存，下次还能重试
-return null;
-});
-shardCache[sfx] = pr;
-}
-pr.then(function (list) {
-var plot = $('#plot'), tags = $('#tags');
-if (list === null) { plot.textContent = '简介加载失败，请重试'; return; }  // 分片拉不到，与「记录不存在」区分
-var rec = (list || []).find(function (x) { return x.id === id; });
-if (!rec) { plot.textContent = '暂无详细资料'; return; }
-plot.textContent = rec.overview || '暂无简介';
-tags.innerHTML = (rec.tags || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; }).slice(0, 12).map(function (t) {
-var n = TAGCNT[t];
-return '<span class="tagpill">' + esc(t)
-+ (n ? '<em>' + n + '</em>' : '') + '</span>';
-}).join('');
-var meta = [];
-if (Array.isArray(rec.rc) && rec.rc.length === 10 && !document.querySelector('#rdist')) {
-var host = document.querySelector('#prt');
-if (host) {
-var mx = Math.max.apply(null, rec.rc);
-var sum = rec.rc.reduce(function (a, b) { return a + b; }, 0);
-var bars = rec.rc.map(function (n, i) {
-var h = mx ? Math.max(2, Math.round((n / mx) * 100)) : 2;
-return '<i style="height:' + h + '%" title="' + (i + 1) + ' 分 · ' + n + ' 人">'
-+ '<b>' + (i + 1) + '</b></i>';
-}).join('');
-var div = document.createElement('div');
-div.className = 'rdist';
-div.id = 'rdist';
-div.innerHTML = '<div class="rdhead">星级分布合计 <b>' + sum + '</b> 人'
-+ (rec.rank ? ' · 排名 <b>#' + rec.rank + '</b>' : '')
-+ (rec.votes ? ' · Bangumi 共 ' + rec.votes + ' 人评分' : '') + '</div>' + bars;
-host.appendChild(div);
-}
-}
-if (Array.isArray(rec.ch) && rec.ch.length) {
-var cb = document.createElement('div');
-cb.className = 'relbox';
-cb.innerHTML = '<div class="relhead">角色</div><div class="chgrid">'
-+ rec.ch.map(function (c) {
-var av = avatarSrc(c[2]);
-var nm = esc(c[0]);
-return '<div class="chcard"><span class="ph">'
-+ '<span class="chin">' + esc(Array.from(String(c[0] == null ? '' : c[0]))[0] || '?') + '</span>'
-+ (av ? '<img class="chav" src="' + esc(av) + '" alt="" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.remove()">' : '')
-+ '</span>'
-+ '<div class="chinfo"><b>' + nm + '</b><em>' + esc(c[1]) + '</em></div></div>';
-}).join('') + '</div>';
-var tbox = document.querySelector('#tags');
-if (tbox && tbox.parentNode) tbox.parentNode.insertBefore(cb, tbox.nextSibling);
-}
-if (Array.isArray(rec.st) && rec.st.length) {
-var sb = document.createElement('div');
-sb.className = 'relbox';
-sb.innerHTML = '<div class="relhead">制作人员</div><div class="staffrow">'
-+ rec.st.map(function (p2) {
-return '<span class="tagpill">' + esc(p2[0])
-+ (p2[1] ? '<em class="strole">' + esc(p2[1]) + '</em>' : '') + '</span>';
-}).join('') + '</div>';
-var cbn = document.querySelector('.chgrid');
-var anchorEl = cbn ? cbn.parentNode : document.querySelector('#tags');
-if (anchorEl && anchorEl.parentNode) anchorEl.parentNode.insertBefore(sb, anchorEl.nextSibling);
-}
-if (Array.isArray(rec.co) && rec.co.some(Boolean)) {
-var mb = document.querySelector('.mbadges');
-if (mb) mb.insertAdjacentHTML('beforeend',
-'<span class="mbadge">想看 ' + rec.co[0] + ' · 在看 ' + rec.co[1] + ' · 看过 ' + rec.co[2] + '</span>');
-}
-if (rec.votes) meta.push(rec.votes + ' 人评分');
-if (rec.rank) {
-var total = ANI.rows.length || 1;
-var pct = Math.max(0.1, (rec.rank / total) * 100);
-meta.push('排名 #' + rec.rank + (pct < 20 ? '（前 ' + pct.toFixed(1) + '%）' : ''));
-}
-var mv = $('#mvotes'); if (mv) mv.textContent = meta.join(' · ');
-});
-}
-function close() { $('#mask').classList.remove('on'); }
 var HOME = { y: 0, q: 0, wd: 0 };
 var QS = [1, 2, 3, 4];
 function seasonOf(m) { return m ? Math.ceil(m / 3) : 0; }
@@ -285,10 +137,6 @@ if (HOME.q && seasonOf(r[5]) !== HOME.q) return false;
 if (HOME.wd && r[6] !== HOME.wd) return false;
 return true;
 }).sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
-}
-function chip(label, on, attr, val) {
-return '<button class="chip' + (on ? ' on' : '') + '" type="button" ' + attr + '="' + val + '">'
-+ label + '</button>';
 }
 function renderLevels() {
 var qs = {};
@@ -420,7 +268,7 @@ var q = nrm(this.value.trim());
 t = setTimeout(function () {
 if (!q) { empty(); return; }
 var found = ANI.rows.filter(function (r) {
-return (r[1] + ' ' + (r[2] || '')).toLowerCase().indexOf(q) !== -1;
+return nrm(r[1] + ' ' + (r[2] || '')).indexOf(q) !== -1;
 }).slice(0, 120);
 $('#main').innerHTML = '<section class="block"><div class="bhead"><h2>搜索</h2><span>'
 + found.length + ' 部</span></div><div class="grid">'
@@ -459,7 +307,7 @@ $('#morewrap').hidden = left <= 0;
 if (left > 0) $('#morebtn').textContent = '加载更多 · 还剩 ' + left + ' 部';
 $('#hint').textContent = '筛出 ' + BROWSE.view.length + ' 部，已显示 ' + BROWSE.shown;
 }
-function applyBrowse() {
+function applyBrowse(reset) {
 var q = nrm(($('#q').value || '').trim());
 var y = ($('#f-year') || {}).value || '';
 var t = ($('#f-type') || {}).value || '';
@@ -487,7 +335,7 @@ return (b[7] || 0) - (a[7] || 0);
 });
 else if (sort === 'name') BROWSE.view.sort(function (a, b) { return String(a[2] || a[1]).localeCompare(String(b[2] || b[1]), 'zh'); });
 else BROWSE.view.sort(function (a, b) { return (b[4] || 0) - (a[4] || 0) || (b[7] || 0) - (a[7] || 0); });
-renderBrowse(true);
+renderBrowse(reset === true ? false : true);
 }
 var TAGS = null;
 function ensureTags() {
@@ -513,7 +361,7 @@ ensureTags().then(function (t) {
 var names = Object.keys(t).sort(function (a, b) { return t[b].length - t[a].length; });
 sel.innerHTML = '<option value="">全部</option>'
 + names.map(function (n) {
-return '<option value="' + n + '">' + n + '（' + t[n].length + '）</option>';
+return '<option value="' + esc(n) + '">' + esc(n) + '（' + t[n].length + '）</option>';
 }).join('');
 });
 }
@@ -543,22 +391,6 @@ mountTagFilter();
 applyBrowse();
 }
 var MOVIE = { all: [], view: [], shown: 0, page: 120, db: [], tm: [] };
-function mcard(x, kind, idx) {
-var img = x.img ? '<img src="' + esc(x.img) + '" loading="lazy" decoding="async" alt="">'
-: '<div class="ph">🎬</div>';
-var rate = (x.r != null && x.r !== '') ? x.r : x.rating;
-var sub = [(rate ? '★ ' + Number(rate).toFixed(1) : ''), (x.y || x.year || '')]
-.filter(Boolean).join(' · ');
-return '<article class="mcard" data-ext="' + esc(kind || '') + '" data-i="'
-+ (idx == null ? '' : idx) + '"><a href="' + esc(x.u || x.url || '#') + '" target="_blank" rel="noopener">'
-+ '<div class="pw">' + img + '</div><div class="t">' + esc(x.n || x.title || '') + '</div>'
-+ '<div class="sub2">' + sub + '</div></a></article>';
-}
-function msec(title, list, kind) {
-return '<section class="msect"><div class="mhead"><h2>' + title + '</h2><span>'
-+ list.length + ' 部</span></div><div class="grid mgrid">'
-+ list.map(function (x, i) { return mcard(x, kind, i); }).join('') + '</div></section>';
-}
 function openExtModal(kind, i) {
 var list = kind === 'tm' ? MOVIE.tm : MOVIE.db;
 var x = list && list[i];
@@ -629,7 +461,7 @@ if (left > 0) btn.textContent = '加载更多 · 还剩 ' + left + ' 部';
 var hint = $('#mhint');
 if (hint) hint.textContent = '筛出 ' + MOVIE.view.length + ' 部，已显示 ' + MOVIE.shown;
 }
-function applyMovie() {
+function applyMovie(reset) {
 var q = nrm((($('#q') || {}).value || '').trim());
 var y = ($('#m-year') || {}).value || '';
 var sort = ($('#m-sort') || {}).value || 'year';
@@ -641,7 +473,7 @@ return true;
 if (sort === 'rating') MOVIE.view.sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
 else if (sort === 'name') MOVIE.view.sort(function (a, b) { return String(a[2] || a[1]).localeCompare(String(b[2] || b[1]), 'zh'); });
 else MOVIE.view.sort(function (a, b) { return (b[4] || 0) - (a[4] || 0) || (b[7] || 0) - (a[7] || 0); });
-renderMovie(true);
+renderMovie(reset === true ? false : true);
 }
 function initMovie() {
 MOVIE.all = ANI.rows.filter(function (r) { return r[3] === 'movie'; });
@@ -683,10 +515,204 @@ var box = $('#mdb');
 if (box) box.innerHTML = '<div class="empty">电影数据加载失败（豆瓣 / TMDB 简介暂不可用），请刷新重试</div>';
 });
 }
-function refreshMovie() {
+function refreshMovie(reset) {
 if (!$('#mgrid')) return;
 paintMovieDb();
-applyMovie();
+applyMovie(reset === true);
+}
+var MODAL_GEN = 0;
+function renderTags(rec, el) {
+if (!el) return;
+el.innerHTML = (rec.tags || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; }).slice(0, 12).map(function (t) {
+var n = TAGCNT[t];
+return '<span class="tagpill">' + esc(t) + (n ? '<em>' + n + '</em>' : '') + '</span>';
+}).join('');
+}
+function openModal(id) {
+var r = ANI.rows.find(function (x) { return x[0] === id; });
+if (!r) return;
+var ex = ANI.extra[id] || [];
+var title = r[2] || r[1];
+var m = $('#modal');
+if (!m) return;                              // 页面没有 #modal 壳时别抛引用错
+var host = m, gen = ++MODAL_GEN;             // 这一代弹窗的容器引用与代号
+m.innerHTML = '<span class="x" aria-label="关闭">×</span>'
++ '<div class="mhd">'
++   '<div class="mposter"><img src="' + esc(ANI.poster + id + '.jpg') + '"' + fbAttr([ex[1]]) + ' alt=""></div>'
++   '<div class="mb">'
++     '<h3>' + esc(title) + '</h3>'
++     (r[1] !== title ? '<div class="orig">' + esc(r[1]) + '</div>' : '')
++     '<div class="mbadges">'
++       (r[4] ? '<span class="mbadge">' + r[4] + (r[5] ? ' 年 ' + r[5] + ' 月' : ' 年') + '</span>' : '')
++       (r[3] ? '<span class="mbadge">' + esc(TYPE[r[3]] || r[3]) + '</span>' : '')
++       (r[8] ? '<span class="mbadge">' + r[8] + ' 话</span>' : '')
++     '</div>'
++     '<div class="mrate">'
++       (r[7] ? '<i class="stars" style="--p:' + Math.max(0, Math.min(10, Math.round(r[7])))
++ '"></i><b class="num">' + Number(r[7]).toFixed(1) + '</b>' : '<b class="num dim">暂无评分</b>')
++       '<span class="mvotes" id="mvotes"></span>'
++     '</div>'
++     '<dl class="infobox" id="minfo">'
++       (r[4] ? '<dt>放送</dt><dd>' + r[4] + (r[5] ? '.' + String(r[5]).padStart(2, '0') : '') + '</dd>' : '')
++       (r[6] ? '<dt>星期</dt><dd>' + WD[r[6] - 1] + '</dd>' : '')
++       (r[8] ? '<dt>话数</dt><dd>' + r[8] + ' 集</dd>' : '')
++       (r[3] ? '<dt>类型</dt><dd>' + esc(TYPE[r[3]] || r[3]) + '</dd>' : '')
++     '</dl>'
++   '</div>'
++ '</div>'
++ '<div class="mtabs">'
++   '<button class="mtab on" data-p="detail" type="button">详情</button>'
++   '<button class="mtab" data-p="rt" type="button">评价</button>'
++   '<button class="mtab" data-p="dm" type="button">弹幕</button>'
++   '<button class="mtab" data-p="rp" type="button">评论</button>'
++ '</div>'
++ '<div class="mbody" data-p="detail"><h4>简介</h4><p class="plot" id="plot">加载中…</p>'
++   '<div class="tags" id="tags"></div></div>'
++ '<div class="mbody" id="prt" data-p="rt" hidden></div>'
++ '<div class="mbody" id="pdm" data-p="dm" hidden></div>'
++ '<div class="mbody" id="prp" data-p="rp" hidden></div>'
++ '<div class="acts">'
++   '<span class="btn pri" id="watch" type="button">开始观看</span>'
++   '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
++   '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
++   (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
++   '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
++   '<button class="btn" id="mgopen" type="button">磁力详情</button>'
++   '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
++     encodeURIComponent(title) + '">B 站搜索</a>'
++ '</div>';
+$('#mask').classList.add('on');
+m.querySelector('.x').onclick = close;
+var wb = m.querySelector('#watch');
+if (wb) wb.onclick = function () {
+var box = host.querySelector('#epsbox');
+if (box && box.querySelector('.eps-chip')) {
+box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+box.classList.add('flash');
+setTimeout(function () { box.classList.remove('flash'); }, 1200);
+return;
+}
+var bp = host.querySelector('#bplay');
+if (bp) { bp.click(); return; }
+window.open('https://bgm.tv/subject/' + id, '_blank');
+};
+var fb = m.querySelector('#favbtn');
+if (fb) {
+var fk = String(id);
+fb.textContent = isFollowed(fk) ? '★ 已追' : '☆ 追番';
+fb.classList.toggle('on', isFollowed(fk));
+fb.onclick = function () {
+var now = toggleFollow(fk);
+fb.textContent = now ? '★ 已追' : '☆ 追番';
+fb.classList.toggle('on', now);
+};
+}
+var mgb = m.querySelector('#mgopen');
+if (mgb) mgb.onclick = function () { openMagView(id, title, r[8] || 0); };
+if (ex[2]) {
+$('#play').onclick = function () {
+if (host.querySelector('.trailer')) return;
+var d = document.createElement('div');
+d.className = 'trailer';
+d.innerHTML = '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(ex[2])
++ '?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
+m.appendChild(d);
+};
+}
+var rec = null;
+ensureTagCounts(function () {
+if (gen !== MODAL_GEN || !rec) return;
+renderTags(rec, host.querySelector('#tags'));
+});
+bindBili(id, title, r[4] || '');
+var sfx = id % 64;
+var pr = shardCache[sfx];
+if (!pr) {
+pr = jd('s' + sfx + '.json').then(function (d) { return d; }, function () {
+delete shardCache[sfx];          // 失败不缓存，下次还能重试
+return null;
+});
+shardCache[sfx] = pr;
+}
+pr.then(function (list) {
+if (gen !== MODAL_GEN) return;      // 这一代已被新打开的番取代：数据与 DOM 都不再属于它
+var plot = host.querySelector('#plot');
+if (!plot) return;      // close() 已清空 / 已切到磁力视图：这一代内容没了，别再往空节点写
+if (list === null) { plot.textContent = '简介加载失败，请重试'; return; }  // 分片拉不到，与「记录不存在」区分
+rec = (list || []).find(function (x) { return x.id === id; });
+if (!rec) { plot.textContent = '暂无详细资料'; return; }
+plot.textContent = rec.overview || '暂无简介';
+renderTags(rec, host.querySelector('#tags'));
+var meta = [];
+if (Array.isArray(rec.rc) && rec.rc.length === 10 && !host.querySelector('#rdist')) {
+var prt = host.querySelector('#prt');
+if (prt) {
+var mx = Math.max.apply(null, rec.rc);
+var sum = rec.rc.reduce(function (a, b) { return a + b; }, 0);
+var bars = rec.rc.map(function (n, i) {
+var h = mx ? Math.max(2, Math.round((n / mx) * 100)) : 2;
+return '<i style="height:' + h + '%" title="' + (i + 1) + ' 分 · ' + n + ' 人">'
++ '<b>' + (i + 1) + '</b></i>';
+}).join('');
+var div = document.createElement('div');
+div.className = 'rdist';
+div.id = 'rdist';
+div.innerHTML = '<div class="rdhead">星级分布合计 <b>' + sum + '</b> 人'
++ (rec.rank ? ' · 排名 <b>#' + rec.rank + '</b>' : '')
++ (rec.votes ? ' · Bangumi 共 ' + rec.votes + ' 人评分' : '') + '</div>' + bars;
+prt.appendChild(div);
+}
+}
+if (Array.isArray(rec.ch) && rec.ch.length) {
+var cb = document.createElement('div');
+cb.className = 'relbox';
+cb.innerHTML = '<div class="relhead">角色</div><div class="chgrid">'
++ rec.ch.map(function (c) {
+var av = avatarSrc(c[2]);
+var nm = esc(c[0]);
+return '<div class="chcard"><span class="ph">'
++ '<span class="chin">' + esc(Array.from(String(c[0] == null ? '' : c[0]))[0] || '?') + '</span>'
++ (av ? '<img class="chav" src="' + esc(av) + '" alt="" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.remove()">' : '')
++ '</span>'
++ '<div class="chinfo"><b>' + nm + '</b><em>' + esc(c[1]) + '</em></div></div>';
+}).join('') + '</div>';
+var tbox = host.querySelector('#tags');
+if (tbox && tbox.parentNode) tbox.parentNode.insertBefore(cb, tbox.nextSibling);
+}
+if (Array.isArray(rec.st) && rec.st.length) {
+var sb = document.createElement('div');
+sb.className = 'relbox';
+sb.innerHTML = '<div class="relhead">制作人员</div><div class="staffrow">'
++ rec.st.map(function (p2) {
+return '<span class="tagpill">' + esc(p2[0])
++ (p2[1] ? '<em class="strole">' + esc(p2[1]) + '</em>' : '') + '</span>';
+}).join('') + '</div>';
+var cbn = host.querySelector('.chgrid');
+var anchorEl = cbn ? cbn.parentNode : host.querySelector('#tags');
+if (anchorEl && anchorEl.parentNode) anchorEl.parentNode.insertBefore(sb, anchorEl.nextSibling);
+}
+if (Array.isArray(rec.co) && rec.co.some(Boolean)) {
+var mb = host.querySelector('.mbadges');
+if (mb) mb.insertAdjacentHTML('beforeend',
+'<span class="mbadge">想看 ' + rec.co[0] + ' · 在看 ' + rec.co[1] + ' · 看过 ' + rec.co[2] + '</span>');
+}
+if (rec.votes) meta.push(rec.votes + ' 人评分');
+if (rec.rank) {
+var total = ANI.rows.length || 1;
+var pct = Math.max(0.1, (rec.rank / total) * 100);
+meta.push('排名 #' + rec.rank + (pct < 20 ? '（前 ' + pct.toFixed(1) + '%）' : ''));
+}
+var mv = host.querySelector('#mvotes'); if (mv) mv.textContent = meta.join(' · ');
+});
+}
+function close() {
+var m = $('#modal');
+if (m) {
+var tr = m.querySelectorAll('.trailer');
+for (var i = 0; i < tr.length; i++) { if (tr[i].parentNode) tr[i].parentNode.removeChild(tr[i]); }
+m.innerHTML = '';
+}
+$('#mask').classList.remove('on');
 }
 function openMagView(id, name, epsN) {
 var m = $('#modal');
@@ -734,270 +760,8 @@ return api.chipOf(c, lb + (bd ? ' · ' + bd : ''));
 body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';
 }).catch(fail);
 }
-var MAGIDX = null;      // [{id,n,e,b,s}]；null = 还没拿到（initMagnet 里填）
-var MGBUILT = '';       // 索引构建时间，仅用于左栏展示
-var MG = { q: '', cur: null, entry: null, seq: 0, liveQ: '' };
-var MG_MAX = 200;       // 列表最多渲染条数：一部一条，200 条足够滚，再多靠搜索
-function magnetItems() {
-if (MAGIDX) return MAGIDX;
-var api = window.__epsApi;
-MAGIDX = ANI.rows.filter(function (r) { return r[10]; }).map(function (r) {
-var n = r[2] || r[1] || '';
-return {
-id: Number(r[0]) || 0, n: n, e: Number(r[8]) || 0, b: 0,
-s: api && api.shardOf ? api.shardOf(n) : 0
-};
-});
-return MAGIDX;
-}
-function initMagnet() {
-if (!window.__epsApi) {
-$('#main').innerHTML = '<div class="empty">磁力模块未加载，请刷新页面</div>';
-return;
-}
-$('#main').innerHTML = '<div class="loading">磁力索引加载中…</div>';
-jd('magnet-index.json').then(function (d) {
-if (d && d.items && d.items.length) {
-MAGIDX = d.items.map(function (x) {
-return {
-id: Number(x.id) || 0, n: x.n || '', e: Number(x.e) || 0,
-b: Number(x.b) || 0, s: Number(x.s) || 0
-};
-});
-MGBUILT = d.built || '';
-}
-}).catch(function () { /* 文件未产出：下面 magnetItems() 用 ANI.rows 兜底 */ })
-.then(function () {
-paintMagnet();
-bindMagnetSearch();
-var q = $('#q');
-if (q) q.placeholder = '搜索磁力…';
-});
-}
-function paintMagnet() {
-var main = $('#main');
-if (!main) return;
-var total = magnetItems().length;
-main.innerHTML = '<div class="home-cols">'
-+ '<aside class="levels"><div class="lv"><div class="lv-h">磁力</div>'
-+ '<div class="chips chips--col"><span class="mnote" id="mgtotal">共 ' + total + ' 部有磁力</span></div>'
-+ (MGBUILT ? '<div class="mnote">索引 ' + esc(MGBUILT) + '</div>' : '')
-+ '</div></aside>'
-+ '<div class="home-main">'
-+ '<div class="home-head"><div class="bhead"><h2>磁力索引</h2><span>点条目看分集/合集</span></div></div>'
-+ '<div class="mglist" id="mglist"></div>'
-+ '<div class="mgdetail" id="mgdetail" hidden></div>'
-+ '</div></div>';
-var box = $('#mglist');
-if (box) box.addEventListener('click', onMagnetClick);
-var det = $('#mgdetail');
-if (det) {
-det.addEventListener('click', onMagnetDetailClick);
-det.addEventListener('keydown', function (e) {
-if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') onMagnetDetailClick(e);
-});
-}
-paintMagnetList();
-if (MG.cur) {
-var ml = $('#mglist'), md = $('#mgdetail');
-if (ml) ml.hidden = true;
-if (md) { md.hidden = false; md.innerHTML = '<div class="loading">磁力详情加载中…</div>'; }
-}
-}
-function paintMagnetList() {
-var box = $('#mglist');
-if (!box) return;
-var items = magnetItems();
-var q = nrm(MG.q);
-var view = q ? items.filter(function (x) { return hit(x.n, q); }) : items.slice();
-view.sort(function (a, b) { return (b.e + b.b) - (a.e + a.b); });
-var h = '';
-if (MG.q) h += '<div class="mnote">搜索「' + esc(String(MG.q).trim()) + '」 ' + view.length + ' 部</div>';
-if (!view.length) h += '<div class="empty">没有匹配的磁力条目</div>';
-h += view.slice(0, MG_MAX).map(function (x) {
-return '<button class="mgrow" type="button" data-id="' + esc(x.id) + '" data-n="' + esc(x.n)
-+ '" data-e="' + esc(x.e) + '" data-s="' + esc(x.s) + '">' + esc(x.n)
-+ '<span class="mgmeta">' + esc(x.e) + ' 集 · ' + esc(x.b) + ' 合集</span></button>';
-}).join('');
-if (view.length > MG_MAX) h += '<div class="mnote">仅显示前 ' + MG_MAX + ' 条，用搜索缩小</div>';
-box.innerHTML = h;
-}
-function onMagnetClick(e) {
-var b = e.target.closest && e.target.closest('.mgrow');
-if (!b) return;
-openMagnet({
-id: Number(b.getAttribute('data-id')) || 0,
-n: b.getAttribute('data-n') || '',
-e: Number(b.getAttribute('data-e')) || 0,
-s: Number(b.getAttribute('data-s')) || 0
-});
-}
-function openMagnet(it) {
-var d = $('#mgdetail');
-var api = window.__epsApi;
-if (!d || !api) return;
-var seq = ++MG.seq;
-MG.cur = it; MG.entry = null;
-d.hidden = false;
-d.innerHTML = '<div class="loading">磁力详情加载中…</div>';
-var list = $('#mglist');
-if (list) list.hidden = true;
-api.loadShard(Number(it.s) || 0).then(function (store) {
-if (!store) return null;
-return store[it.id] || (api.findByName ? api.findByName(store, it.n) : null);
-}).catch(function () { return null; }).then(function (entry) {
-if (entry) return entry;
-return api.live(it.n, Number(it.e) || 0, '').catch(function () { return null; });
-}).then(function (entry) {
-if (seq !== MG.seq) return;          // 期间点了别的条目，丢弃这次结果
-MG.entry = entry;
-showMagnetDetail(it, entry, false);
-});
-}
-function showMagnetDetail(it, entry, keepList) {
-var d = $('#mgdetail');
-var api = window.__epsApi;
-if (!d || !api) return;
-var h = '<div class="bhead"><h2>' + esc(it.n) + '</h2><span>'
-+ '<button class="mgback" id="mgback" type="button">‹ 返回列表</button></span></div>';
-if (entry) {
-var eps = entry.eps || {}, batch = entry.batch || [];
-var nums = Object.keys(eps).map(Number).sort(function (a, b) { return a - b; });
-if (nums.length) {
-h += '<div class="bhead lv2"><h2>分集磁力 · ' + nums.length + ' 集</h2></div>'
-+ '<div class="epsgrid">' + nums.map(function (n) {
-var arr = eps[n] || [];
-return arr.length ? api.chipOf(arr[0], '第 ' + n + ' 集') : '';
-}).join('') + '</div>';
-} else {
-h += '<div class="empty">这部暂无按集索引</div>';
-}
-if (batch.length) {
-h += '<div class="bhead lv2"><h2>整季 / 合集 · ' + batch.length + ' 个</h2></div>'
-+ '<div class="epsgrid">' + batch.map(function (c, i) {
-return api.chipOf(c, '合集 ' + (i + 1));
-}).join('') + '</div>';
-}
-} else {
-h += '<div class="empty">这部暂无分集磁力索引</div>';
-}
-d.innerHTML = h;
-d.hidden = false;
-var list = $('#mglist');
-if (list) list.hidden = !keepList;
-}
-function onMagnetDetailClick(e) {
-var back = e.target.closest && e.target.closest('#mgback');
-if (back) { closeMagnetDetail(); return; }
-var c = e.target.closest && e.target.closest('.eps-chip');
-if (!c || !window.__epsApi) return;
-e.preventDefault();
-var m = c.getAttribute('data-m') || '';
-if (!m) return;
-window.__epsApi.copyText(m).then(function (ok) {
-window.__epsApi.toast(ok ? '已复制磁力链接' : '复制失败，请长按手动复制');
-});
-}
-function closeMagnetDetail() {
-MG.cur = null; MG.entry = null; MG.seq++;
-var d = $('#mgdetail');
-if (d) { d.hidden = true; d.innerHTML = ''; }
-var list = $('#mglist');
-if (list) list.hidden = false;
-}
-function bindMagnetSearch() {
-var q = $('#q');
-if (!q || q.dataset.mg) return;
-q.dataset.mg = '1';
-var t = 0;
-q.addEventListener('input', function () {
-clearTimeout(t);
-var v = q.value;
-t = setTimeout(function () {
-MG.q = v;
-MG.liveQ = '';
-if (MG.cur) closeMagnetDetail();     // 搜索即回到列表，别让详情挡着
-paintMagnetList();
-if (nrm(MG.q)) magnetLive(MG.q);
-}, 220);
-});
-}
-function magnetLive(q) {
-var api = window.__epsApi;
-if (!api || !api.live) return;
-var qq = nrm(q);
-var any = magnetItems().some(function (x) { return hit(x.n, qq); });
-if (any || MG.liveQ === qq) return;
-MG.liveQ = qq;
-var box = $('#mglist');
-if (box) {
-box.insertAdjacentHTML('afterbegin',
-'<div class="mnote" data-live="1">实时查询「' + esc(String(q).trim()) + '」…</div>');
-}
-api.live(q, 0, '').then(function (entry) {
-if (MG.liveQ !== qq) return;
-var hint = box && box.querySelector('[data-live]');
-if (!entry) {
-if (hint) hint.textContent = '「' + String(q).trim() + '」本地与实时查询都没有磁力';
-return;
-}
-if (hint) hint.textContent = '来自实时查询';
-MG.cur = { id: 0, n: String(q).trim(), e: 0, s: 0 };
-MG.entry = entry;
-showMagnetDetail(MG.cur, entry, true);   // 保留列表：顶部那条提示还要看得见
-}).catch(function () {
-var hint = box && box.querySelector('[data-live]');
-if (hint) hint.textContent = '实时查询失败，请稍后再试';
-});
-}
-function refreshMagnet() {
-if (!MAGIDX) return;                 // 首屏还没就绪，initMagnet 完成后自己会画
-paintMagnet();
-if (!MG.cur) return;
-if (MG.entry) showMagnetDetail(MG.cur, MG.entry, false);
-else openMagnet(MG.cur);
-}
-function repaint() {
-if (PAGE === 'anime') applyBrowse();
-else if (PAGE === 'movie') refreshMovie();
-else if (PAGE === 'rank') renderRank();
-else renderHome();
-}
-function syncPsz(btn) {
-var hd = PSZ.mode === 'hd';
-btn.textContent = hd ? '高清' : '标准';
-btn.setAttribute('aria-pressed', hd ? 'false' : 'true');
-}
-function initPsz() {
-var btn = document.getElementById('psz');
-if (!btn) return;
-syncPsz(btn);
-btn.onclick = function () {
-PSZ.mode = PSZ.mode === 'hd' ? 'sd' : 'hd';
-try { localStorage.setItem('psz', PSZ.mode); } catch (e) { /* 忽略 */ }
-syncPsz(btn);
-if ($('#mask')) close();
-repaint();
-};
-}
-function bootHeader() {
-var P = PAGE;
-var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
-var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
-['rank', 'rank', '排行榜']]
-.map(function (x) {
-return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
-}).join('');
-var host = document.getElementById('topbar');
-if (!host) return;
-host.innerHTML = '<div class="wrap"><a class="brand" href="./"><i></i>番组<b>计划</b></a>'
-+ '<nav class="mainnav">' + nav + '</nav><div class="head-spacer"></div>'
-+ '<div class="searchbox"><input id="q" type="search" placeholder="' + ph + '" autocomplete="off"></div>'
-+ '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
-+ '<span class="cnt" id="cnt"></span>'
-+ '<span class="build" id="build">' + (document.body.dataset.build || '') + '</span></div>';
-}
 var BILI = {};          // id -> {bvid, aid, pages:[{page,cid,part}]}
+var BILI_P = {};        // id -> 在途的 resolve：同 id 并发共用一次请求
 var BILI_BASE = 'https://120.48.56.189/bili/';
 function biliGet(path, params) {
 var q = Object.keys(params || {}).map(function (k) {
@@ -1025,6 +789,7 @@ return score;
 }
 function biliResolve(id, title, year) {
 if (BILI[id] !== undefined) return Promise.resolve(BILI[id]);
+if (BILI_P[id]) return BILI_P[id];
 var direct = (typeof DATA !== 'undefined' && DATA.bili && DATA.bili[id]) || '';
 var p = direct
 ? biliGet('view', { bvid: direct })
@@ -1032,10 +797,13 @@ var p = direct
 if (!f || !f.found || !f.bvid) return { ok: false };
 return biliGet('view', { bvid: f.bvid });
 });
-return p.then(function (v) {
-BILI[id] = (v && v.ok) ? v : null;
-return BILI[id];
-}).catch(function () { BILI[id] = null; return null; });
+var r = p.then(function (v) {
+if (v && v.ok && (v.aid || (v.pages && v.pages.length))) BILI[id] = v;
+return (v && v.ok) ? v : null;
+}).catch(function () { return null; });
+BILI_P[id] = r;
+r.then(function () { delete BILI_P[id]; }, function () { delete BILI_P[id]; });
+return r;
 }
 function renderDm(box, d, pages, curPage) {
 if (!d || !d.ok) { box.innerHTML = '<div class="mnote">弹幕取不到（' + ((d && d.error) || '网络') + '）</div>'; return; }
@@ -1164,6 +932,46 @@ if (fr) fr.src = mkSrc(Number(selEl.value) || 1);
 });
 };
 }
+}
+function repaint() {
+if (PAGE === 'anime') applyBrowse(true);
+else if (PAGE === 'movie') refreshMovie(true);
+else if (PAGE === 'rank') renderRank();
+else renderHome();
+}
+function syncPsz(btn) {
+var hd = PSZ.mode === 'hd';
+btn.textContent = hd ? '高清' : '标准';
+btn.setAttribute('aria-pressed', hd ? 'false' : 'true');
+}
+function initPsz() {
+var btn = document.getElementById('psz');
+if (!btn) return;
+syncPsz(btn);
+btn.onclick = function () {
+PSZ.mode = PSZ.mode === 'hd' ? 'sd' : 'hd';
+try { localStorage.setItem('psz', PSZ.mode); } catch (e) { /* 忽略 */ }
+syncPsz(btn);
+if ($('#mask')) close();
+repaint();
+};
+}
+function bootHeader() {
+var P = PAGE;
+var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
+var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
+['rank', 'rank', '排行榜']]
+.map(function (x) {
+return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
+}).join('');
+var host = document.getElementById('topbar');
+if (!host) return;
+host.innerHTML = '<div class="wrap"><a class="brand" href="./"><i></i>番组<b>计划</b></a>'
++ '<nav class="mainnav">' + nav + '</nav><div class="head-spacer"></div>'
++ '<div class="searchbox"><input id="q" type="search" placeholder="' + ph + '" autocomplete="off"></div>'
++ '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
++ '<span class="cnt" id="cnt"></span>'
++ '<span class="build" id="build">' + (document.body.dataset.build || '') + '</span></div>';
 }
 function bootAnime() {
 return jd('anime.json').then(function (d) {
