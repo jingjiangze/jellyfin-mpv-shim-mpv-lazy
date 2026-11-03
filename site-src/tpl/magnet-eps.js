@@ -300,7 +300,11 @@
      并行发是安全的（无副作用）。命中/未命中都只想抢个先手：未命中、坏响应、
      SQLite 挂掉一律 null，**不置 LIVE_DOWN**（库挂了不该把整条透传关掉）。 */
   function dbLive(name) {
-    var u = LIVE_URL + '?kw=' + encodeURIComponent(name) + '&db=1';
+    /* `&_=` 破缓存：服务端给了 cache-control: no-store，但 nginx 在同一个响应上
+       **又**加了一条 `Cache-Control: public, max-age=600`（双头并存），CF 有可能按
+       后者缓存 —— 那样「点进详情先读 SQLite」会读到 10 分钟前的库。URL 每次不同即
+       绕开，代价只是这条请求不复用缓存（SQLite 命中本来就只有几毫秒）。 */
+    var u = LIVE_URL + '?kw=' + encodeURIComponent(name) + '&db=1&_=' + Date.now();
     return getJSON(u, 9000).then(function (d) {
       /* miss:true 是「库里没有」，ok:false 视作坏响应；两者都当空 */
       if (!d || d.miss || d.ok === false) return null;
