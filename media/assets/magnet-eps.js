@@ -287,44 +287,59 @@ var t = String((c && c.t) || '').replace(/\s+/g, ' ').trim();
 if (!t) return '';
 return t.length > max ? t.slice(0, max) + '…' : t;
 }
-function epsListHtml(eps) {
-var nums = Object.keys(eps || {}).map(Number).sort(function (a, b) { return a - b; });
-var h = '';
+function escText(s) {
+return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function metaOf(c) {
+var bits = [], sub = cleanSub(c && c.sub);
+if (c && c.s) bits.push(fmtSize(c.s));
+if (c && c.sd) bits.push(c.sd + ' 种');
+if (sub) bits.push('字幕 ' + sub);   // 不带字段名时「· 无 / · 中」看不出是什么
+return bits.join(' · ');
+}
+function rowOf(c, idx) {
+var t = String((c && c.t) || '').replace(/\s+/g, ' ').trim();
+return '<button class="mgrow" type="button" data-m="' + escAttr(c && c.m) + '"'
++ (t ? ' title="' + escAttr(t) + '"' : '') + '>'
++ '<span class="mgidx">' + escText(idx) + '</span>'
++ '<span class="mgmain"><span class="mgt">' + escText(t) + '</span>'
++ '<span class="mgmeta">' + escText(metaOf(c)) + '</span></span>'
++ '<span class="mgcopy">复制</span>'
++ '</button>';
+}
+function sectHtml(title, sub, rows) {
+return '<div class="mgsect"><div class="sec-h"><h2>' + escText(title) + '</h2>'
++ '<span class="sec-sub">' + escText(sub) + '</span></div>'
++ '<div class="mgrows">' + rows + '</div></div>';
+}
+function epsListHtml(a, b) {
+var eps = {}, batch = [];
+if (a && typeof a === 'object' && ('eps' in a || 'batch' in a)) {
+eps = a.eps || {};
+batch = a.batch || [];
+} else {
+eps = a || {};
+batch = b || [];
+}
+var nums = Object.keys(eps).map(Number)
+.filter(function (n) { return n > 0; })
+.sort(function (x, y) { return x - y; });
+var rows = '', h = '';
 nums.forEach(function (n) {
-(eps[n] || []).slice(0, 3).forEach(function (c) {
-var d = descOf(c, 46);
-h += chipOf(c, '第 ' + n + ' 集' + (d ? ' · ' + d : ''));
+(eps[n] || []).slice(0, 3).forEach(function (c) { rows += rowOf(c, pad2(n)); });
 });
-});
+if (rows) h += sectHtml('分集磁力', nums.length + ' 集 · 点击复制', rows);
+var brows = '';
+(batch || []).forEach(function (c) { brows += rowOf(c, '合集'); });
+if (brows) h += sectHtml('整季 / 合集', (batch || []).length + ' 个 · 点击复制', brows);
 return h;
 }
 function render(m, e) {
 var box = m.querySelector('#epsbox');
 if (!box) return;
-var eps = (e && e.eps) || {};
-var batch = (e && e.batch) || [];
-var nums = Object.keys(eps).map(Number).sort(function (a, b) { return a - b; });
-var h = '';
-if (nums.length) {
-h += '<div class="relhead">分集磁力 · ' + nums.length + ' 集（点击复制）</div>';
-h += epsListHtml(eps);
-}
-if (batch.length) {
-h += '<div class="relhead" style="margin-top:10px">整季 / 合集 · ' + batch.length + ' 个（点击复制）</div>';
-var labels = batch.map(function (c, i) { return batchLabel(c, i); });
-var dup = {}, used = {};
-labels.forEach(function (s) { dup[s] = (dup[s] || 0) + 1; });
-batch.forEach(function (c, i) {
-var lb = labels[i];
-if (dup[lb] > 1) {
-used[lb] = (used[lb] || 0) + 1;
-lb += ' · 来源 ' + used[lb];
-}
-var bd = descOf(c, 46);
-h += chipOf(c, lb + (bd ? ' · ' + bd : ''));
-});
-}
-box.innerHTML = h || '<div class="relhead">分集磁力</div><div class="eps-none">暂无按集索引</div>';
+var h = epsListHtml(e);
+box.innerHTML = h || '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
++ '<div class="eps-none">暂无按集索引</div></div>';
 }
 function legacyCopy(txt) {
 var ta = null;
@@ -385,7 +400,7 @@ if (!m) return;
 if (m.__epsObs) return;
 m.__epsObs = true;
 function onChip(ev) {
-var c = ev.target && ev.target.closest && ev.target.closest('.eps-chip');
+var c = ev.target && ev.target.closest && ev.target.closest('.mgrow, .eps-chip');
 if (!c) return;
 ev.preventDefault();
 ev.stopPropagation();            // 别冒泡去触发卡片的开关逻辑
@@ -398,6 +413,8 @@ toast(ok ? '已复制磁力链接' : '复制失败，请长按链接手动复制
 m.addEventListener('click', onChip);
 m.addEventListener('keydown', function (ev) {
 if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+var t = ev.target;
+if (t && t.closest && t.closest('.mgrow')) return;
 onChip(ev);
 });
 new MutationObserver(function () {
@@ -406,22 +423,28 @@ if (!h3) return;
 var name = h3.textContent.trim();
 if (name === LAST_NAME && m.querySelector('#epsbox')) return;
 LAST_NAME = name;
-var host = m.querySelector('.acts') || m.querySelector('.mb');
-if (!host || host.parentNode.querySelector('#epsbox')) return;
+var body = m.querySelector('.mbody[data-p="detail"]');
+var host = body ? null : (m.querySelector('.acts') || m.querySelector('.mb'));
+if (!body && !host) return;
+if ((body || host.parentNode).querySelector('#epsbox')) return;   // 已有就不重复插
 var box = document.createElement('div');
 box.className = 'relbox';
 box.id = 'epsbox';
-box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引加载中…</div>';
-host.parentNode.insertBefore(box, host.nextSibling);
+box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
++ '<div class="eps-none">索引加载中…</div></div>';
+if (body) body.appendChild(box);
+else host.parentNode.insertBefore(box, host.nextSibling);
 resolveEntry(name).then(function (e) {
 if (e && ((e.eps && Object.keys(e.eps).length) || (e.batch && e.batch.length))) return render(m, e);
-box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引里没有，正在向后端查询…</div>';
+box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
++ '<div class="eps-none">索引里没有，正在向后端查询…</div></div>';
 var origEl = m.querySelector('.orig');
 var origName = origEl ? origEl.textContent.trim() : '';
 return fetchLive(name, episodeCount(m), origName).then(function (live) {
 if (live) return render(m, live);
 if (LIVE_DOWN) {                       // 后端连不上：说清楚，别装作"没有"
-box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引里没有，后端暂时连不上</div>';
+box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
++ '<div class="eps-none">索引里没有，后端暂时连不上</div></div>';
 return;
 }
 render(m, e);
