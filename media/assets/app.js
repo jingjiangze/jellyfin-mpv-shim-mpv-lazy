@@ -338,6 +338,9 @@ else BROWSE.view.sort(function (a, b) { return (b[4] || 0) - (a[4] || 0) || (b[7
 renderBrowse(reset === true ? false : true);
 }
 var TAGS = null;
+function pickTagFromUrl() {
+try { return new URLSearchParams(location.search).get('tag') || ''; } catch (e) { return ''; }
+}
 function ensureTags() {
 if (TAGS) return Promise.resolve(TAGS);
 return jd('tags.json').then(function (d) {
@@ -349,6 +352,7 @@ function mountTagFilter() {
 var sel = $('#f-tag');
 if (!sel) return;
 sel.onchange = function () {
+var y = $('#f-year'); if (y) y.value = '';
 if (!TAGS) {
 ensureTags().then(function () { applyBrowse(); });
 return;
@@ -363,6 +367,12 @@ sel.innerHTML = '<option value="">全部</option>'
 + names.map(function (n) {
 return '<option value="' + esc(n) + '">' + esc(n) + '（' + t[n].length + '）</option>';
 }).join('');
+var want = pickTagFromUrl();
+if (want && TAGS && TAGS[want]) {
+sel.value = want;
+var y = $('#f-year'); if (y) y.value = '';
+applyBrowse();
+}
 });
 }
 function initBrowse() {
@@ -388,6 +398,8 @@ $('#f-year').value = ys[0] ? String(ys[0]) : '';
 $('#morebtn').onclick = function () { renderBrowse(false); };
 ['#f-year', '#f-type', '#f-sort'].forEach(function (s) { $(s).addEventListener('change', applyBrowse); });
 mountTagFilter();
+var deepTag = pickTagFromUrl();
+if (deepTag && TAGS && TAGS[deepTag]) { $('#f-tag').value = deepTag; $('#f-year').value = ''; }
 applyBrowse();
 }
 var MOVIE = { all: [], view: [], shown: 0, page: 120, db: [], tm: [] };
@@ -525,7 +537,8 @@ function renderTags(rec, el) {
 if (!el) return;
 el.innerHTML = (rec.tags || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; }).slice(0, 12).map(function (t) {
 var n = TAGCNT[t];
-return '<span class="tagpill">' + esc(t) + (n ? '<em>' + n + '</em>' : '') + '</span>';
+var href = './anime.html?tag=' + encodeURIComponent(t);
+return '<a class="tagpill" href="' + esc(href) + '">' + esc(t) + (n ? '<em>' + n + '</em>' : '') + '</a>';
 }).join('');
 }
 function openModal(id) {
