@@ -447,7 +447,16 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 /* #epsbox 的 id 选择器带 padding 简写（0 …），会压过 .relbox 的 padding-top，补一条 id+class */
 #epsbox.relbox { padding-top: var(--s3); }
 .relhead { margin: 0 0 var(--s2); font-size: var(--fs-sm); font-weight: 600; letter-spacing: .02em; color: var(--dim); }
-#epsbox { padding: 0 var(--s5) var(--s5); }
+/* 磁力卡改网格：单集 chip 与同集多线路组混排时列对齐，换行后右边界一致 */
+#epsbox {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px; align-items: start; padding: 0 var(--s5) var(--s5);
+}
+/* 小标题与空态跨整行 */
+#epsbox .relhead, #epsbox .eps-none { grid-column: 1 / -1; }
+#epsbox .eps-chip, #epsbox .epgroup { width: 100%; box-sizing: border-box; }
+/* 网格项自带的 margin 会吃掉 gap 并在最后一列溢出；组内 chip 的 margin 已由 .epgroup .eps-chip 归零，这里只清直系子项 */
+#epsbox > .eps-chip, #epsbox > .epgroup { margin: 0; }
 .eps-chip {
   display: inline-flex; align-items: center; gap: 6px; margin: 0 6px 6px 0;
   padding: 4px 10px; border-radius: 999px; cursor: pointer; user-select: none;
@@ -538,6 +547,9 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
   .mrate .num { font-size: var(--fs-lg); }
   .infobox { grid-column: 1 / -1; grid-row: 4; margin-top: var(--s3); }
   .mbody, .acts, #epsbox { padding-left: var(--s4); padding-right: var(--s4); }
+  /* 移动端磁力卡固定两列；窄格内 chip 文字允许换行，避免撑破列宽 */
+  #epsbox { grid-template-columns: 1fr 1fr; }
+  #epsbox .eps-chip { white-space: normal; }
   .trailer { margin-left: var(--s4); margin-right: var(--s4); }
   .modal .x { top: var(--s2); right: var(--s2); }
 }
@@ -662,11 +674,13 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
   background: linear-gradient(135deg, #3a2f52, #241d33);
 }
 .chcard .chav {
-  position: relative; z-index: 1; display: block;
+  position: relative; z-index: 1; display: block; background: transparent;
   width: 100%; height: 100%; object-fit: cover;
 }
 .chinfo { min-width: 0; }
 .chinfo b { display: block; font-size: var(--fs-sm); font-weight: 600; }
 .chinfo em { font-style: normal; font-size: var(--fs-xs); color: var(--dim2); }
 .staffrow { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 制作胶囊的关系字段：比人名暗一档但保持清晰可读（不动全局 .tagpill em） */
+.staffrow .tagpill .strole { color: #cfc9dd; }
 @media (max-width: 760px) { .chgrid { grid-template-columns: 1fr 1fr; } }
