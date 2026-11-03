@@ -1087,7 +1087,10 @@ return r.json();
 var u = (d && d.ok && d.user) || null;
 if (!u) { var e = new Error('login_required'); e.auth = 1; throw e; }
 el.title = '点击退出登录';
-el.innerHTML = '<img class="av" src="' + esc(u.avatar) + '" alt=""><b>' + esc(u.login) + '</b>';
+var av = u.avatar
+? '<img class="av" src="' + esc(u.avatar) + '" alt="">'
+: '<span class="avt">' + esc(String(u.login || '?').slice(0, 1).toUpperCase()) + '</span>';
+el.innerHTML = av + '<b>' + esc(u.login) + '</b>';
 el.onclick = function () {
 fetch(AUTH_BASE + '/auth/logout', { method: 'POST', headers: { authorization: 'Bearer ' + tk } })
 .catch(function () { /* 退出请求失败也照常清本地态 */ })
