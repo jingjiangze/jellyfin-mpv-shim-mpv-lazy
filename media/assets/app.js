@@ -80,8 +80,7 @@ var base = PSZ.mode === 'sd' ? (ANI.posterSd || ANI.poster) : ANI.poster;
 return base + id + '.jpg';
 }
 function avatarSrc(u) {
-if (!u) return '';
-if (/^https?:/i.test(u)) return u;
+if (!u || /^https?:/i.test(u)) return '';   // 未镜像的 lain.bgm.tv 图在国内不可达，直接出首字
 return String(ANI.poster || '').replace(/bgm-$/, '') + u;
 }
 function titleHTML(s) {
@@ -205,7 +204,7 @@ if (list === null) { plot.textContent = '简介加载失败，请重试'; return
 var rec = (list || []).find(function (x) { return x.id === id; });
 if (!rec) { plot.textContent = '暂无详细资料'; return; }
 plot.textContent = rec.overview || '暂无简介';
-tags.innerHTML = (rec.tags || []).slice(0, 12).map(function (t) {
+tags.innerHTML = (rec.tags || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; }).slice(0, 12).map(function (t) {
 var n = TAGCNT[t];
 return '<span class="tagpill">' + esc(t)
 + (n ? '<em>' + n + '</em>' : '') + '</span>';
@@ -252,7 +251,7 @@ sb.className = 'relbox';
 sb.innerHTML = '<div class="relhead">制作人员</div><div class="staffrow">'
 + rec.st.map(function (p2) {
 return '<span class="tagpill">' + esc(p2[0])
-+ (p2[1] ? '<em>' + esc(p2[1]) + '</em>' : '') + '</span>';
++ (p2[1] ? '<em class="strole">' + esc(p2[1]) + '</em>' : '') + '</span>';
 }).join('') + '</div>';
 var cbn = document.querySelector('.chgrid');
 var anchorEl = cbn ? cbn.parentNode : document.querySelector('#tags');
