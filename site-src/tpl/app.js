@@ -181,6 +181,7 @@
       +   '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
       +   (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
       +   '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
+      +   '<button class="btn" id="mgopen" type="button">磁力详情</button>'
       +   '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
       +     encodeURIComponent(title) + '">B 站搜索</a>'
       + '</div>';
@@ -214,6 +215,10 @@
         fb.classList.toggle('on', now);
       };
     }
+
+    /* 磁力详情：同一个弹窗内整屏切到该番的分集 / 合集磁力视图（见 openMagView） */
+    var mgb = m.querySelector('#mgopen');
+    if (mgb) mgb.onclick = function () { openMagView(id, title, r[8] || 0); };
 
     if (ex[2]) {
       $('#play').onclick = function () {
@@ -801,6 +806,59 @@ function renderRank() {
     applyMovie();
   }
 
+  /* ---------------- 详情内磁力视图（「磁力详情」按钮进来，不跳首页标签） ----------------
+     复用同一个 #modal 外壳整体换内容：.acts 里的 #mgopen 触发，‹ 返回详情 重新走
+     openModal（.mtabs / #epsbox 那套绑定与注入随之重建）。分集与合集都交给
+     magnet-eps.js 的 __epsApi（epsListHtml 同集多线路分组、batchLabel 出集数范围），
+     点击复制由 arm() 挂在 #modal 上的委托接管（.eps-chip[data-m]），这里不绑。 */
+  function openMagView(id, name, epsN) {
+    var m = $('#modal');
+    var api = window.__epsApi;
+    if (!m || !api) return;
+    m.innerHTML = '<span class="x" aria-label="关闭">×</span>'
+      + '<div class="bhead lv2"><h2>' + esc(name) + ' · 磁力</h2><span>'
+      +   '<button class="mgback" id="mgback" type="button">‹ 返回详情</button>'
+      + '</span></div>'
+      + '<div id="mgbody"><div class="loading">磁力索引加载中…</div></div>';
+    $('#mask').classList.add('on');
+    m.querySelector('.x').onclick = close;
+    var back = m.querySelector('#mgback');
+    if (back) back.onclick = function () { openModal(id); };   // 回详情：重跑 openModal 重建绑定
+
+    var body = m.querySelector('#mgbody');
+    /* 用户可能在这几秒里点了返回 / 关闭：节点已离开文档就不再写 */
+    function alive() { return body && body.isConnected; }
+    var fail = function () {
+      if (!alive()) return;
+      body.innerHTML = '<div class="eps-none">这部暂无磁力索引</div>';
+    };
+
+    api.loadShard(api.shardOf(name)).then(function (store) {
+      if (!store) return null;
+      return store[String(id)] || (api.findByName ? api.findByName(store, name) : null);
+    }, function () { return null; }).then(function (entry) {
+      if (entry) return entry;
+      return api.live(name, epsN || 0, '');
+    }).then(function (entry) {
+      if (!alive()) return;
+      if (!entry) return fail();
+      var eps = entry.eps || {}, batch = entry.batch || [];
+      var nums = Object.keys(eps).map(Number).sort(function (a, b) { return a - b; });
+      var h = '';
+      if (nums.length) {
+        h += '<div class="relhead">分集磁力 · ' + nums.length + ' 集（点击复制）</div>'
+          + '<div class="epsgrid">' + api.epsListHtml(eps) + '</div>';
+      }
+      if (batch.length) {
+        h += '<div class="relhead">整季 / 合集 · ' + batch.length + ' 个（点击复制）</div>'
+          + '<div class="epsgrid">' + batch.map(function (c, i) {
+              return api.chipOf(c, api.batchLabel(c, i));
+            }).join('') + '</div>';
+      }
+      body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';
+    }).catch(fail);
+  }
+
   /* ---------------- 磁力独立页（magnet.html）：索引列表 + 分集/合集详情 ----------------
      列表数据走 ./data/magnet-index.json（{built, items:[{id,n,e,b,s}]}）；文件还没
      产出时降级成「ANI.rows 里有 has_mag 的那些」，分片号现场用 shardOf 算。
@@ -1062,7 +1120,6 @@ function renderRank() {
     if (PAGE === 'anime') applyBrowse();
     else if (PAGE === 'movie') refreshMovie();
     else if (PAGE === 'rank') renderRank();
-    else if (PAGE === 'magnet') refreshMagnet();
     else renderHome();
   }
 
@@ -1090,10 +1147,10 @@ function renderRank() {
      注意：必须在任何 $('#q') / $('#psz') 绑定之前调用。 */
   function bootHeader() {
     var P = PAGE;
-    /* 首页 / 番剧 / 排行榜都搜番剧，电影页搜电影，磁力页搜磁力 */
-    var ph = P === 'movie' ? '搜索电影…' : P === 'magnet' ? '搜索磁力…' : '搜索番剧…';
+    /* 首页 / 番剧 / 排行榜都搜番剧，电影页搜电影 */
+    var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
     var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
-      ['magnet', 'magnet', '磁力'], ['rank', 'rank', '排行榜']]
+      ['rank', 'rank', '排行榜']]
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');
@@ -1123,12 +1180,32 @@ function renderRank() {
       .then(function (r) { clearTimeout(timer); return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); });
   }
 
+  /* B 站 UGC 搜索会混进 OP/ED/OST/MV，播放量还特别高。按标题黑名单 +
+     分P数量 + 每集时长 粗筛一次「像不像正片」；不通过就只当「相关视频」提示。 */
+  var BILI_NOISE = /(主题歌|主題歌|\bOP\d?\b|\bED\d?\b|\bOST\b|原声|原聲|サントラ|Soundtrack|\bMV\b|\bMAD\b|\bAMV\b|混剪|鼓谱|钢琴|ピアノ|反应|reaction|合集|全集|一口气看完)/i;
+  function biliScore(v, title) {
+    if (!v || !v.pages) return 0;
+    var t = v.title || '';
+    var n = v.pages.length;
+    var avg = 0;
+    for (var i = 0; i < n; i++) avg += (v.pages[i].duration || 0);
+    avg = n ? avg / n : 0;
+    var score = 0;
+    if (BILI_NOISE.test(t)) score -= 2;            // 名字像二创/音乐
+    if (n >= 3 && avg >= 600) score += 2;          // 多P 且每集 10 分钟以上：最像正片
+    if (n === 1 && avg >= 1200) score += 1;        // 单P 长视频：可能是合集
+    if (n === 1 && avg < 300) score -= 2;          // 短片基本是 PV/OP
+    return score;
+  }
+
   function biliResolve(id, title, year) {
     if (BILI[id] !== undefined) return Promise.resolve(BILI[id]);
     var direct = (typeof DATA !== 'undefined' && DATA.bili && DATA.bili[id]) || '';
     var p = direct
       ? biliGet('view', { bvid: direct })
-      : biliGet('find', { t: title, y: year || '' }).then(function (f) {
+      /* 不传 y：盒子的 /bili/find 用「上传年」比对，而这里是「放送年」，
+         实测命中率会从 100% 掉到 65%。年份只做前端软过滤（见 biliScore）。 */
+      : biliGet('find', { t: title }).then(function (f) {
           if (!f || !f.found || !f.bvid) return { ok: false };
           return biliGet('view', { bvid: f.bvid });
         });
@@ -1231,12 +1308,43 @@ function renderRank() {
           if (on) page = Number(on.getAttribute('data-pg')) || 1;
           var old = m.querySelector('.trailer');
           if (old) old.remove();
+          var oldBar = m.querySelector('.bplay-bar');
+          if (oldBar) oldBar.remove();
+          /* find 只搜 UGC，OP/ED/MV/合集常把正片顶掉：score<0 时仍允许播放，
+             但明确标注这是「最接近的一个相关视频」。 */
+          var score = biliScore(v, title);
+          var bvid = v.bvid;
+          var mkSrc = function (pg) {
+            return 'https://player.bilibili.com/player.html?bvid=' + encodeURIComponent(bvid)
+              + '&page=' + pg + '&autoplay=1&danmaku=1&high_quality=1';
+          };
+          var barHtml = '';
+          if (score < 0) barHtml += '<div class="mnote">未找到正片源，这是 B 站上最接近的视频（可能是 OP/剪辑/相关视频）</div>';
+          if (score < 2) barHtml += '<div class="mnote">B 站官方番剧多为会员专享，这里的「集」是 UP 主上传的分P，不一定对应正片集数</div>';
+          if (v.pages.length >= 2) {
+            barHtml += '<select id="bsel">' + v.pages.map(function (p, i) {
+              return '<option value="' + (p.page || i + 1) + '">' + esc(p.part || ('第 ' + (i + 1) + ' 集')) + '</option>';
+            }).join('') + '</select>';
+          }
+          if (barHtml) {
+            var bar = document.createElement('div');
+            bar.className = 'bplay-bar';
+            bar.innerHTML = barHtml;
+            m.appendChild(bar);
+          }
           var d = document.createElement('div');
           d.className = 'trailer';
-          d.innerHTML = '<iframe src="https://player.bilibili.com/player.html?bvid=' + encodeURIComponent(v.bvid)
-            + '&page=' + page + '&autoplay=1&danmaku=1&high_quality=1" '
+          d.innerHTML = '<iframe src="' + mkSrc(page) + '" '
             + 'allow="autoplay; fullscreen" allowfullscreen referrerpolicy="no-referrer"></iframe>';
           m.appendChild(d);
+          var selEl = m.querySelector('#bsel');
+          if (selEl) {
+            selEl.value = String(page);
+            selEl.onchange = function () {
+              var fr = d.querySelector('iframe');
+              if (fr) fr.src = mkSrc(Number(selEl.value) || 1);
+            };
+          }
         });
       };
     }
@@ -1283,8 +1391,6 @@ function renderRank() {
     } else if (PAGE === 'rank') {
       renderRank();
       bindSearch(renderRank);
-    } else if (PAGE === 'magnet') {
-      initMagnet();          // 自带搜索绑定，不调 bindSearch
     } else {
       renderHome();
       bindSearch(renderHome);

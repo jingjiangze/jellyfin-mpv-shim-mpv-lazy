@@ -538,6 +538,7 @@
     loadManifest: loadManifest, loadShard: loadShard, resolveEntry: resolveEntry,
     findByName: findByName, chipOf: chipOf, copyText: copyText, toast: toast,
     fmtSize: fmtSize, norm: norm, shardOf: shardOf, buildEps: buildEps,
+    epsListHtml: epsListHtml, batchLabel: batchLabel,
     live: function (name, epsN, orig) { return fetchLive(name, epsN, orig); }
   };
 })();
