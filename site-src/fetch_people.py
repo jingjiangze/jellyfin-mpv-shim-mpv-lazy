@@ -121,7 +121,12 @@ def build(sid):
 
 def download_img(url, timeout=AVATAR_TIMEOUT, retries=AVATAR_RETRIES):
     """下载一张图，返回 bytes；content-type 不是 image/* 也当失败。"""
-    req = urllib.request.Request(url, headers={"user-agent": IMG_UA, "accept": "image/*"})
+    req = urllib.request.Request(url, headers={
+        "user-agent": IMG_UA,
+        "referer": "https://bgm.tv/",
+        "accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+        "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
+    })
     last = None
     for i in range(retries + 1):
         try:
