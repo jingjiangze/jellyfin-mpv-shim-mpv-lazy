@@ -140,7 +140,8 @@
       if (list === null) { plot.textContent = '简介加载失败，请重试'; return; }  // 分片拉不到，与「记录不存在」区分
       rec = (list || []).find(function (x) { return x.id === id; });
       if (!rec) { plot.textContent = '暂无详细资料'; return; }
-      plot.textContent = rec.overview || '暂无简介';
+      /* 简介里常带 3 行以上连续空行（原文分段残留），pre-wrap 下会撑出大块空白 */
+      plot.textContent = String(rec.overview || '暂无简介').replace(/\n{3,}/g, '\n\n');
       renderTags(rec, host.querySelector('#tags'));
       var meta = [];
       /* 评分分布放进「评价」tab（10 根柱子，高度按各档人数归一） */

@@ -29,8 +29,8 @@
   --line-hi: #34343f;
   --fg: #ececf1;
   --fg2: #b9b9c6;
-  --dim: #9b9ba6;
-  --dim2: #6f6f7b;
+  --dim: #a8a8b4;
+  --dim2: #7d7d8a;
   --accent: #f09199;
   --accent-soft: rgba(240, 145, 153, .13);
   --accent-line: rgba(240, 145, 153, .42);
@@ -521,7 +521,7 @@ main {
 
 .chip.on .lv-n {
   color: inherit;
-  opacity: .75;
+  opacity: .9;
 }
 
 /* ---------------------------------------------------------------- 7 栅格 / 卡片 */
@@ -1117,7 +1117,7 @@ main {
 /* ---------------------------------------------------------------- 12 角色 / 制作人员 */
 .chgrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: var(--s3);
 }
 
@@ -1182,7 +1182,8 @@ main {
   font-weight: 600;
   line-height: 1.35;
   white-space: normal;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .chinfo em {
@@ -1694,7 +1695,7 @@ main {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
   .chgrid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   }
   .staffgrid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
