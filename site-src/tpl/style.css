@@ -600,3 +600,40 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 .rprow b { font-size: var(--fs-sm); font-weight: 600; }
 .rprow em { margin-left: 8px; font-style: normal; font-size: var(--fs-xs); color: var(--dim2); }
 .rprow p { margin: 4px 0 0; font-size: var(--fs-sm); color: var(--fg2); line-height: 1.6; }
+
+/* ---------------- 详情页 P0 新增块 ---------------- */
+.mbadges { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 var(--s3); }
+.mbadge {
+  padding: 3px 9px; border-radius: 999px;
+  font-size: var(--fs-xs); color: var(--dim);
+  background: var(--card2); border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.btn.on { color: var(--star); border-color: var(--accent-line); }
+.relbox.flash { animation: flashbox 1.2s ease; }
+@keyframes flashbox {
+  0%, 100% { background: transparent; }
+  30% { background: var(--accent-soft); border-radius: var(--r-sm); }
+}
+.rdhead { margin: 0 0 var(--s2); font-size: var(--fs-sm); color: var(--dim); }
+.rdhead b { color: var(--fg); font-weight: 600; }
+.tagpill em {
+  margin-left: 6px; font-style: normal; font-size: 10px; color: var(--dim2);
+  font-variant-numeric: tabular-nums;
+}
+/* 角色两列卡 + 制作胶囊 */
+.chgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.chcard {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px; border-radius: var(--r-sm);
+  background: var(--card2); border: 1px solid var(--line);
+}
+.chcard img, .chcard .chph {
+  flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%;
+  object-fit: cover; background: var(--line);
+}
+.chinfo { min-width: 0; }
+.chinfo b { display: block; font-size: var(--fs-sm); font-weight: 600; }
+.chinfo em { font-style: normal; font-size: var(--fs-xs); color: var(--dim2); }
+.staffrow { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 760px) { .chgrid { grid-template-columns: 1fr 1fr; } }

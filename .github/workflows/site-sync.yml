@@ -96,6 +96,17 @@ jobs:
           RATE_WORKERS: "4"
         run: python -u fetch_ratings.py
 
+      # 角色 / 制作人员 / 收藏统计（Bangumi v0），每轮补 PEOPLE_MAX 条
+      - name: Fill characters and staff
+        timeout-minutes: 25
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          NO_LOCAL_PROXY: "1"
+          PEOPLE_MAX: "1500"
+          PEOPLE_WORKERS: "3"
+        run: python -u fetch_people.py
+
       - name: Fill missing posters
         timeout-minutes: 20
         working-directory: site-src

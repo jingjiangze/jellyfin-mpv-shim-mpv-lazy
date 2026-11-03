@@ -362,7 +362,11 @@
       h += '<div class="relhead">分集磁力 · ' + nums.length + ' 集（点击复制）</div>';
       nums.forEach(function (n) {
         var arr = eps[n] || [];
-        if (arr.length) h += chipOf(arr[0], '第 ' + n + ' 集');
+        /* 同一集有多条磁力＝多条「线路」，分别成 chip（最多 3 条），
+           对应参考 App 里「某源 3 线 / 1 线 / 无尽③」那种多线路选择。 */
+        arr.slice(0, 3).forEach(function (c, i) {
+          h += chipOf(c, '第 ' + n + ' 集' + (arr.length > 1 ? ' · 线路 ' + (i + 1) : ''));
+        });
       });
     }
     /* 整季/合集：以前这些包（[01-12]、第01-26话、Batch）是被直接丢掉的，

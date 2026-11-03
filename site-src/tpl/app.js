@@ -57,6 +57,13 @@
 
   var ANI = { poster: '', posterSd: '', rows: [], extra: {}, year: 0 };
   var shardCache = {};
+  /* 标签全站计数：单独一份小表（约 40KB），首次用到时拉一次 */
+  var TAGCNT = {}, TAGCNT_LOADING = false;
+  function ensureTagCounts() {
+    if (TAGCNT_LOADING || Object.keys(TAGCNT).length) return;
+    TAGCNT_LOADING = true;
+    jd('tagcounts.json').then(function (d) { TAGCNT = d || {}; }, function () { TAGCNT_LOADING = false; });
+  }
 
   /* 海报清晰度：hd 用大图 ANI.poster，sd 用小图 ANI.posterSd（省流量）。
      sd 图缺失或加载失败时由 data-fb 回落到大图，绝不能出现空白封面。 */
@@ -107,6 +114,11 @@
       +   '<div class="mb">'
       +     '<h3>' + esc(title) + '</h3>'
       +     (r[1] !== title ? '<div class="orig">' + esc(r[1]) + '</div>' : '')
+      +     '<div class="mbadges">'
+      +       (r[4] ? '<span class="mbadge">' + r[4] + (r[5] ? ' 年 ' + r[5] + ' 月' : ' 年') + '</span>' : '')
+      +       (r[3] ? '<span class="mbadge">' + esc(TYPE[r[3]] || r[3]) + '</span>' : '')
+      +       (r[8] ? '<span class="mbadge">' + r[8] + ' 话</span>' : '')
+      +     '</div>'
       +     '<div class="mrate">'
       +       (r[7] ? '<i class="stars" style="--p:' + Math.max(0, Math.min(10, Math.round(r[7])))
                  + '"></i><b class="num">' + Number(r[7]).toFixed(1) + '</b>' : '<b class="num dim">暂无评分</b>')
@@ -122,15 +134,19 @@
       + '</div>'
       + '<div class="mtabs">'
       +   '<button class="mtab on" data-p="detail" type="button">详情</button>'
+      +   '<button class="mtab" data-p="rt" type="button">评价</button>'
       +   '<button class="mtab" data-p="dm" type="button">弹幕</button>'
       +   '<button class="mtab" data-p="rp" type="button">评论</button>'
       + '</div>'
       + '<div class="mbody" data-p="detail"><h4>简介</h4><p class="plot" id="plot">加载中…</p>'
       +   '<div class="tags" id="tags"></div></div>'
+      + '<div class="mbody" id="prt" data-p="rt" hidden></div>'
       + '<div class="mbody" id="pdm" data-p="dm" hidden></div>'
       + '<div class="mbody" id="prp" data-p="rp" hidden></div>'
       + '<div class="acts">'
-      +   '<a class="btn pri" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
+      +   '<span class="btn pri" id="watch" type="button">开始观看</span>'
+      +   '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
+      +   '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
       +   (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
       +   '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
       +   '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
@@ -138,6 +154,34 @@
       + '</div>';
     $('#mask').classList.add('on');
     m.querySelector('.x').onclick = close;
+
+    /* 开始观看：优先跳分集磁力（真能下载），其次 B 站弹幕播放，最后开 Bangumi 页 */
+    var wb = m.querySelector('#watch');
+    if (wb) wb.onclick = function () {
+      var box = m.querySelector('#epsbox');
+      if (box && box.querySelector('.eps-chip')) {
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        box.classList.add('flash');
+        setTimeout(function () { box.classList.remove('flash'); }, 1200);
+        return;
+      }
+      var bp = m.querySelector('#bplay');
+      if (bp) { bp.click(); return; }
+      window.open('https://bgm.tv/subject/' + id, '_blank');
+    };
+
+    /* 追番：复用卡片星标同一套存储（key 用条目 id） */
+    var fb = m.querySelector('#favbtn');
+    if (fb) {
+      var fk = String(id);
+      fb.textContent = isFollowed(fk) ? '★ 已追' : '☆ 追番';
+      fb.classList.toggle('on', isFollowed(fk));
+      fb.onclick = function () {
+        var now = toggleFollow(fk);
+        fb.textContent = now ? '★ 已追' : '☆ 追番';
+        fb.classList.toggle('on', now);
+      };
+    }
 
     if (ex[2]) {
       $('#play').onclick = function () {
@@ -150,6 +194,7 @@
       };
     }
 
+    ensureTagCounts();
     bindBili(id, title, r[4] || '');
     var sfx = id % 64;
     var pr = shardCache[sfx] || (shardCache[sfx] = jd('s' + sfx + '.json').catch(function () { return []; }));
@@ -158,13 +203,16 @@
       var plot = $('#plot'), tags = $('#tags');
       if (!rec) { plot.textContent = '暂无详细资料'; return; }
       plot.textContent = rec.overview || '暂无简介';
-      tags.innerHTML = (rec.tags || []).slice(0, 12)
-        .map(function (t) { return '<span class="tagpill">' + esc(t) + '</span>'; }).join('');
+      tags.innerHTML = (rec.tags || []).slice(0, 12).map(function (t) {
+        var n = TAGCNT[t];
+        return '<span class="tagpill">' + esc(t)
+          + (n ? '<em>' + n + '</em>' : '') + '</span>';
+      }).join('');
       var meta = [];
-      /* 评分分布：10 根柱子（1…10 分），高度按各档人数归一 */
+      /* 评分分布放进「评价」tab（10 根柱子，高度按各档人数归一） */
       if (Array.isArray(rec.rc) && rec.rc.length === 10 && !document.querySelector('#rdist')) {
-        var host = document.querySelector('#modal .mrate');
-        if (host && host.parentNode) {
+        var host = document.querySelector('#prt');
+        if (host) {
           var mx = Math.max.apply(null, rec.rc);
           var sum = rec.rc.reduce(function (a, b) { return a + b; }, 0);
           var bars = rec.rc.map(function (n, i) {
@@ -175,9 +223,42 @@
           var div = document.createElement('div');
           div.className = 'rdist';
           div.id = 'rdist';
-          div.innerHTML = bars + '<em>' + sum + ' 人评分</em>';
-          host.parentNode.insertBefore(div, host.nextSibling);
+          div.innerHTML = '<div class="rdhead">共 <b>' + sum + '</b> 人评分'
+            + (rec.rank ? ' · 排名 <b>#' + rec.rank + '</b>' : '')
+            + (rec.votes ? ' · Bangumi ' + rec.votes + ' 人' : '') + '</div>' + bars;
+          host.appendChild(div);
         }
+      }
+      /* 角色（两列卡）/ 制作（胶囊）/ 收藏统计 —— 数据来自 CI 抓的 ch/st/co */
+      if (Array.isArray(rec.ch) && rec.ch.length) {
+        var cb = document.createElement('div');
+        cb.className = 'relbox';
+        cb.innerHTML = '<div class="relhead">角色</div><div class="chgrid">'
+          + rec.ch.map(function (c) {
+            return '<div class="chcard">'
+              + (c[2] ? '<img src="' + esc(c[2]) + '" alt="" loading="lazy" onerror="this.remove()">'
+                      : '<i class="chph"></i>')
+              + '<div class="chinfo"><b>' + esc(c[0]) + '</b><em>' + esc(c[1]) + '</em></div></div>';
+          }).join('') + '</div>';
+        var tbox = document.querySelector('#tags');
+        if (tbox && tbox.parentNode) tbox.parentNode.insertBefore(cb, tbox.nextSibling);
+      }
+      if (Array.isArray(rec.st) && rec.st.length) {
+        var sb = document.createElement('div');
+        sb.className = 'relbox';
+        sb.innerHTML = '<div class="relhead">制作人员</div><div class="staffrow">'
+          + rec.st.map(function (p2) {
+            return '<span class="tagpill">' + esc(p2[0])
+              + (p2[1] ? '<em>' + esc(p2[1]) + '</em>' : '') + '</span>';
+          }).join('') + '</div>';
+        var cbn = document.querySelector('.chgrid');
+        var anchorEl = cbn ? cbn.parentNode : document.querySelector('#tags');
+        if (anchorEl && anchorEl.parentNode) anchorEl.parentNode.insertBefore(sb, anchorEl.nextSibling);
+      }
+      if (Array.isArray(rec.co) && rec.co.some(Boolean)) {
+        var mb = document.querySelector('.mbadges');
+        if (mb) mb.insertAdjacentHTML('beforeend',
+          '<span class="mbadge">想看 ' + rec.co[0] + ' · 在看 ' + rec.co[1] + ' · 看过 ' + rec.co[2] + '</span>');
       }
       if (rec.votes) meta.push(rec.votes + ' 人评分');
       if (rec.rank) {

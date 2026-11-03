@@ -409,7 +409,12 @@ def main():
               if len(ids) >= 3 and t not in DUP_TYPE}
     (ddir / "tags.json").write_text(
         json.dumps(tagmap, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"tags: {len(tagmap)} 个 / {sum(len(v) for v in tagmap.values())} 条映射")
+    # 详情页要显示「标签 + 全站计数」，但没必要为几十个数字拉 365KB 的 tags.json，
+    # 单独出一份 tag→count 的小表（约 40KB）。
+    counts = {t: len(ids) for t, ids in tagmap.items()}
+    (ddir / "tagcounts.json").write_text(
+        json.dumps(counts, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"tags: {len(tagmap)} 个 / {sum(len(v) for v in tagmap.values())} 条映射；counts 已出")
 
     # 磁力层：把 prior 会话的 magnet-eps.js 一起部署，并在页面里引用
     mj = TPL / "magnet-eps.js"
