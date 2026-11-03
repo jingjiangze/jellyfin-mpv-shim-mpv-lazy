@@ -51,7 +51,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: anime-${{ matrix.shard }}
-          path: site-src/site/anime/*.json
+          path: site-src/site/anime/${{ matrix.shard }}.json
           if-no-files-found: warn
           retention-days: 3
 
@@ -67,6 +67,23 @@ jobs:
           pattern: anime-*
           path: site-src/site/anime
           merge-multiple: true
+
+      - name: Verify shard JSON integrity
+        run: |
+          python - <<'EOF'
+          import glob, json, sys
+          bad = []
+          files = sorted(glob.glob("site-src/site/anime/*.json"))
+          for p in files:
+              try:
+                  json.load(open(p, encoding="utf-8"))
+              except Exception as e:
+                  bad.append(f"{p}: {e}")
+          print(f"shards: {len(files)} 个，坏 {len(bad)}")
+          if bad:
+              print("\n".join(bad[:10]))
+              sys.exit(1)
+          EOF
 
       - name: Report coverage
         run: |

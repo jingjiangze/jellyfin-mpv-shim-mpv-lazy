@@ -258,6 +258,11 @@ def build_magnet_index():
           f"{sum(1 for x in items if x['e'])} / 合集 {sum(1 for x in items if x['b'])}")
 
 
+def _nm(s):
+    return "".join(ch for ch in str(s or "").lower()
+                   if ch not in " \t\r\n-_.·・:：!！?？,，。'\"()[]【】（）～~")
+
+
 def build_movies():
     """电影页数据：豆瓣（fresh.json 的 movies）+ TMDB（fetch_tmdb.py 的 tmdb.json）。"""
     # 豆瓣条目简介：movies-intro.json 由单独脚本抓（按豆瓣 subject_id 索引）。
@@ -313,6 +318,35 @@ def build_movies():
                              "ot": x.get("ot") or ""})
         except (ValueError, OSError):
             pass
+
+    # 豆瓣 / TMDB 会各存一份同片（译名不同），列表里就重复出现两次。
+    # 按归一化片名判同片，保留简介更长的一侧作为主条目，另一侧整条去掉 ——
+    # 不合并字段，否则两套链接/海报会混在同一张卡片上。
+    db_by_name = {}
+    for i, d in enumerate(douban):
+        k = _nm(d.get("n"))
+        if k:
+            db_by_name.setdefault(k, []).append(i)
+    claimed, drop_db, drop_tm = set(), set(), set()
+    n_same = 0
+    for j, t in enumerate(tmdb):
+        k = _nm(t.get("n"))
+        if not k:
+            continue
+        i = next((x for x in db_by_name.get(k, []) if x not in claimed), None)
+        if i is None:
+            continue
+        claimed.add(i)
+        n_same += 1
+        if len(t.get("ov") or "") > len(douban[i].get("intro") or ""):
+            drop_db.add(i)
+        else:
+            drop_tm.add(j)
+    if n_same:
+        douban = [d for i, d in enumerate(douban) if i not in drop_db]
+        tmdb = [t for j, t in enumerate(tmdb) if j not in drop_tm]
+        print(f"movies: 去重 {n_same} 部（豆瓣 {len(drop_db)} / TMDB {len(drop_tm)} → "
+              f"合计 {len(douban) + len(tmdb)}）")
 
     out = SITE / "data"
     out.mkdir(parents=True, exist_ok=True)
@@ -382,6 +416,10 @@ def main():
             n += 1
         except OSError:
             pass
+    # 分片缺失会让详情弹窗（简介/标签/评分分布）大面积失效：生产是 64 片，
+    # 少于 60 说明这一轮的数据不完整，宁可让构建失败也不要发一个残废站点。
+    if n < 60:
+        raise SystemExit(f"shards only {n}, expected >= 60 —— 分片缺失，拒绝发布")
     print(f"shards: {n} (flat, data/s<N>.json)")
 
     # tag 索引：番剧页按标签筛选用。tags 只在详情分片里有，这里汇总成

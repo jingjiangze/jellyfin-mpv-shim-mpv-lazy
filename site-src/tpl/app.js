@@ -35,12 +35,16 @@
     function go() {
       if (i >= D_BASES.length) return Promise.reject(new Error('data ' + name + ' 三源都失败'));
       var u = D_BASES[i++] + name;
-      return fetch(u).then(function (r) {
+      /* 每个源限时 12s：源挂起时 fetch 永不 settle，弹窗会卡在「加载中…」 */
+      var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 12000);
+      return fetch(u, ctl ? { signal: ctl.signal } : undefined).then(function (r) {
+        clearTimeout(timer);
         if (!r.ok) throw 0;
         var ct = (r.headers.get('content-type') || '').toLowerCase();
         if (ct.indexOf('json') < 0 && ct.indexOf('octet-stream') < 0) throw 0;  // CF 兜底 HTML 会命中这里
         return r.json();
-      }).catch(go);
+      }).catch(function () { clearTimeout(timer); return go(); });
     }
     return go();
   }
@@ -57,6 +61,23 @@
 
   var ANI = { poster: '', posterSd: '', rows: [], extra: {}, year: 0 };
   var shardCache = {};
+  /* 追番：localStorage 存 id 数组。弹窗里 #favbtn 依赖这两个函数——
+     之前只加了按钮没加实现，点卡片会抛 ReferenceError 并中断 openModal，
+     导致简介/标签/评分分布永远停在「加载中…」。 */
+  var FAV_KEY = 'follow';
+  function favList() {
+    try {
+      var a = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
+      return Object.prototype.toString.call(a) === '[object Array]' ? a : [];
+    } catch (e) { return []; }
+  }
+  function isFollowed(id) { return favList().indexOf(String(id)) >= 0; }
+  function toggleFollow(id) {
+    var a = favList(), k = String(id), i = a.indexOf(k);
+    if (i >= 0) a.splice(i, 1); else a.push(k);
+    try { localStorage.setItem(FAV_KEY, JSON.stringify(a)); } catch (e) { /* 忽略 */ }
+    return i < 0;
+  }
   /* 标签全站计数：单独一份小表（约 40KB），首次用到时拉一次 */
   var TAGCNT = {}, TAGCNT_LOADING = false;
   function ensureTagCounts() {
@@ -197,10 +218,18 @@
     ensureTagCounts();
     bindBili(id, title, r[4] || '');
     var sfx = id % 64;
-    var pr = shardCache[sfx] || (shardCache[sfx] = jd('s' + sfx + '.json').catch(function () { return []; }));
+    var pr = shardCache[sfx];
+    if (!pr) {
+      pr = jd('s' + sfx + '.json').then(function (d) { return d; }, function () {
+        delete shardCache[sfx];          // 失败不缓存，下次还能重试
+        return null;
+      });
+      shardCache[sfx] = pr;
+    }
     pr.then(function (list) {
-      var rec = (list || []).find(function (x) { return x.id === id; });
       var plot = $('#plot'), tags = $('#tags');
+      if (list === null) { plot.textContent = '简介加载失败，请重试'; return; }  // 分片拉不到，与「记录不存在」区分
+      var rec = (list || []).find(function (x) { return x.id === id; });
       if (!rec) { plot.textContent = '暂无详细资料'; return; }
       plot.textContent = rec.overview || '暂无简介';
       tags.innerHTML = (rec.tags || []).slice(0, 12).map(function (t) {
@@ -742,7 +771,10 @@ function renderRank() {
       MOVIE.db = (d && d.douban) || [];
       MOVIE.tm = (d && d.tmdb) || [];
       paintMovieDb();
-    }).catch(function () { paintMovieDb(); });
+    }).catch(function () {
+      var box = $('#mdb');
+      if (box) box.innerHTML = '<div class="empty">电影数据加载失败（豆瓣 / TMDB 简介暂不可用），请刷新重试</div>';
+    });
   }
 
   /* 只重画，不重建 DOM：清晰度切换时保留当前筛选与搜索词（状态都在 select / input 上） */

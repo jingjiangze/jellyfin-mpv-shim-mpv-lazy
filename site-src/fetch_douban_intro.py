@@ -14,7 +14,9 @@
   intro 压掉连续空白、截断 600 字；sub 取 card_subtitle，
   缺则 genres + countries 用 " / " 拼，再缺则空串。
 
-容错：单条失败只跳过；本轮条数少于旧文件时保留旧数据不覆盖；
+容错：单条失败只跳过；按 subject_id 与旧文件合并——本轮抓到的覆盖旧值，
+      没抓到的保留旧值，旧文件里已不在 fresh.json 的条目（孤儿）清掉；
+      本轮整体抓取失败（OK=0 且旧文件存在）时保留旧文件不动；
       整体失败也 exit 0，CI 不变红。
       请求之间间隔 0.8s、单条最多 3 次尝试，避免触发豆瓣风控。
 
@@ -93,21 +95,41 @@ def main():
         items[sid] = {"intro": intro, "sub": make_sub(d)}
 
     dst = OUT.relative_to(HERE).as_posix()
-    old_n = 0
+    old_items = {}
     if OUT.is_file():
         try:
-            old_n = len((json.loads(OUT.read_text(encoding="utf-8")).get("items") or {}))
+            old_items = dict(json.loads(OUT.read_text(encoding="utf-8")).get("items") or {})
         except Exception:
-            old_n = 0
-    if old_n > len(items):
-        print(f"douban-intro: 保留旧数据（新抓 {len(items)} < 旧 {old_n}）")
+            old_items = {}
+    if not items and old_items:      # 整体抓取失败，不覆盖旧文件
+        print(f"douban-intro: 本轮 OK 0 / MISS {miss}，抓取整体失败，保留旧数据 {len(old_items)} 条")
         return
+
+    merged = dict(old_items)
+    added = updated = 0
+    for k, v in items.items():
+        if k in merged:
+            updated += 1
+        else:
+            added += 1
+        merged[k] = v
+
+    # 孤儿清理：只保留仍在 fresh.movies 里的 subject_id
+    want_ids = set()
+    for m in (fresh.get("movies") or []):
+        hit = SUBJ.search(m.get("u") or "")
+        if hit:
+            want_ids.add(hit.group(1))
+    orphans = [k for k in merged if k not in want_ids]
+    for k in orphans:
+        del merged[k]
 
     SITE.mkdir(parents=True, exist_ok=True)
     OUT.write_text(
-        json.dumps({"built": dt.datetime.now().strftime("%m-%d %H:%M"), "items": items},
+        json.dumps({"built": dt.datetime.now().strftime("%m-%d %H:%M"), "items": merged},
                    ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"douban-intro: OK {len(items)} 条 / MISS {miss} 条 → {dst}")
+    print(f"douban-intro: 本轮 OK {len(items)} / MISS {miss}，合并后共 {len(merged)} 条"
+          f"（新增 {added} / 更新 {updated} / 清理孤儿 {len(orphans)}）→ {dst}")
 
 
 if __name__ == "__main__":

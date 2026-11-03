@@ -87,7 +87,9 @@ def map_subject(s):
         "rank": (s.get("rating") or {}).get("rank") or None,
         "votes": (s.get("rating") or {}).get("total") or 0,
         "poster": imgs.get("large") or imgs.get("common") or imgs.get("medium") or "",
-        "overview": (s.get("summary") or "")[:220],
+        # 简介统一空白（去 CRLF / 全角缩进 / 连续空格）后截 600 字：
+        # 220 会正好切断句子（实测 s0 有 45.5% 的简介恰好停在 220 字）。
+        "overview": " ".join((s.get("summary") or "").split())[:600],
         "format": s.get("platform") or "",
         "tags": tags,
         "url": f"https://bgm.tv/subject/{s.get('id')}",
