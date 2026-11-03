@@ -305,7 +305,7 @@ def build_movies():
     return douban, tmdb
 
 
-PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><script>(function(){var B=['https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/','https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/assets/','/'];function css(i){if(i>=B.length)return;var l=document.createElement('link');l.rel='stylesheet';l.href=B[i]+'style.css?v=__CV__';l.onerror=function(){l.parentNode&&l.parentNode.removeChild(l);css(i+1)};document.head.appendChild(l)}var F=['app.js?v=__JV__','magnet-eps.js'];function ld(f,i){if(f>=F.length)return;var s=document.createElement('script');s.src=B[i]+F[f];s.onload=function(){ld(f+1,0)};s.onerror=function(){s.parentNode&&s.parentNode.removeChild(s);if(i+1<B.length)ld(f,i+1);else ld(f+1,0)};document.body.appendChild(s)}css(0);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){ld(0,0)});else ld(0,0)})()</script></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header><main class=wrap id=main><div class=loading>加载中…</div></main><div class=mask id=mask><div class=modal id=modal></div></div></body></html>"""
+PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><script>(function(){var B=['https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/','https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/assets/','/'];function css(i){if(i>=B.length)return;var l=document.createElement('link');l.rel='stylesheet';l.href=B[i]+'style.css?v=__CV__';l.onerror=function(){l.parentNode&&l.parentNode.removeChild(l);css(i+1)};document.head.appendChild(l)}var F=['app.js?v=__JV__','magnet-eps.js?v=__MV__'];function ld(f,i){if(f>=F.length)return;var s=document.createElement('script');s.src=B[i]+F[f];s.onload=function(){ld(f+1,0)};s.onerror=function(){s.parentNode&&s.parentNode.removeChild(s);if(i+1<B.length)ld(f,i+1);else ld(f+1,0)};document.body.appendChild(s)}css(0);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){ld(0,0)});else ld(0,0)})()</script></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header><main class=wrap id=main><div class=loading>加载中…</div></main><div class=mask id=mask><div class=modal id=modal></div></div></body></html>"""
 
 PAGES = [
     ("index.html", "home", "番组计划 · 新番表", "搜索番剧…", 'class="is-on"', "", ""),
@@ -342,9 +342,15 @@ def main():
     import hashlib as _h
     cv = _h.sha1(css.encode("utf-8")).hexdigest()[:10]
     jv = _h.sha1(js.encode("utf-8")).hexdigest()[:10]
+    # magnet-eps.js 也要带版本号：它由下面（约 :407）单独 minify 并写出，而页面外壳在
+    # 这里先生成，所以直接对源文件取哈希当指纹（内容派生、变则变即可）。
+    # 不带的后果：用户可能拿到「旧 magnet-eps.js + 新 app.js」，详情页 ⟳ 会调
+    # window.__epsApi.reload，旧磁力层没有这个键，只能静默降级成不刷新。
+    _mj = TPL / "magnet-eps.js"
+    mv = _h.sha1(_mj.read_bytes()).hexdigest()[:10] if _mj.is_file() else "0"
     for name, page, title, ph, on_home, on_anime, on_movie in PAGES:
         html = (PAGE.replace("__TITLE__", title).replace("__PAGE__", page)
-                .replace("__CV__", cv).replace("__JV__", jv)
+                .replace("__CV__", cv).replace("__JV__", jv).replace("__MV__", mv)
                 .replace("__BUILD__", BUILD_TAG)
                 .replace("__PH__", ph)
                 .replace("__ON_HOME__", on_home).replace("__ON_ANIME__", on_anime)

@@ -13,6 +13,11 @@
 /app.js
   Cache-Control: public, max-age=300, must-revalidate
 
+# 磁力层与 app.js 同寿命：它不带哈希，靠页面里的 ?v= 换 URL；
+# 这一条只是兜底（万一某个入口漏了 ?v=），不要给长缓存。
+/magnet-eps.js
+  Cache-Control: public, max-age=300, must-revalidate
+
 /
   Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=120
 

@@ -623,12 +623,17 @@
      画之前先核对身份：取 #modal 里 h3 的片名与本次请求的片名比对，不一致（或取不到）就直接
      返回不画 —— 刷新是 fire-and-forget、fetchLive 最长 15s，这期间用户完全可能已经打开另一部番，
      旧结果必须整条丢掉。返回是否真的画了（reload 靠它决定要不要同步 state）。 */
-  function paint(e) {
+  function paint(e, titleHint) {
     var m = document.getElementById('modal');
     if (!m) return false;
     var h3 = m.querySelector('h3');
     var cur = h3 ? String(h3.textContent == null ? '' : h3.textContent).trim() : '';
-    if (!sameTitle(cur, e && e.n)) return false;
+    /* 比对基准优先用调用方给的本次请求片名（详情页 title），没有才退回 e.n。
+       为什么不是只用 e.n：`resolveEntry` 交回来的是**分片里的索引名**（如
+       「进击的巨人 最终季 完结篇」），而 h3 显示的是站点标题（r[2]||r[1]），
+       两者在该片名上未必逐字相同 —— 只用 e.n 会把「刷新失败后回落静态分片」
+       这条路也一并误杀。 */
+    if (!sameTitle(cur, titleHint || (e && e.n))) return false;
     if (m.querySelector('#epsbox')) { render(m, e); return true; }
     var body = m.querySelector('#mgbody');
     if (body) {
@@ -693,7 +698,7 @@
         if (phBox && phBox.parentNode) phBox.innerHTML = phFail;
         return null;
       }
-      if (!paint(e)) return e;            // 框里已经是别的番：宁可不画，也不串台
+      if (!paint(e, n)) return e;         // 框里已经是别的番：宁可不画，也不串台
       syncState(e);                       // 行数与 state 推进到新结果，旧响应再也盖不回来
       return e;
     }
