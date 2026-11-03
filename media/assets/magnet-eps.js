@@ -9,6 +9,11 @@ var BASES = [
 ];
 var SHARDS = 16;
 var CACHE = {};                      // shardNo -> { 归一化片名: 条目 }
+var AUTH_BASE = 'https://120.48.56.189';
+var TOKEN_KEY = 'gh_token';
+function authToken() {
+try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+}
 function hashOf(str) {
 var h = 0, i = 0, s = String(str || '');
 while (i < s.length) {
@@ -99,7 +104,7 @@ resolve(d);
 })();
 });
 }
-var LIVE = {}, LIVE_DOWN = false;
+var LIVE = {}, LIVE_DOWN = false, NEED_LOGIN = false;
 var LIVE_URL = 'https://120.48.56.189/eps';
 var RE_RANGE = /第\s*(\d{1,4})\s*[-–~〜]\s*(\d{1,4})\s*[話话集]/;
 var RE_SINGLE = /第\s*(\d{1,4})\s*[話话集](?!\d)/;
@@ -184,15 +189,21 @@ return 0;
 }
 function fetchLive(name, epsN, orig) {
 if (LIVE[name]) return Promise.resolve(LIVE[name]);
+NEED_LOGIN = false;
 var u = LIVE_URL + '?kw=' + encodeURIComponent(name);
 if (orig) u += '&o=' + encodeURIComponent(orig);
 var ctl = typeof AbortController === 'function' ? new AbortController() : null;
 var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
-return fetch(u, ctl ? { signal: ctl.signal } : undefined).then(function (r) {
+var tk = authToken();
+var opt = ctl ? { signal: ctl.signal } : {};
+if (tk) opt.headers = { authorization: 'Bearer ' + tk };
+return fetch(u, opt).then(function (r) {
 clearTimeout(timer);
+if (r.status === 401) { NEED_LOGIN = true; throw new Error('login_required'); }
 if (!r.ok) throw new Error('HTTP ' + r.status);
 return r.json();
 }).then(function (d) {
+if (d && d.error === 'login_required') { NEED_LOGIN = true; return null; }
 var eps = (d && d.eps && Object.keys(d.eps).length) ? d.eps : null;
 var batch = (d && d.batch) || [];
 if (!eps) {
@@ -214,7 +225,10 @@ signal: ctl2 ? ctl2.signal : undefined
 }).then(function () { clearTimeout(t2); }, function () { clearTimeout(t2); });
 } catch (err) { /* 忽略：只是入库，不影响展示 */ }
 return e;
-}).catch(function () { LIVE_DOWN = true; return null; });
+}).catch(function () {
+if (!NEED_LOGIN) LIVE_DOWN = true;
+return null;
+});
 }
 function resolveEntry(name) {
 if (!name) return Promise.resolve(null);
@@ -334,6 +348,10 @@ var brows = '';
 if (brows) h += sectHtml('整季 / 合集', (batch || []).length + ' 个 · 点击复制', brows);
 return h;
 }
+function loginNoteHtml() {
+return '<div class="mnote">实时查询需登录 · <a href="' + AUTH_BASE + '/auth/start?next='
++ encodeURIComponent(location.href) + '" target="_blank" rel="noopener">GitHub 登录</a></div>';
+}
 function render(m, e) {
 var box = m.querySelector('#epsbox');
 if (!box) return;
@@ -442,6 +460,11 @@ var origEl = m.querySelector('.orig');
 var origName = origEl ? origEl.textContent.trim() : '';
 return fetchLive(name, episodeCount(m), origName).then(function (live) {
 if (live) return render(m, live);
+if (NEED_LOGIN) {                      // 401：挂登录入口，别显示成「没有资源」
+box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
++ loginNoteHtml() + '</div>';
+return;
+}
 if (LIVE_DOWN) {                       // 后端连不上：说清楚，别装作"没有"
 box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
 + '<div class="eps-none">索引里没有，后端暂时连不上</div></div>';
