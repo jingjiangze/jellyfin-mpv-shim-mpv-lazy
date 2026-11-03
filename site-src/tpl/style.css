@@ -29,8 +29,8 @@
   --line-hi: #34343f;
   --fg: #ececf1;
   --fg2: #b9b9c6;
-  --dim: #85858f;
-  --dim2: #5f5f69;
+  --dim: #9b9ba6;
+  --dim2: #6f6f7b;
   --accent: #f09199;
   --accent-soft: rgba(240, 145, 153, .13);
   --accent-line: rgba(240, 145, 153, .42);
@@ -1065,7 +1065,7 @@ main {
 }
 
 .sect {
-  margin: 0 0 var(--s6);
+  margin: 0 0 28px;
 }
 
 .sect:last-child {
@@ -1117,7 +1117,7 @@ main {
 /* ---------------------------------------------------------------- 12 角色 / 制作人员 */
 .chgrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: var(--s3);
 }
 
@@ -1174,12 +1174,15 @@ main {
 }
 
 .chinfo b {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .chinfo em {
@@ -1760,6 +1763,9 @@ main {
   .chips--col .chip {
     width: auto;
     justify-content: flex-start;
+  }
+  .chgrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .mhero, .mhd {
     grid-template-columns: 160px minmax(0, 1fr);
