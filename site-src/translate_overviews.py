@@ -142,7 +142,7 @@ def main():
     failed = []
     files = 0
     for n in range(SHARD_TOTAL):
-        p = DATA / f"s{n}.json"
+        p = ANIME / f"{n}.json"   # site-sync 里 Translate 排在 Build pages 之前，此时 data/ 还不存在，真源在 anime/
         if not p.is_file():
             continue
         rows = load_list(p)
