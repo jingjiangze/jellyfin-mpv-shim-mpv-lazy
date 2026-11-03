@@ -643,7 +643,7 @@ if (!plot) return;      // close() 已清空 / 已切到磁力视图：这一代
 if (list === null) { plot.textContent = '简介加载失败，请重试'; return; }  // 分片拉不到，与「记录不存在」区分
 rec = (list || []).find(function (x) { return x.id === id; });
 if (!rec) { plot.textContent = '暂无详细资料'; return; }
-plot.textContent = rec.overview || '暂无简介';
+plot.textContent = String(rec.overview || '暂无简介').replace(/\n{3,}/g, '\n\n');
 renderTags(rec, host.querySelector('#tags'));
 var meta = [];
 if (Array.isArray(rec.rc) && rec.rc.length === 10 && !host.querySelector('#rdist')) {
