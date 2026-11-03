@@ -58,7 +58,13 @@ def seasons(text):
     for m in RE_SEASON.finditer(str(text or "")):
         raw = m.group(1)
         d = re.search(r"\d+", raw)
-        n = int(d.group()) if d else NUM.get(raw.strip()[-1], 0)
+        if d:
+            n = int(d.group())
+        else:
+            # 「第二季」的末字是「季」不是「二」，取末字会解析成 0 —— 名字侧
+            # 季集合变空、标题侧 "Ao Ashi S2" 解析出 {s2}，不相等 → 整批误杀。
+            core = re.sub(r"[第季期部分]|Season|Part\.?", "", raw, flags=re.I).strip()
+            n = NUM.get(core[-1], 0) if core else 0
         if n:
             out.add(("part" if re.search(r"Part", raw, re.I) else "s") + str(n))
     return out
@@ -161,6 +167,8 @@ def split_results(name, orig, eps_n, results, per_ep=2, max_batch=8, aliases=Non
     keys = build_keys(name, orig, aliases)
     qtoks = tokens(name) + tokens(orig)
     short = len(q) <= 3
+    # 短名检查同时接受别名：发布名常是异语言（炒翻天→Tetsunabe no Jan）
+    short_pats = [re.escape(x) for x in ([name] + list(aliases or [])) if len(x) >= 2] if short else []
     cand, packs = {}, []
     for r in results:
         t = str(r.get("title") or r.get("name") or "")
@@ -171,8 +179,8 @@ def split_results(name, orig, eps_n, results, per_ep=2, max_batch=8, aliases=Non
             continue
         if not match_name(t, keys, qtoks):
             continue
-        if short and not re.search(
-                r"[\[\]【】()（）\s\-_/]" + re.escape(name) + r"[\[\]【】()（）\s\-_/]", t):
+        if short and short_pats and not any(
+                re.search(r"[\[\]【】()（）\s\-_/]" + sp + r"[\[\]【】()（）\s\-_/]", t) for sp in short_pats):
             continue
         rs = seasons(t)
         if qs != rs and (qs or rs):

@@ -179,6 +179,9 @@ def push_once(files, msg):
 # 名字里含 "\" 的文件、真正的 media/eps/ 目录根本不存在）。
 files = sorted(p.as_posix() for p in pathlib.Path("media/eps").glob("*.json"))
 files.append("site-src/data/magnet-eps.json")
+# bgm 别名缓存一并提交：构建端 index_eps.py 用它补译名（bangumi-data 里没有的那批）
+if pathlib.Path("site-src/data/bgm-alias.json").is_file():
+    files.append("site-src/data/bgm-alias.json")
 # 旧的整份 monolith 从仓库里删掉：浏览器已改读分片，留着等于每轮多推 7.5MB
 DELETES = []
 msg = f"magnet-eps: index {len(base)} titles [skip ci]"

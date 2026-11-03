@@ -59,7 +59,12 @@
     while ((m = re.exec(str))) {
       var raw = m[1];
       var d = raw.match(/\d+/);
-      var n = d ? Number(d[0]) : NUM[raw.charAt(raw.length - 1)];
+      var n = 0;
+      if (d) n = Number(d[0]);
+      else { /* 「第二季」末字是「季」不是「二」，先剥掉修饰字再查数字表 */
+        var core = raw.replace(/[第季期部分]/gi, '').trim();
+        n = NUM[core.charAt(core.length - 1)] || 0;
+      }
       if (!n) continue;
       out[(/Part/i.test(raw) ? 'part' : 's') + n] = 1;
     }

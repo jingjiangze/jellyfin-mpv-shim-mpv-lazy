@@ -194,6 +194,31 @@ def alias_map():
         print("bangumi-data: %d 条别名" % len(_ALIAS), flush=True)
     except Exception as e:
         print("bangumi-data 拉取失败 %s: %s" % (type(e).__name__, e), flush=True)
+
+    # 增量：fetch_bgm_alias.py 抓的 bgm infobox 别名（bangumi-data 没有的译名，
+    # 实测「炒翻天→铁锅料理王 / Tetsunabe no Jan」只有这里才有）。
+    # 两个候选位置都试：fetch job 的 site/、publish job 的 data/。
+    for cand in ("site/bgm-alias.json", "data/bgm-alias.json"):
+        p2 = pathlib.Path(cand)
+        if not p2.is_file():
+            continue
+        try:
+            extra = json.loads(p2.read_text(encoding="utf-8")).get("items") or {}
+        except Exception as e:
+            print("bgm-alias 读取失败 %s: %s" % (cand, e), flush=True)
+            continue
+        hit = 0
+        for sid, names in extra.items():
+            if not names:
+                continue
+            cur = _ALIAS.setdefault(str(sid), [])
+            for nm in names:
+                if nm and nm not in cur:
+                    cur.append(nm)
+            _ALIAS[str(sid)] = cur[:8]
+            hit += 1
+        print("bgm-alias: %s 合并 %d 条" % (cand, hit), flush=True)
+        break
     return _ALIAS
 
 
