@@ -109,7 +109,7 @@ jobs:
           # 每轮 1,200 部，4,490 部大约 4 轮补完。源不可达时脚本 6 秒预检即跳过。
           # 2026-11-03 第二轮实测 8s/0 重试在全挂（dl=0 fail=10），放宽到 20s/1 次重试。
           AVATAR_MAX: "1200"
-          AVATAR_WORKERS: "4"
+          AVATAR_WORKERS: "2"
           AVATAR_TIMEOUT: "20"
           AVATAR_RETRIES: "1"
         run: python -u fetch_people.py
@@ -280,8 +280,27 @@ jobs:
           cd "$RUNNER_TEMP/ms"
           git add -A posters assets
           git -c commit.gpgsign=false -c user.name=github-actions               -c user.email=actions@users.noreply.github.com commit -qm "sync posters + js from site repo (+$added ~$updated js=$js_added)"
-          if ! git push "$MS_URL" HEAD:master 2>"$RUNNER_TEMP/ms-push.err"; then
-            sed -E 's#oauth2:[^@]*@#oauth2:***@#g' "$RUNNER_TEMP/ms-push.err"
+          echo "remote: $(git remote -v | head -1 | sed -E 's#oauth2:[^@]*@#oauth2:***@#g')"
+          # 并发 run / 别的会话会同时推这个数据集仓库，单次 push 会被
+          # "cannot lock ref 'refs/heads/master'" 拒掉（实测 41608694447，
+          # 后续 CDN 推送与 Deploy 全被跳过）。先 fetch + rebase 再推，最多 3 轮。
+          pushed=0
+          for attempt in 1 2 3; do
+            if git push "$MS_URL" HEAD:master 2>"$RUNNER_TEMP/ms-push.err"; then
+              pushed=1; break
+            fi
+            echo "push 第 $attempt 次失败，尝试同步远端后重试"
+            if git fetch -q "$MS_URL" master 2>/dev/null; then
+              if ! git -c rebase.autoStash=true rebase FETCH_HEAD >/dev/null 2>&1; then
+                git rebase --abort >/dev/null 2>&1 || true
+                echo "rebase 冲突，放弃本轮数据集同步"
+                break
+              fi
+            fi
+            sleep 5
+          done
+          if [ "$pushed" != "1" ]; then
+            sed -E 's#oauth2:[^@]*@#oauth2:***@#g' "$RUNNER_TEMP/ms-push.err" || true
             echo "::error::push to ModelScope failed"; exit 1
           fi
           echo "pushed: +$added ~$updated posters"
