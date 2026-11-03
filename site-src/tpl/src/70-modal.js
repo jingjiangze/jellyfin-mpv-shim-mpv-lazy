@@ -266,7 +266,9 @@
       dropShard(sfx);
       var api = window.__epsApi;
       if (api && typeof api.reload === 'function') {
-        try { api.reload(title, r[8] || 0); } catch (e) { /* 磁力刷新失败不影响简介重取 */ }
+        /* 原名一起传：与上面 h3/.orig 的取值口径一致（title = r[2] || r[1]），
+           中文标题和发布名差得远时，只按标题查会漏。 */
+        try { api.reload(title, r[8] || 0, r[1] !== title ? r[1] : ''); } catch (e) { /* 磁力刷新失败不影响简介重取 */ }
       }
       jd('s' + sfx + '.json', { bust: true }).then(function (d) {
         shardCache[sfx] = Promise.resolve(d);     // 回填缓存：关掉再开不必重拉

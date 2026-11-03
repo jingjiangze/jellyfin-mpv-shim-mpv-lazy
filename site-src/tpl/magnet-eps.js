@@ -21,6 +21,12 @@
   'use strict';
   var ENTRY = null, LOADING = false, LAST_NAME = null, BASE_I = -1, MANIFEST = null;
   var REV = '';                        // reload() 期间的时间戳：只用于绕 HTTP 缓存
+  /* 刷新代号：每次 reload() 自增。打开详情页时发出的 A/B 在发起时记下当时的 EPOCH，
+     响应回来若已不是最新代号就整条作废（慢网下它可能比刷新结果更晚到）。 */
+  var EPOCH = 0;
+  /* 当前注入的 #epsbox 与它的渲染状态（{ e, cnt, ... }，arm() 里创建）。
+     reload() 拿新结果覆盖后要同步它，否则随后的旧响应会因「行数更多」把刷新盖回去。 */
+  var CUR_BOX = null, CUR_STATE = null;
   var BASES = [
     /* 数据集为主源：国内 CDN，实测 0.2–0.5s；后续几个只作兜底 */
     'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/eps/',
@@ -601,46 +607,98 @@
     return e ? collectRows(e).length : 0;
   }
 
-  /* 把入口画进当前弹窗：详情页画 #epsbox；openMagView 那种整屏磁力视图画 #mgbody。 */
+  /* 片名身份键：只折空白与大小写，保留标点符号。paint() 用它判断「这块框现在装的是不是
+     同一部片」。不用现成的 norm()：它会把 ! ？ 【 】 一起去掉，《工作细胞》与《工作细胞!!》
+     会被判成同一部，正好就是「把 A 的磁力画进 B」的错法；也不用严格 ===：DOM 文本可能有
+     空白差异（全角空格 / 折叠空格），宁可少画也不能画错。 */
+  function titleKey(s) {
+    return String(s == null ? '' : s).replace(/\s+/g, '').toLowerCase();
+  }
+  function sameTitle(a, b) {
+    var x = titleKey(a);
+    return !!x && x === titleKey(b);
+  }
+
+  /* 把入口画进当前弹窗：详情页画 #epsbox；openMagView 那种整屏磁力视图画 #mgbody。
+     画之前先核对身份：取 #modal 里 h3 的片名与本次请求的片名比对，不一致（或取不到）就直接
+     返回不画 —— 刷新是 fire-and-forget、fetchLive 最长 15s，这期间用户完全可能已经打开另一部番，
+     旧结果必须整条丢掉。返回是否真的画了（reload 靠它决定要不要同步 state）。 */
   function paint(e) {
     var m = document.getElementById('modal');
-    if (!m) return;
-    if (m.querySelector('#epsbox')) return render(m, e);
+    if (!m) return false;
+    var h3 = m.querySelector('h3');
+    var cur = h3 ? String(h3.textContent == null ? '' : h3.textContent).trim() : '';
+    if (!sameTitle(cur, e && e.n)) return false;
+    if (m.querySelector('#epsbox')) { render(m, e); return true; }
     var body = m.querySelector('#mgbody');
     if (body) {
       var h = epsListHtml(e);
       body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';
+      return true;
     }
+    return false;
+  }
+
+  /* reload() 的成功结果落地后，把「当前已渲染」推进到这份新结果：还在飞的旧响应随后到达时，
+     即使行数更多也过不了 take() 的 state.cnt 比较（与 epoch 守卫互为兜底）。 */
+  function syncState(e) {
+    if (!CUR_STATE || !CUR_BOX || !CUR_BOX.parentNode) return false;
+    var m = document.getElementById('modal');
+    if (!m || m.querySelector('#epsbox') !== CUR_BOX) return false;
+    CUR_STATE.e = e;
+    CUR_STATE.cnt = epCount(e);
+    CUR_STATE.got = true;
+    return true;
   }
 
   /* 手动刷新（详情页 ⟳）：清掉该片名的全部缓存层 → 分片（A）与 `force=1` 完整查询
      并行（force 跳过 SQLite、强制重查上游并写回，回灌仍走 fetchLive 里的 /eps-save）。
      force 拿到内容就以它为准；force 空/失败则回落到 A 的结果，而不是直接显示错误。
-     刷新不受 __CUR_SEASON 限制。返回 Promise，resolve 为最终入口或 null，不 reject。 */
-  function reload(name, epsN) {
+     刷新不受 __CUR_SEASON 限制。orig 是本片原名（中文标题与发布名差得远时全靠它命中）。
+     返回 Promise，resolve 为最终入口或 null，不 reject。 */
+  function reload(name, epsN, orig) {
     var n = String(name == null ? '' : name).trim();
+    var o = String(orig == null ? '' : orig).trim();   // 两参旧调用 → ''，保持向后兼容
     if (!n) return Promise.resolve(null);
+    EPOCH++;                            // 作废打开详情页时还在飞的 A/B（见 take 的 epoch 守卫）
+    var my = EPOCH;
     delete LIVE[n];
     delete CACHE[shardOf(n)];
     MANIFEST = null;
     BASE_I = 0;
     LIVE_DOWN = false;
     REV = String(Date.now());          // 本次刷新的清单/分片 URL 带 ?v= 绕 HTTP 缓存
+    /* 占位只在框里还没有内容时写：已有内容保持不动，刷新失败也不会把列表清空
+       （进度反馈由 70-modal.js 的 ⟳ 按钮文字负责）。 */
     var box = document.querySelector('#epsbox');
-    var body = document.querySelector('#mgbody');
-    if (box) {
+    var body = box ? null : document.querySelector('#mgbody');
+    var phBox = null, phFail = '';
+    if (box && !String(box.innerHTML || '').trim()) {
+      phBox = box;
+      phFail = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
+        + '<div class="eps-none">磁力刷新失败，请重试</div></div>';
       box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
         + '<div class="eps-none">正在刷新…</div></div>';
-    } else if (body) {
+    } else if (body && !String(body.innerHTML || '').trim()) {
+      phBox = body;
+      phFail = '<div class="eps-none">磁力刷新失败，请重试</div>';
       body.innerHTML = '<div class="eps-none">正在刷新…</div>';
     }
     function done(e) {
-      REV = '';                        // 时间戳只作用于这一次刷新
-      paint(e);
-      return e || null;
+      if (my !== EPOCH) return e || null;  // 期间又刷新了一次：这份结果作废，别回滚更新的那次
+      REV = '';                          // 时间戳只作用于这一次刷新
+      if (!e) {
+        /* 刷新没拿到内容：说成「失败」，别伪装成「暂无按集索引」；框里已有内容就原样留着 */
+        toast('磁力刷新失败，请重试');
+        if (phBox && phBox.parentNode) phBox.innerHTML = phFail;
+        return null;
+      }
+      if (!paint(e)) return e;            // 框里已经是别的番：宁可不画，也不串台
+      syncState(e);                       // 行数与 state 推进到新结果，旧响应再也盖不回来
+      return e;
     }
     var aP = resolveEntry(n);          // A：数据集分片（内部已 catch → null）
-    return fetchLive(n, Number(epsN) || 0, '', 1).then(function (live) {
+    return fetchLive(n, Number(epsN) || 0, o, 1).then(function (live) {
       if (hasRows(live)) return live;  // 强制查询拿到内容：以最新结果为准
       return aP.then(function (a) {    // 否则回落分片，实在没有才交 null
         return hasRows(a) ? a : (live || a || null);
@@ -770,11 +828,15 @@
          （dbLive → /eps?db=1，无副作用）。先到先画；后到者条目数**严格多于**
          已渲染的才重画，等量/更少忽略（防闪烁）。A/B 都空才讨论透传。 */
       var state = { e: null, cnt: 0, live: false, settled: 0, got: false };
+      var my = EPOCH;                 // 发起这次 A/B 的刷新代号：期间点过 ⟳ 就把结果作废
+      CUR_BOX = box;                  // 供 reload() 把行数 / state 同步到最新结果
+      CUR_STATE = state;
       var origEl = m.querySelector('.orig');
       var origName = origEl ? origEl.textContent.trim() : '';
       /* 弹窗已被换片 / #epsbox 被重插：这次响应作废，别画进别人的框 */
       function stale() { return !box.parentNode || m.querySelector('#epsbox') !== box; }
       function take(e) {
+        if (my !== EPOCH) return false;          // 这几条是刷新前发出的旧响应
         if (stale() || !hasRows(e)) return false;
         var c = epCount(e);
         if (c <= state.cnt) return false;
@@ -785,8 +847,9 @@
       }
       function finish() {
         /* A/B 都空：自动透传只限当季（__CUR_SEASON 由 70-modal.js 判定，
-           undefined = 还没判定 = 允许）。非当季到此为止，要查只能点详情页 ⟳。 */
-        if (stale() || state.cnt || state.live) return;
+           undefined = 还没判定 = 允许）。非当季到此为止，要查只能点详情页 ⟳。
+           刷新过就别再把「正在向后端查询…」写进已经换成新结果的框。 */
+        if (my !== EPOCH || stale() || state.cnt || state.live) return;
         state.live = true;
         if (window.__CUR_SEASON === false) { render(m, state.e); return; }
         box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
@@ -838,6 +901,9 @@
     defaultOpen: defaultOpen,
     tgsHtml: tgsHtml,
     bustUrl: bustUrl,
+    /* 刷新身份校验与"当前已渲染"状态：供离线脚本断言「刷新后 state 与 DOM 行数一致」 */
+    sameTitle: sameTitle,
+    curState: function () { return CUR_STATE; },
   };
 
   /* 磁力独立页用：这些函数本身不依赖 #modal，导出后可安全复用 */
