@@ -19,6 +19,7 @@ import base64
 import json
 import os
 import pathlib
+import random
 import re
 import sys
 import urllib.parse
@@ -333,6 +334,9 @@ def main():
     # 反过来（先取前 150 再剔除）会导致每轮都只剩 0 条可做 —— 实测两轮
     # merged 3066 -> 3066，一条没新增。
     if a.limit:
+        # 每轮随机取一批：失败的空壳会一直留在 todo 里，若按 catalog 顺序截断，
+        # 同一批失败的条目会永远占住前 limit 个名额，后面的永远轮不到。
+        random.shuffle(todo)
         todo = todo[: a.limit]
     print(f"本轮可做 {len(todo)} 条（已跳过 {len(done)} 条）", flush=True)
 
