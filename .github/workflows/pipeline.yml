@@ -137,7 +137,7 @@ jobs:
         id: magnet
         if: always()
         continue-on-error: true
-        timeout-minutes: 35
+        timeout-minutes: 60
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -166,7 +166,7 @@ jobs:
             done
             echo "::warning::$WF 等待超时（${LIMIT}m）"; exit 1
           }
-          wait_wf anime-magnet.yml 30
+          wait_wf anime-magnet.yml 55
 
       - name: Run site-sync
         id: sync

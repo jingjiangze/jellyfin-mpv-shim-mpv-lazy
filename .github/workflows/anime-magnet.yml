@@ -46,7 +46,9 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           SHARD_TOTAL: "16"
-          MAGNET_MAX: "150"
+          # 空壳每轮都要重试：一轮处理 400 条/分片（16 分片 = 6400），
+          # 这样才能在单轮里把 4000+ 个空条目扫完；150 时每轮只走 2400。
+          MAGNET_MAX: "400"
           PAN_HUB_USER: ${{ secrets.PAN_HUB_USER }}
           PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
         # --mark-miss：把「查过但没结果」也写进索引（eps 为空），否则每轮都从
