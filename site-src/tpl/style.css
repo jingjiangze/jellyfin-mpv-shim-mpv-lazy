@@ -450,7 +450,7 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 /* 磁力卡改网格：单集 chip 与同集多线路组混排时列对齐，换行后右边界一致 */
 #epsbox {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 6px; align-items: start; padding: 0 var(--s5) var(--s5);
+  gap: 6px; align-items: stretch; padding: 0 var(--s5) var(--s5);
 }
 /* 小标题与空态跨整行 */
 #epsbox .relhead, #epsbox .eps-none { grid-column: 1 / -1; }
@@ -459,7 +459,7 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 #epsbox > .eps-chip, #epsbox > .epgroup { margin: 0; }
 .eps-chip {
   display: inline-flex; align-items: center; gap: 6px; margin: 0 6px 6px 0;
-  padding: 4px 10px; border-radius: 999px; cursor: pointer; user-select: none;
+  padding: 4px 10px; border-radius: 999px; cursor: pointer; user-select: none; word-break: keep-all;
   font-size: var(--fs-sm); color: var(--fg); font-variant-numeric: tabular-nums;
   background: var(--card2); border: 1px solid var(--line);
   transition: background .15s, border-color .15s;
@@ -549,7 +549,7 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
   .mbody, .acts, #epsbox { padding-left: var(--s4); padding-right: var(--s4); }
   /* 移动端磁力卡固定两列；窄格内 chip 文字允许换行，避免撑破列宽 */
   #epsbox { grid-template-columns: 1fr 1fr; }
-  #epsbox .eps-chip { white-space: normal; }
+  #epsbox .eps-chip { white-space: normal; word-break: keep-all; }
   .trailer { margin-left: var(--s4); margin-right: var(--s4); }
   .modal .x { top: var(--s2); right: var(--s2); }
 }
@@ -598,7 +598,7 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 .rdist i:hover { background: linear-gradient(180deg, #ff9ec1, rgba(255, 122, 176, .62)); }
 .rdist i b {
   position: absolute; left: 0; right: 0; bottom: -14px;
-  font-size: 9px; font-weight: 400; color: #c9c3d8; text-align: center;
+  font-size: 9px; font-weight: 400; color: #efeaf4; text-align: center; text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
 }
 .rdist em {
   position: absolute; right: 0; top: -2px;
