@@ -29,6 +29,7 @@ import pathlib
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -43,6 +44,28 @@ MAX = int(os.environ.get("DOUBAN_MAX", "120"))
 INTRO_LEN = 600
 GAP = 0.8
 SUBJ = re.compile(r"/subject/(\d+)")
+
+# 豆瓣抓不到的条目用 TMDB 同名回填（中文简介）。豆瓣有 IP 级风控，
+# 实测稳定缺 20+ 条；TMDB 的 language=zh-CN 对这批片覆盖很好。
+TMDB_KEY = os.environ.get("TMDB_KEY", "99bf884d2a3e8403ae8accded44ec73c")
+TMDB_SEARCH = "https://api.tmdb.org/3/search/movie"
+
+
+def tmdb_intro(title):
+    q = urllib.parse.urlencode({"api_key": TMDB_KEY, "query": title, "language": "zh-CN"})
+    try:
+        req = urllib.request.Request(TMDB_SEARCH + "?" + q,
+                                     headers={"user-agent": "anime-intro"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            d = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return ""
+    for it in (d.get("results") or [])[:3]:
+        ov = " ".join((it.get("overview") or "").split())
+        # 只认中文且有实质内容的，避免把英文简介混进来
+        if len(ov) >= 20 and re.search(r"[一-鿿]", ov):
+            return ov[:INTRO_LEN]
+    return ""
 
 
 def get_json(url):
@@ -93,6 +116,24 @@ def main():
             miss += 1
             continue
         items[sid] = {"intro": intro, "sub": make_sub(d)}
+
+    # 豆瓣没抓到的，用 TMDB 同名回填（只填空，不覆盖已有内容）
+    filled = 0
+    for m in (fresh.get("movies") or []):
+        hit = SUBJ.search(m.get("u") or "")
+        if not hit:
+            continue
+        sid = hit.group(1)
+        cur = items.get(sid) or {}
+        if cur.get("intro"):
+            continue
+        ov = tmdb_intro(m.get("n") or "")
+        if not ov:
+            continue
+        items[sid] = {"intro": ov, "sub": cur.get("sub") or "", "src": "tmdb"}
+        filled += 1
+    if filled:
+        print(f"douban-intro: TMDB 回填 {filled} 条")
 
     dst = OUT.relative_to(HERE).as_posix()
     old_items = {}

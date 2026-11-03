@@ -152,6 +152,50 @@ AG_API = os.environ.get("AG_API", "https://api.animes.garden/resources")
 AG_PAGE = int(os.environ.get("AG_PAGE_SIZE", "100"))
 
 
+# ---------------- bangumi-data：简繁/多语别名表 ----------------
+# 社区实践：bangumi-data（CC BY 4.0）以 Bangumi id 为主键，带
+# titleTranslate{zh-Hans, zh-Hant, ja, en}。我们目录 8,851 个 id 100% 命中。
+# 用处：关键字兜底时补上「繁体译名」等别名 —— 实测 557531 的 zh-Hant 是
+# 「皎潔深宵之月」，而中文名是「皎洁迎宵之月」，差一个字，精确匹配必然失败。
+BGM_DATA_URL = os.environ.get(
+    "BGM_DATA_URL", "https://cdn.jsdelivr.net/npm/bangumi-data@latest/dist/data.json")
+_ALIAS = None
+
+
+def alias_map():
+    """id -> [别名...]（懒加载，只取一次；下载失败则返回空表，不影响主流程）。"""
+    global _ALIAS
+    if _ALIAS is not None:
+        return _ALIAS
+    _ALIAS = {}
+    try:
+        req = urllib.request.Request(BGM_DATA_URL, headers={"user-agent": "anime-eps-index"})
+        with urllib.request.urlopen(req, timeout=90) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+        for it in data.get("items") or []:
+            sid = ""
+            for site in it.get("sites") or []:
+                if site.get("site") == "bangumi":
+                    sid = str(site.get("id") or "")
+                    break
+            if not sid:
+                continue
+            names = []
+            tt = it.get("titleTranslate") or {}
+            for loc in ("zh-Hans", "zh-Hant", "zh", "en"):
+                for v in tt.get(loc) or []:
+                    if v and v not in names:
+                        names.append(v)
+            t = it.get("title")
+            if t and t not in names:
+                names.append(t)
+            _ALIAS[sid] = names
+        print("bangumi-data: %d 条别名" % len(_ALIAS), flush=True)
+    except Exception as e:
+        print("bangumi-data 拉取失败 %s: %s" % (type(e).__name__, e), flush=True)
+    return _ALIAS
+
+
 def ag_subject(sid, timeout=25):
     """按 Bangumi 条目 id 从 AnimeGarden 直取资源。
 
@@ -180,7 +224,12 @@ def build_one(row):
     if not res:
         if not USER or not PASS:
             return aid, None, "nocred"
-        for kw in EF.kw_variants(name, orig):
+        # 关键字兜底：本地名/原名之外，再补 bangumi-data 里的简繁/英别名
+        cands = EF.kw_variants(name, orig)
+        for extra in (alias_map().get(str(aid)) or [])[:4]:
+            if extra and extra not in cands:
+                cands.append(extra)
+        for kw in cands[:7]:
             try:
                 d = search(kw)
             except Exception:
@@ -190,7 +239,10 @@ def build_one(row):
                 src = "kw:" + kw[:12]
                 break
 
-    eps, packs = EF.split_results(name, orig, int(eps_n or 0), res)
+    # 别名（含繁体）始终参与匹配：很多「有结果但匹配不上」的片子，
+    # 其实发布名用的是另一套译名（bangumi-data 的 zh-Hant 常正好对得上）
+    aliases = (alias_map().get(str(aid)) or [])[:6]
+    eps, packs = EF.split_results(name, orig, int(eps_n or 0), res, aliases=aliases)
     if not eps and not packs:
         return aid, None, "noep"
     out = {"n": name, "eps": eps, "src": src}
@@ -269,10 +321,13 @@ def main():
     if a.resume and outp.is_file():
         try:
             out = json.loads(outp.read_text(encoding="utf-8"))
-            print(f"resume: 已有 {len(out)} 条，跳过", flush=True)
+            print(f"resume: 已有 {len(out)} 条，其中有内容 {sum(1 for v in out.values() if isinstance(v, dict) and (v.get('eps') or v.get('batch')))} 条", flush=True)
         except Exception:
             out = {}
-    done = set(out)
+    # 只把「已有分集或合集」的条目算完成。标了 miss 的空壳必须每轮重试：
+    # 上游后来补了资源也永远进不来（实测 8,806 条里 4,000+ 条是空壳，
+    # 之前 set(out) 把它们全当已完成，覆盖率就卡死了）。
+    done = {k for k, v in out.items() if isinstance(v, dict) and (v.get("eps") or v.get("batch"))}
     todo = [t for t in todo if str(t[0]) not in done]
     # 顺序很关键：必须「先剔除已收录、再截断到 MAGNET_MAX」。
     # 反过来（先取前 150 再剔除）会导致每轮都只剩 0 条可做 —— 实测两轮
