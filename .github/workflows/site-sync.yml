@@ -175,6 +175,8 @@ jobs:
           cp -f site-src/site/style.css site-src/site/app.js build-out/
 
           cp site-src/tpl/_headers build-out/_headers
+          # 媒体库已下线：旧链接 301 回首页（否则 CF Pages 会回落成 200 + 首页 HTML）
+          cp -f site-src/tpl/_redirects build-out/_redirects 2>/dev/null || true
           # 逐个 glob 拷贝，不用 `cp -r 目录 目录`（目标已存在时会多套一层）
           cp -f site-src/site/data/*.json build-out/data/
           cp -f site-src/tpl/magnet-eps.js build-out/ || true
