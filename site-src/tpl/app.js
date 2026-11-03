@@ -120,11 +120,19 @@
       +     '</dl>'
       +   '</div>'
       + '</div>'
-      + '<div class="mbody"><h4>简介</h4><p class="plot" id="plot">加载中…</p>'
+      + '<div class="mtabs">'
+      +   '<button class="mtab on" data-p="detail" type="button">详情</button>'
+      +   '<button class="mtab" data-p="dm" type="button">弹幕</button>'
+      +   '<button class="mtab" data-p="rp" type="button">评论</button>'
+      + '</div>'
+      + '<div class="mbody" data-p="detail"><h4>简介</h4><p class="plot" id="plot">加载中…</p>'
       +   '<div class="tags" id="tags"></div></div>'
+      + '<div class="mbody" id="pdm" data-p="dm" hidden></div>'
+      + '<div class="mbody" id="prp" data-p="rp" hidden></div>'
       + '<div class="acts">'
       +   '<a class="btn pri" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
       +   (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
+      +   '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
       +   '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
       +     encodeURIComponent(title) + '">B 站搜索</a>'
       + '</div>';
@@ -142,6 +150,7 @@
       };
     }
 
+    bindBili(id, title, r[4] || '');
     var sfx = id % 64;
     var pr = shardCache[sfx] || (shardCache[sfx] = jd('s' + sfx + '.json').catch(function () { return []; }));
     pr.then(function (list) {
@@ -709,6 +718,133 @@ function renderRank() {
       + '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
       + '<span class="cnt" id="cnt"></span>'
       + '<span class="build" id="build">' + (document.body.dataset.build || '') + '</span></div>';
+  }
+
+  /* ---------------- 详情弹窗：详情 / 弹幕 / 评论 三 tab ----------------
+     数据全部走盒子的 B 站代理（https://120.48.56.189/bili/*，带 buvid3 cookie
+     与 SQLite 缓存）；静态资源仍旧走 CDN，这里只有动态取数。 */
+  var BILI = {};          // id -> {bvid, aid, pages:[{page,cid,part}]}
+  var BILI_BASE = 'https://120.48.56.189/bili/';
+
+  function biliGet(path, params) {
+    var q = Object.keys(params || {}).map(function (k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    }).join('&');
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
+    return fetch(BILI_BASE + path + (q ? '?' + q : ''), ctl ? { signal: ctl.signal } : undefined)
+      .then(function (r) { clearTimeout(timer); return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); });
+  }
+
+  function biliResolve(id, title, year) {
+    if (BILI[id] !== undefined) return Promise.resolve(BILI[id]);
+    var direct = (typeof DATA !== 'undefined' && DATA.bili && DATA.bili[id]) || '';
+    var p = direct
+      ? biliGet('view', { bvid: direct })
+      : biliGet('find', { t: title, y: year || '' }).then(function (f) {
+          if (!f || !f.found || !f.bvid) return { ok: false };
+          return biliGet('view', { bvid: f.bvid });
+        });
+    return p.then(function (v) {
+      BILI[id] = (v && v.ok) ? v : null;
+      return BILI[id];
+    }).catch(function () { BILI[id] = null; return null; });
+  }
+
+  function renderDm(box, d, pages, curPage) {
+    if (!d || !d.ok) { box.innerHTML = '<div class="mnote">弹幕取不到（' + ((d && d.error) || '网络') + '）</div>'; return; }
+    if (!d.items.length) { box.innerHTML = '<div class="mnote">这一集还没有弹幕</div>'; return; }
+    var sel = '';
+    if (pages.length > 1) {
+      sel = '<div class="pgsel">' + pages.slice(0, 24).map(function (p) {
+        return '<button class="chip' + (p.page === curPage ? ' on' : '') + '" type="button" data-pg="'
+          + p.page + '" data-cid="' + p.cid + '">第 ' + p.page + ' 集</button>';
+      }).join('') + '</div>';
+    }
+    var rows = d.items.slice(0, 300).map(function (it) {
+      var mm = Math.floor(it.t / 60), ss = ('0' + Math.floor(it.t % 60)).slice(-2);
+      return '<div class="dmrow"><em>' + mm + ':' + ss + '</em><span>' + esc(it.m) + '</span></div>';
+    }).join('');
+    box.innerHTML = '<div class="mnote">共 ' + d.count + ' 条 · 来源 B 站（显示前 ' + Math.min(300, d.count) + ' 条）</div>'
+      + sel + '<div class="dmlist">' + rows + '</div>';
+  }
+
+  function renderRp(box, d) {
+    if (!d || !d.ok) { box.innerHTML = '<div class="mnote">评论取不到（' + ((d && d.error) || '网络') + '）</div>'; return; }
+    if (!d.items.length) { box.innerHTML = '<div class="mnote">还没有评论</div>'; return; }
+    box.innerHTML = '<div class="mnote">共 ' + d.total + ' 条 · 来源 B 站</div>'
+      + d.items.map(function (it) {
+        var dt = it.t ? new Date(it.t * 1000) : null;
+        var day = dt ? (dt.getFullYear() + '-' + ('0' + (dt.getMonth() + 1)).slice(-2) + '-' + ('0' + dt.getDate()).slice(-2)) : '';
+        return '<div class="rprow">'
+          + (it.a ? '<img src="' + esc(it.a) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '')
+          + '<div><b>' + esc(it.u || '匿名') + '</b><em>' + day + (it.l ? ' · 赞 ' + it.l : '') + '</em>'
+          + '<p>' + esc(it.m) + '</p></div></div>';
+      }).join('');
+  }
+
+  function bindBili(id, title, year) {
+    var m = $('#modal');
+    if (!m) return;
+    m.querySelectorAll('.mtab').forEach(function (b) {
+      b.onclick = function () {
+        var p = b.getAttribute('data-p');
+        m.querySelectorAll('.mtab').forEach(function (x) { x.classList.toggle('on', x === b); });
+        m.querySelectorAll('.mbody').forEach(function (x) {
+          x.hidden = x.getAttribute('data-p') !== p;
+        });
+        if (p === 'dm' && !m.querySelector('#pdm').dataset.done) {
+          m.querySelector('#pdm').dataset.done = '1';
+          m.querySelector('#pdm').innerHTML = '<div class="mnote">弹幕加载中…</div>';
+          biliResolve(id, title, year).then(function (v) {
+            var box = m.querySelector('#pdm');
+            if (!v || !v.pages || !v.pages.length) { box.innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; return; }
+            var pg = v.pages[0];
+            return biliGet('dm', { cid: pg.cid }).then(function (d) {
+              renderDm(box, d, v.pages, pg.page);
+              box.querySelectorAll('[data-pg]').forEach(function (c) {
+                c.onclick = function () {
+                  box.querySelectorAll('[data-pg]').forEach(function (x) { x.classList.toggle('on', x === c); });
+                  box.innerHTML = '<div class="mnote">弹幕加载中…</div>';
+                  biliGet('dm', { cid: c.getAttribute('data-cid') }).then(function (dd) {
+                    renderDm(box, dd, v.pages, Number(c.getAttribute('data-pg')));
+                  });
+                };
+              });
+            });
+          }).catch(function () { m.querySelector('#pdm').innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; });
+        }
+        if (p === 'rp' && !m.querySelector('#prp').dataset.done) {
+          m.querySelector('#prp').dataset.done = '1';
+          m.querySelector('#prp').innerHTML = '<div class="mnote">评论加载中…</div>';
+          biliResolve(id, title, year).then(function (v) {
+            if (!v || !v.aid) { m.querySelector('#prp').innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; return; }
+            return biliGet('reply', { aid: v.aid, ps: 20 }).then(function (d) { renderRp(m.querySelector('#prp'), d); });
+          }).catch(function () { m.querySelector('#prp').innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; });
+        }
+      };
+    });
+    var bp = m.querySelector('#bplay');
+    if (bp) {
+      bp.onclick = function () {
+        bp.textContent = '匹配中…';
+        biliResolve(id, title, year).then(function (v) {
+          if (!v || !v.pages || !v.pages.length) { bp.textContent = '▶ B 站弹幕播放'; bp.setAttribute('data-miss', '1'); return; }
+          bp.textContent = '▶ B 站弹幕播放';
+          var page = 1;
+          var on = m.querySelector('#pdm [data-pg].on');
+          if (on) page = Number(on.getAttribute('data-pg')) || 1;
+          var old = m.querySelector('.trailer');
+          if (old) old.remove();
+          var d = document.createElement('div');
+          d.className = 'trailer';
+          d.innerHTML = '<iframe src="https://player.bilibili.com/player.html?bvid=' + encodeURIComponent(v.bvid)
+            + '&page=' + page + '&autoplay=1&danmaku=1&high_quality=1" '
+            + 'allow="autoplay; fullscreen" allowfullscreen referrerpolicy="no-referrer"></iframe>';
+          m.appendChild(d);
+        });
+      };
+    }
   }
 
   /* ---------------- boot ---------------- */

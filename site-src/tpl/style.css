@@ -543,3 +543,24 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
   font-size: var(--fs-xs); font-style: normal; color: var(--dim2);
 }
 @media (max-width: 760px) { .rdist { height: 52px; } }
+
+/* ---------------- 详情弹窗：详情 / 弹幕 / 评论 ---------------- */
+.mtabs { display: flex; gap: 4px; padding: 0 var(--s5); border-bottom: 1px solid var(--line); }
+.mtab {
+  padding: 8px 14px; font-size: var(--fs-sm); color: var(--dim);
+  background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer;
+  transition: color .16s ease, border-color .16s ease;
+}
+.mtab:hover { color: var(--fg); }
+.mtab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.mnote { padding: 6px 0 10px; font-size: var(--fs-xs); color: var(--dim2); }
+.dmlist { max-height: 320px; overflow-y: auto; }
+.dmrow { display: flex; gap: 8px; padding: 3px 0; font-size: var(--fs-sm); color: var(--fg2); line-height: 1.5; }
+.dmrow em { flex: 0 0 42px; font-style: normal; color: var(--dim2); font-variant-numeric: tabular-nums; }
+.pgsel { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.rprow { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.rprow:first-of-type { border-top: 0; }
+.rprow img { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 50%; }
+.rprow b { font-size: var(--fs-sm); font-weight: 600; }
+.rprow em { margin-left: 8px; font-style: normal; font-size: var(--fs-xs); color: var(--dim2); }
+.rprow p { margin: 4px 0 0; font-size: var(--fs-sm); color: var(--fg2); line-height: 1.6; }
