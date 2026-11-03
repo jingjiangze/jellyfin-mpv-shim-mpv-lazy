@@ -26,7 +26,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 200
     steps:
       - name: Run anime-catalog
         id: catalog
@@ -171,7 +171,7 @@ jobs:
       - name: Run site-sync
         id: sync
         if: always()
-        timeout-minutes: 40
+        timeout-minutes: 75
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -200,7 +200,7 @@ jobs:
             done
             echo "::warning::$WF 等待超时（${LIMIT}m）"; exit 1
           }
-          wait_wf site-sync.yml 35
+          wait_wf site-sync.yml 70
 
       - name: Summary
         if: always()
