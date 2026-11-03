@@ -219,31 +219,45 @@ def build_one(row):
     if not name:
         return aid, None, "noname"
 
+    # 别名（含繁体/英文/日文）始终参与匹配：发布名常是另一套译名
+    aliases = (alias_map().get(str(aid)) or [])[:6]
+
+    def pick(results):
+        return EF.split_results(name, orig, int(eps_n or 0), results, aliases=aliases)
+
     # ① id 优先：AnimeGarden 按 Bangumi 条目 id 直取（准确、免别名问题）
-    res, src = ag_subject(aid), "ag"
-    # ② 兜底：关键词多变体（全名 → 去季/章后缀 → 原名）
-    if not res:
+    res = ag_subject(aid)
+    src = "ag"
+    eps, packs = pick(res) if res else ({}, [])
+
+    # ② 兜底：多语言关键词**全试、取最优**，而不是「首个有结果就停」。
+    #    实测 16 个匹配不到的片里上游 14 个其实有资源：中文名没命中、
+    #    日文/英文能命中（例：「电影 LoveLive！莲之空」cn 0 条 / ja 7 条）。
+    if not eps and not packs:
         if not USER or not PASS:
             return aid, None, "nocred"
-        # 关键字兜底：本地名/原名之外，再补 bangumi-data 里的简繁/英别名
         cands = EF.kw_variants(name, orig)
-        for extra in (alias_map().get(str(aid)) or [])[:4]:
+        for extra in (alias_map().get(str(aid)) or []):
             if extra and extra not in cands:
                 cands.append(extra)
-        for kw in cands[:7]:
+        best = None
+        for kw in cands[:12]:
             try:
                 d = search(kw)
             except Exception:
                 continue
-            res = d.get("results") or []
-            if res:
-                src = "kw:" + kw[:12]
-                break
+            results = d.get("results") or []
+            if not results:
+                continue
+            e, p = pick(results)
+            sc = len(e) + len(p)
+            if sc and (best is None or sc > best[2]):
+                best = (e, p, sc, "kw:" + kw[:12])
+                if len(e) >= 3:      # 够好就停，省配额
+                    break
+        if best:
+            eps, packs, _, src = best
 
-    # 别名（含繁体）始终参与匹配：很多「有结果但匹配不上」的片子，
-    # 其实发布名用的是另一套译名（bangumi-data 的 zh-Hant 常正好对得上）
-    aliases = (alias_map().get(str(aid)) or [])[:6]
-    eps, packs = EF.split_results(name, orig, int(eps_n or 0), res, aliases=aliases)
     if not eps and not packs:
         return aid, None, "noep"
     out = {"n": name, "eps": eps, "src": src}
