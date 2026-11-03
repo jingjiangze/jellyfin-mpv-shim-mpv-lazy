@@ -105,6 +105,10 @@ jobs:
           NO_LOCAL_PROXY: "1"
           PEOPLE_MAX: "1500"
           PEOPLE_WORKERS: "3"
+          # 头像镜像：实测 runner 到 lain.bgm.tv 很快（2,683 张 / 65 秒），
+          # 每轮 1,200 部，4,490 部大约 4 轮补完。源不可达时脚本 6 秒预检即跳过。
+          AVATAR_MAX: "1200"
+          AVATAR_WORKERS: "6"
         run: python -u fetch_people.py
 
       # 分片/状态用 Git Data API 直推：publish 那步的 git rebase 会被同轮的
