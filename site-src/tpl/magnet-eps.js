@@ -331,7 +331,7 @@
     var bits = [], sub = cleanSub(c.sub);
     if (c.s) bits.push(fmtSize(c.s));
     if (c.sd) bits.push(c.sd + ' 种');
-    if (sub) bits.push(sub);
+    if (sub) bits.push('字幕 ' + sub);   // 不带字段名时「· 无 / · 中」看不出是什么
     return '<span class="eps-chip" role="button" tabindex="0" data-m="' + mg + '" title="' +
       escAttr(c.t) + '">' + label +
       (bits.length ? ' · ' + bits.join(' · ') : '') + '</span>';
@@ -351,6 +351,26 @@
     return '合集 ' + (i + 1);
   }
 
+  /* 分集 chip 段（不含 .relhead 标题）。同一集有多条磁力＝多条「线路」（最多 3 条），
+     对应参考 App 里「某源 3 线 / 1 线 / 无尽③」那种多线路选择：多条时包成 .epgroup，
+     组标题只写一次集号，chip 只写「线路 i」——否则 4 列网格换行后同集的两条会分到两行。
+     单条保持原样、不加容器，避免布局无谓变化。 */
+  function epsListHtml(eps) {
+    var nums = Object.keys(eps || {}).map(Number).sort(function (a, b) { return a - b; });
+    var h = '';
+    nums.forEach(function (n) {
+      var top = (eps[n] || []).slice(0, 3);
+      if (top.length > 1) {
+        h += '<span class="epgroup"><em class="epglabel">第 ' + n + ' 集</em>';
+        top.forEach(function (c, i) { h += chipOf(c, '线路 ' + (i + 1)); });
+        h += '</span>';
+      } else {
+        top.forEach(function (c) { h += chipOf(c, '第 ' + n + ' 集'); });
+      }
+    });
+    return h;
+  }
+
   function render(m, e) {
     var box = m.querySelector('#epsbox');
     if (!box) return;
@@ -360,20 +380,25 @@
     var h = '';
     if (nums.length) {
       h += '<div class="relhead">分集磁力 · ' + nums.length + ' 集（点击复制）</div>';
-      nums.forEach(function (n) {
-        var arr = eps[n] || [];
-        /* 同一集有多条磁力＝多条「线路」，分别成 chip（最多 3 条），
-           对应参考 App 里「某源 3 线 / 1 线 / 无尽③」那种多线路选择。 */
-        arr.slice(0, 3).forEach(function (c, i) {
-          h += chipOf(c, '第 ' + n + ' 集' + (arr.length > 1 ? ' · 线路 ' + (i + 1) : ''));
-        });
-      });
+      h += epsListHtml(eps);
     }
     /* 整季/合集：以前这些包（[01-12]、第01-26话、Batch）是被直接丢掉的，
        实际它们往往是新番早期唯一能拿到的资源，单独成一组。 */
     if (batch.length) {
       h += '<div class="relhead" style="margin-top:10px">整季 / 合集 · ' + batch.length + ' 个（点击复制）</div>';
-      batch.forEach(function (c, i) { h += chipOf(c, batchLabel(c, i)); });
+      /* 同一集数范围常有多条（实测两个都是「合集 27–28」，只差 666MB/665MB），
+         显示文本完全相同的几条追加「来源 N」（组内从 1 起）；不同的保持原样。 */
+      var labels = batch.map(function (c, i) { return batchLabel(c, i); });
+      var dup = {}, used = {};
+      labels.forEach(function (s) { dup[s] = (dup[s] || 0) + 1; });
+      batch.forEach(function (c, i) {
+        var lb = labels[i];
+        if (dup[lb] > 1) {
+          used[lb] = (used[lb] || 0) + 1;
+          lb += ' · 来源 ' + used[lb];
+        }
+        h += chipOf(c, lb);
+      });
     }
     box.innerHTML = h || '<div class="relhead">分集磁力</div><div class="eps-none">暂无按集索引</div>';
   }
@@ -502,6 +527,8 @@
     norm: norm,
     shardOf: shardOf,
     buildEps: buildEps,
+    epsListHtml: epsListHtml,
+    render: render,
     hashOf: hashOf,
     setIdx: function (d) { ENTRY = d; return ENTRY; },
   };
