@@ -94,6 +94,7 @@ jobs:
           cp -f media/eps/*.json "$RUNNER_TEMP/ms/assets/eps/"
           cd "$RUNNER_TEMP/ms"
           if [ -z "$(git status --porcelain -- assets/eps)" ]; then echo "eps 分片已是最新"; exit 0; fi
+          git add -A assets/eps
           git -c commit.gpgsign=false -c user.name=github-actions \
               -c user.email=actions@users.noreply.github.com commit -qm "sync eps shards from anime-magnet [skip ci]"
           for i in 1 2 3; do
