@@ -20,11 +20,12 @@
     var m = $('#modal');
     if (!m) return;                              // 页面没有 #modal 壳时别抛引用错
     var host = m, gen = ++MODAL_GEN;             // 这一代弹窗的容器引用与代号
-    /* 结构契约：magnet-eps.js 靠 h3 取片名、靠 .acts 定位插入点，别改这两个 */
-    m.innerHTML = '<span class="x" aria-label="关闭">×</span>'
-      + '<div class="mhd">'
-      +   '<div class="mposter"><img src="' + esc(ANI.poster + id + '.jpg') + '"' + fbAttr([ex[1]]) + ' alt=""></div>'
-      +   '<div class="mb">'
+    /* 结构契约：magnet-eps.js 靠 h3 取片名、靠 .acts 定位插入点，别改这两个。
+       版式（DESIGN-SPEC §2.2）：.mhero 两栏（200px 封面 + 信息）→ 吸顶 tabs → 单栏 .sect 流。 */
+    m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
+      + '<div class="mhero">'
+      +   '<img class="mposter" src="' + esc(ANI.poster + id + '.jpg') + '"' + fbAttr([ex[1]]) + ' alt="">'
+      +   '<div class="mh-info">'
       +     '<h3>' + esc(title) + '</h3>'
       +     (r[1] !== title ? '<div class="orig">' + esc(r[1]) + '</div>' : '')
       +     '<div class="mbadges">'
@@ -32,17 +33,25 @@
       +       (r[3] ? '<span class="mbadge">' + esc(TYPE[r[3]] || r[3]) + '</span>' : '')
       +       (r[8] ? '<span class="mbadge">' + r[8] + ' 话</span>' : '')
       +     '</div>'
-      +     '<div class="mrate">'
-      +       (r[7] ? '<i class="stars" style="--p:' + Math.max(0, Math.min(10, Math.round(r[7])))
-                 + '"></i><b class="num">' + Number(r[7]).toFixed(1) + '</b>' : '<b class="num dim">暂无评分</b>')
-      +       '<span class="mvotes" id="mvotes"></span>'
+      +     '<div class="mrate-line">'
+      +       (r[7] ? '<b class="score">' + Number(r[7]).toFixed(1) + '</b>'
+                 + '<span class="stars" style="--p:' + Math.max(0, Math.min(100, Math.round(r[7] * 10))) + '"></span>'
+               : '<b class="score dim">暂无评分</b>')
+      +       '<span class="votes" id="mvotes"></span>'
       +     '</div>'
-      +     '<dl class="infobox" id="minfo">'
-      +       (r[4] ? '<dt>放送</dt><dd>' + r[4] + (r[5] ? '.' + String(r[5]).padStart(2, '0') : '') + '</dd>' : '')
-      +       (r[6] ? '<dt>星期</dt><dd>' + WD[r[6] - 1] + '</dd>' : '')
-      +       (r[8] ? '<dt>话数</dt><dd>' + r[8] + ' 集</dd>' : '')
-      +       (r[3] ? '<dt>类型</dt><dd>' + esc(TYPE[r[3]] || r[3]) + '</dd>' : '')
-      +     '</dl>'
+      +     '<div class="mcollect">'
+      +       '<span><b>—</b><i>想看</i></span><span><b>—</b><i>在看</i></span><span><b>—</b><i>看过</i></span>'
+      +     '</div>'
+      +     '<div class="acts">'
+      +       '<span class="btn pri" id="watch" type="button">开始观看</span>'
+      +       '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
+      +       '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
+      +       (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
+      +       '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
+      +       '<button class="btn" id="mgopen" type="button">磁力详情</button>'
+      +       '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
+      +         encodeURIComponent(title) + '">B 站搜索</a>'
+      +     '</div>'
       +   '</div>'
       + '</div>'
       + '<div class="mtabs">'
@@ -51,21 +60,15 @@
       +   '<button class="mtab" data-p="dm" type="button">弹幕</button>'
       +   '<button class="mtab" data-p="rp" type="button">评论</button>'
       + '</div>'
-      + '<div class="mbody" data-p="detail"><h4>简介</h4><p class="plot" id="plot">加载中…</p>'
-      +   '<div class="tags" id="tags"></div></div>'
-      + '<div class="mbody" id="prt" data-p="rt" hidden></div>'
-      + '<div class="mbody" id="pdm" data-p="dm" hidden></div>'
-      + '<div class="mbody" id="prp" data-p="rp" hidden></div>'
-      + '<div class="acts">'
-      +   '<span class="btn pri" id="watch" type="button">开始观看</span>'
-      +   '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
-      +   '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
-      +   (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
-      +   '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
-      +   '<button class="btn" id="mgopen" type="button">磁力详情</button>'
-      +   '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
-      +     encodeURIComponent(title) + '">B 站搜索</a>'
-      + '</div>';
+      + '<div class="mbody" data-p="detail">'
+      +   '<section class="sect"><div class="sec-h"><h2>简介</h2></div><p class="plot" id="plot">加载中…</p></section>'
+      +   '<section class="sect"><div class="sec-h"><h2>标签</h2></div><div class="tagpills" id="tags"></div></section>'
+      +   '<section class="sect" id="sect-chars" hidden></section>'
+      +   '<section class="sect" id="sect-staff" hidden></section>'
+      + '</div>'
+      + '<div class="mbody" data-p="rt" hidden><div class="sect"><div class="sec-h"><h2>评分分布</h2></div><div id="prt"></div></div></div>'
+      + '<div class="mbody" data-p="dm" hidden><div id="pdm"></div></div>'
+      + '<div class="mbody" data-p="rp" hidden><div id="prp"></div></div>';
     $('#mask').classList.add('on');
     m.querySelector('.x').onclick = close;
 
@@ -73,7 +76,8 @@
     var wb = m.querySelector('#watch');
     if (wb) wb.onclick = function () {
       var box = host.querySelector('#epsbox');
-      if (box && box.querySelector('.eps-chip')) {
+      /* 只要 #epsbox 里已经有可点的磁力条目（旧胶囊 .eps-chip / 新行 .mgrow 都带 data-m）就直接滚过去 */
+      if (box && box.querySelector('[data-m]')) {
         box.scrollIntoView({ behavior: 'smooth', block: 'center' });
         box.classList.add('flash');
         setTimeout(function () { box.classList.remove('flash'); }, 1200);
@@ -159,40 +163,42 @@
           prt.appendChild(div);
         }
       }
-      /* 角色（两列卡）/ 制作（胶囊）/ 收藏统计 —— 数据来自 CI 抓的 ch/st/co */
+      /* 角色 / 制作人员 / 收藏统计 —— 数据来自 CI 抓的 ch/st/co。
+         三块容器在 openModal 里已预置（#sect-chars / #sect-staff / .mcollect 的三个 b），
+         这里只填内容、把 hidden 打开，不再往 #tags 后面插新节点。 */
       if (Array.isArray(rec.ch) && rec.ch.length) {
-        var cb = document.createElement('div');
-        cb.className = 'relbox';
-        cb.innerHTML = '<div class="relhead">角色</div><div class="chgrid">'
-          + rec.ch.map(function (c) {
-            var av = avatarSrc(c[2]);
-            var nm = esc(c[0]);
-            /* 首字常驻在下、图片叠在上：图 404 时 onerror 把 img 摘掉，首字自然露出 */
-            return '<div class="chcard"><span class="ph">'
-              + '<span class="chin">' + esc(Array.from(String(c[0] == null ? '' : c[0]))[0] || '?') + '</span>'
-              + (av ? '<img class="chav" src="' + esc(av) + '" alt="" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.remove()">' : '')
-              + '</span>'
-              + '<div class="chinfo"><b>' + nm + '</b><em>' + esc(c[1]) + '</em></div></div>';
-          }).join('') + '</div>';
-        var tbox = host.querySelector('#tags');
-        if (tbox && tbox.parentNode) tbox.parentNode.insertBefore(cb, tbox.nextSibling);
+        var chars = host.querySelector('#sect-chars');
+        if (chars) {
+          chars.innerHTML = '<div class="sec-h"><h2>角色</h2></div><div class="chgrid">'
+            + rec.ch.map(function (c) {
+              var av = avatarSrc(c[2]);
+              var nm = esc(c[0]);
+              /* 首字常驻在下、图片叠在上：图 404 时 onerror 把 img 摘掉，首字自然露出 */
+              return '<div class="chcard"><span class="ph">'
+                + '<span class="chin">' + esc(Array.from(String(c[0] == null ? '' : c[0]))[0] || '?') + '</span>'
+                + (av ? '<img class="chav" src="' + esc(av) + '" alt="" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.remove()">' : '')
+                + '</span>'
+                + '<div class="chinfo"><b>' + nm + '</b><em>' + esc(c[1]) + '</em></div></div>';
+            }).join('') + '</div>';
+          chars.hidden = false;
+        }
       }
       if (Array.isArray(rec.st) && rec.st.length) {
-        var sb = document.createElement('div');
-        sb.className = 'relbox';
-        sb.innerHTML = '<div class="relhead">制作人员</div><div class="staffrow">'
-          + rec.st.map(function (p2) {
-            return '<span class="tagpill">' + esc(p2[0])
-              + (p2[1] ? '<em class="strole">' + esc(p2[1]) + '</em>' : '') + '</span>';
-          }).join('') + '</div>';
-        var cbn = host.querySelector('.chgrid');
-        var anchorEl = cbn ? cbn.parentNode : host.querySelector('#tags');
-        if (anchorEl && anchorEl.parentNode) anchorEl.parentNode.insertBefore(sb, anchorEl.nextSibling);
+        var staff = host.querySelector('#sect-staff');
+        if (staff) {
+          staff.innerHTML = '<div class="sec-h"><h2>制作人员</h2></div><div class="staffgrid">'
+            + rec.st.map(function (p2) {
+              return '<div class="staff"><b>' + esc(p2[0]) + '</b>'
+                + (p2[1] ? '<em>' + esc(p2[1]) + '</em>' : '') + '</div>';
+            }).join('') + '</div>';
+          staff.hidden = false;
+        }
       }
       if (Array.isArray(rec.co) && rec.co.some(Boolean)) {
-        var mb = host.querySelector('.mbadges');
-        if (mb) mb.insertAdjacentHTML('beforeend',
-          '<span class="mbadge">想看 ' + rec.co[0] + ' · 在看 ' + rec.co[1] + ' · 看过 ' + rec.co[2] + '</span>');
+        var cos = host.querySelectorAll('.mcollect b');
+        for (var ci = 0; ci < cos.length && ci < 3; ci++) {
+          cos[ci].textContent = rec.co[ci] == null ? '—' : String(rec.co[ci]);
+        }
       }
       if (rec.votes) meta.push(rec.votes + ' 人评分');
       if (rec.rank) {
@@ -219,14 +225,14 @@
 
   /* ---------------- 详情内磁力视图（「磁力详情」按钮进来，不跳首页标签） ----------------
      复用同一个 #modal 外壳整体换内容：.acts 里的 #mgopen 触发，‹ 返回详情 重新走
-     openModal（.mtabs / #epsbox 那套绑定与注入随之重建）。分集与合集都交给
-     magnet-eps.js 的 __epsApi（epsListHtml 同集多线路分组、batchLabel 出集数范围），
-     点击复制由 arm() 挂在 #modal 上的委托接管（.eps-chip[data-m]），这里不绑。 */
+     openModal（.mtabs / #epsbox 那套绑定与注入随之重建）。分集与合集的整段列表都交给
+     magnet-eps.js 的 epsListHtml(entry)（自带 .mgsect + .sec-h + .mgrows，分集/合集标题
+     与行都在里面），点击复制由 arm() 挂在 #modal 上的委托接管（带 data-m 的条目），这里不绑。 */
   function openMagView(id, name, epsN) {
     var m = $('#modal');
     var api = window.__epsApi;
     if (!m || !api) return;
-    m.innerHTML = '<span class="x" aria-label="关闭">×</span>'
+    m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
       + '<div class="bhead lv2"><h2>' + esc(name) + ' · 磁力</h2><span>'
       +   '<button class="mgback" id="mgback" type="button">‹ 返回详情</button>'
       + '</span></div>'
@@ -253,21 +259,10 @@
     }).then(function (entry) {
       if (!alive()) return;
       if (!entry) return fail();
-      var eps = entry.eps || {}, batch = entry.batch || [];
-      var nums = Object.keys(eps).map(Number).sort(function (a, b) { return a - b; });
       var h = '';
-      if (nums.length) {
-        h += '<div class="relhead">分集磁力 · ' + nums.length + ' 集（点击复制）</div>'
-          + '<div class="epsgrid">' + api.epsListHtml(eps) + '</div>';
-      }
-      if (batch.length) {
-        h += '<div class="relhead">整季 / 合集 · ' + batch.length + ' 个（点击复制）</div>'
-          + '<div class="epsgrid">' + batch.map(function (c, i) {
-              var lb = api.batchLabel(c, i);
-              var bd = api.descOf ? api.descOf(c, 46) : '';
-              return api.chipOf(c, lb + (bd ? ' · ' + bd : ''));
-            }).join('') + '</div>';
-      }
+      /* 分集与合集的区块标题、行式列表、复制态全部由 epsListHtml(entry) 出（它自带
+         .mgsect + .sec-h + .mgrows），这里不再自己拼 .mgsect，也不再调 chipOf/batchLabel/descOf。 */
+      h += window.__epsApi.epsListHtml(entry);
       body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';
     }).catch(fail);
   }

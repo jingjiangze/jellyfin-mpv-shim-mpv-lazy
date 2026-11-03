@@ -79,7 +79,7 @@
       return '<div class="dmrow"><em>' + mm + ':' + ss + '</em><span>' + esc(it.m) + '</span></div>';
     }).join('');
     box.innerHTML = '<div class="mnote">共 ' + d.count + ' 条 · 来源 B 站（显示前 ' + Math.min(300, d.count) + ' 条）</div>'
-      + sel + '<div class="dmlist">' + rows + '</div>';
+      + sel + '<div class="dmlist"><div class="dmgrid">' + rows + '</div></div>';
   }
 
   function renderRp(box, d) {
@@ -90,7 +90,8 @@
         var dt = it.t ? new Date(it.t * 1000) : null;
         var day = dt ? (dt.getFullYear() + '-' + ('0' + (dt.getMonth() + 1)).slice(-2) + '-' + ('0' + dt.getDate()).slice(-2)) : '';
         return '<div class="rprow' + (it.re === 1 ? ' re' : '') + '">'
-          + (it.a ? '<img src="' + esc(it.a) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '')
+          + (it.a ? '<img src="' + esc(it.a) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">'
+            : '<span class="rpav">' + esc(String(it.u || '匿名').slice(0, 1)) + '</span>')
           + '<div><b>' + esc(it.u || '匿名') + '</b><em>' + day + (it.l ? ' · 赞 ' + it.l : '') + '</em>'
           + '<p>' + esc(it.m) + '</p></div></div>';
       }).join('');
