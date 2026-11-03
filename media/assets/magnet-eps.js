@@ -454,12 +454,12 @@ function sameTitle(a, b) {
 var x = titleKey(a);
 return !!x && x === titleKey(b);
 }
-function paint(e) {
+function paint(e, titleHint) {
 var m = document.getElementById('modal');
 if (!m) return false;
 var h3 = m.querySelector('h3');
 var cur = h3 ? String(h3.textContent == null ? '' : h3.textContent).trim() : '';
-if (!sameTitle(cur, e && e.n)) return false;
+if (!sameTitle(cur, titleHint || (e && e.n))) return false;
 if (m.querySelector('#epsbox')) { render(m, e); return true; }
 var body = m.querySelector('#mgbody');
 if (body) {
@@ -512,7 +512,7 @@ toast('磁力刷新失败，请重试');
 if (phBox && phBox.parentNode) phBox.innerHTML = phFail;
 return null;
 }
-if (!paint(e)) return e;            // 框里已经是别的番：宁可不画，也不串台
+if (!paint(e, n)) return e;         // 框里已经是别的番：宁可不画，也不串台
 syncState(e);                       // 行数与 state 推进到新结果，旧响应再也盖不回来
 return e;
 }
