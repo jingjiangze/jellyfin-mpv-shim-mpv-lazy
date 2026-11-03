@@ -288,7 +288,9 @@ if (nums.length) {
 h += '<div class="relhead">分集磁力 · ' + nums.length + ' 集（点击复制）</div>';
 nums.forEach(function (n) {
 var arr = eps[n] || [];
-if (arr.length) h += chipOf(arr[0], '第 ' + n + ' 集');
+arr.slice(0, 3).forEach(function (c, i) {
+h += chipOf(c, '第 ' + n + ' 集' + (arr.length > 1 ? ' · 线路 ' + (i + 1) : ''));
+});
 });
 }
 if (batch.length) {
