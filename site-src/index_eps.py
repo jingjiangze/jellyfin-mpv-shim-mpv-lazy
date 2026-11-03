@@ -125,6 +125,7 @@ def pick(r):
         "sd": int(r.get("seeders") or r.get("sd") or 0),
         "sub": str(r.get("sub") or r.get("subs") or "")[:12],
         "t": str(r.get("title") or r.get("name") or "")[:160],
+        "g": EF.grp(r),          # 与 split_results 同口径：别在这里丢字幕组
     }
 
 
@@ -248,7 +249,10 @@ def build_one(row):
     aliases = (alias_map().get(str(aid)) or [])[:6]
 
     def pick(results):
-        return EF.split_results(name, orig, int(eps_n or 0), results, aliases=aliases)
+        # per_ep 必须显式传：本模块从 MAGNET_MAX_PER_EP 读出 PER_EP，但以前没往下传，
+        # split_results 一直用默认 2，环境变量设了也等于没设。
+        return EF.split_results(name, orig, int(eps_n or 0), results,
+                                per_ep=PER_EP, aliases=aliases)
 
     # ① id 优先：AnimeGarden 按 Bangumi 条目 id 直取（准确、免别名问题）
     res = ag_subject(aid)
@@ -285,6 +289,8 @@ def build_one(row):
 
     if not eps and not packs:
         return aid, None, "noep"
+    # 直接透传 split_results 的 item（不重新构造），否则 item 里新增的键（如 g=字幕组）
+    # 会在入索引这一步被悄悄丢掉。
     out = {"n": name, "eps": eps, "src": src}
     if packs:
         out["batch"] = packs

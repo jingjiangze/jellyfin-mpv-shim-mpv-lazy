@@ -98,18 +98,21 @@ jobs:
 
       # 角色 / 制作人员 / 收藏统计（Bangumi v0），每轮补 PEOPLE_MAX 条
       - name: Fill characters and staff
-        timeout-minutes: 25
+        timeout-minutes: 35
         continue-on-error: true
         working-directory: site-src
         env:
           NO_LOCAL_PROXY: "1"
-          PEOPLE_MAX: "1500"
+          # 2026-11-04 上调：角色 46,510 条 / 制作人 53,318 条里只有 2,099 处是
+          # 镜像裸名（覆盖率 4.5%），按 1,500/轮 × 4h 要跑十几天。制作人本轮
+          # 才开始抓头像（st 加第三个字段），所以三者一起加大。
+          PEOPLE_MAX: "3000"
           PEOPLE_WORKERS: "3"
           # 头像镜像：实测 runner 到 lain.bgm.tv 很快（2,683 张 / 65 秒），
-          # 每轮 1,200 部，4,490 部大约 4 轮补完。源不可达时脚本 6 秒预检即跳过。
+          # 源不可达时脚本 6 秒预检即跳过。
           # 2026-11-03 第二轮实测 8s/0 重试在全挂（dl=0 fail=10），放宽到 20s/1 次重试。
-          AVATAR_MAX: "1200"
-          AVATAR_WORKERS: "2"
+          AVATAR_MAX: "3000"
+          AVATAR_WORKERS: "6"
           AVATAR_TIMEOUT: "20"
           AVATAR_RETRIES: "1"
         run: python -u fetch_people.py

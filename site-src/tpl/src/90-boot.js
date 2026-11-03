@@ -1,3 +1,8 @@
+  /* 当季标记：供 magnet-eps.js 判断「当前看的是不是当季番」。
+     详情页打开时由 70-modal.js 的 openModal 按该条目的年 / 月重算并覆盖；
+     这里只给默认值——没有条目上下文（如磁力独立页）时一律 false。 */
+  window.__CUR_SEASON = false;
+
   /* 切清晰度只换海报地址，不重排列表：browse / movie 传 reset === true 保留分页游标，
      无参调用会退回第一页（用户已经滚到第 5 屏时切换会被弹回顶部）。 */
   function repaint() {

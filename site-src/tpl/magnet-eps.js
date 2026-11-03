@@ -1,7 +1,11 @@
 /* 分集磁力层（架构无关附加层）
  *
  * 不依赖任何一方的数据/key 体系：监听 #modal 的内容变化，从弹窗标题取片名，
- * 按片名查分集索引，把分集 / 整季合集渲染成行式列表（.mgsect > .mgrows > .mgrow）。
+ * 按片名查分集索引，按字幕组渲染成可折叠的行式列表
+ * （.tgs > .mgteam[data-open] > .tg-h + .mgrows > .mgrow），不再分「分集 / 整季」两段。
+ * 组名口径：条目 g 键（后端算）→ 发布标题前缀 `[组名]` / `【组名】` → 「其他」。
+ * 自动向后端透传只在当季发生（只读 window.__CUR_SEASON；undefined = 还没判定 = 允许）；
+ * 非当季要透传只能点详情页 ⟳（window.__epsApi.reload）。
  *
  * 索引已分片：整份 7.5MB 在手机上首次点开卡片就要下完，太重。
  *   media/eps/index.json     清单（shards / count，几百字节）
@@ -14,6 +18,7 @@
 (function () {
   'use strict';
   var ENTRY = null, LOADING = false, LAST_NAME = null, BASE_I = -1, MANIFEST = null;
+  var REV = '';                        // reload() 期间的时间戳：只用于绕 HTTP 缓存
   var BASES = [
     /* 数据集为主源：国内 CDN，实测 0.2–0.5s；后续几个只作兜底 */
     'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/eps/',
@@ -95,6 +100,16 @@
     });
   }
 
+  /* 防缓存参数。优先级：reload() 的时间戳（REV）> 构建版本（MANIFEST.v）> 不带。
+     时间戳必须在最前：线上清单一直带 `{"v":2,...}`，若让 v 优先，⟳ 刷新取到的
+     仍是同一个 URL，浏览器/CDN 缓存原样返回，刷新按钮就成了摆设。
+     BASES 全部以 `/` 结尾，query 必须接在文件名后面，别缀到目录上。 */
+  function bustUrl() {
+    if (REV) return '?v=' + REV;
+    if (MANIFEST && MANIFEST.v) return '?v=' + encodeURIComponent(String(MANIFEST.v));
+    return '';
+  }
+
   function loadManifest() {
     if (MANIFEST) return Promise.resolve(MANIFEST);
     var i = 0;
@@ -102,7 +117,7 @@
       (function next() {
         if (i >= BASES.length) return reject(new Error('no manifest'));
         var at = i++;
-        getJSON(BASES[at] + 'index.json').then(function (m) {
+        getJSON(BASES[at] + 'index.json' + bustUrl()).then(function (m) {
           if (!m || !m.shards || !m.count) throw new Error('bad manifest');
           MANIFEST = m;
           BASE_I = at;
@@ -122,7 +137,7 @@
       (function next() {
         if (k >= order.length) return reject(new Error('shard ' + n + ' unavailable'));
         var at = order[k++];
-        getJSON(BASES[at] + 's' + (n < 10 ? '0' + n : n) + '.json').then(function (d) {
+        getJSON(BASES[at] + 's' + (n < 10 ? '0' + n : n) + '.json' + bustUrl()).then(function (d) {
           if (!d) throw new Error('empty shard');
           CACHE[n] = d;
           resolve(d);
@@ -402,10 +417,67 @@
       + '<div class="mgrows">' + rows + '</div></div>';
   }
 
-  /* 分集 + 整季/合集两段（顺序同旧 render）。入参两种形状都吃：
-       epsListHtml(entry)       { eps: { 集号: [条目] }, batch: [...] }（70-modal.js 的 openMagView）
-       epsListHtml(eps, batch)  旧调用：入参直接是 eps 映射，合集走第二个参数 */
-  function epsListHtml(a, b) {
+  /* ---------------- 字幕组分组（纯函数，无副作用，可离线单测） ----------------
+     条目只有 { m, s, sd, sub, t }（后端新增 g），组名多数只能从发布标题前缀取：
+     实测 95% 的发布名以 `[组名]` / `【组名】` 开头。 */
+
+  var G_OTHER = '其他';
+  /* 前缀：[组名] / 【组名】，1–40 字且不含括号本身 */
+  var RE_GPREFIX = /^[\[【]([^\]】]{1,40})[\]】]/;
+
+  /* 前缀清洗：去首尾 【】[] 残片（`[【A】]` 会把 `【A` 抓进捕获组）；
+     分隔符两侧空格归一（`[Lilith - Raws]` 与 `[Lilith-Raws]` 落同一组）；
+     连续空格折叠成一个、**不删**（`[Nekomoe kissaten]` 要正常显示，不能挤成
+     `Nekomoekissaten`）；清完是空串时由调用方兜底成「其他」。 */
+  function cleanGroupName(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    s = s.replace(/^[\[\]【】\s]+/, '').replace(/[\[\]【】\s]+$/, '');
+    s = s.replace(/\s*([\-–—_/~|&+·・])\s*/g, '$1');
+    s = s.replace(/\s+/g, ' ');
+    return s.trim();
+  }
+
+  /* 组名判定顺序：g 键 → 标题前缀 → 「其他」 */
+  function groupNameOf(item) {
+    var g = cleanGroupName(item && item.g);
+    if (g) return g;
+    var m = RE_GPREFIX.exec(String((item && item.t) || '').trim());
+    return cleanGroupName(m && m[1]) || G_OTHER;
+  }
+
+  /* 集号：eps 映射的键优先；合集包（[01-12] / 第1-12话）与解析不出的返回 null → 排后面 */
+  function epNoOf(item, hint) {
+    var n = Number(hint);
+    if (n > 0) return n;
+    var t = String((item && item.t) || '');
+    if (!t || RE_PACK.test(t)) return null;
+    var nums = parseEpsTitle(t);
+    return nums.length === 1 ? nums[0] : null;
+  }
+
+  /* 组排序：中文排序，「其他」恒在最后（不再靠 localeCompare 把汉字排到英文后碰运气） */
+  function groupCmp(a, b) {
+    if (a === b) return 0;
+    if (a === G_OTHER) return 1;
+    if (b === G_OTHER) return -1;
+    return String(a).localeCompare(String(b), 'zh');
+  }
+
+  /* 组内排序：集号升序（合集垫底）→ 做种降序 → 体积降序 */
+  function rowCmp(a, b) {
+    var an = a.ep == null, bn = b.ep == null;
+    if (an !== bn) return an ? 1 : -1;
+    if (!an && a.ep !== b.ep) return a.ep - b.ep;
+    var x = a.it || {}, y = b.it || {};
+    return ((Number(y.sd) || 0) - (Number(x.sd) || 0))
+      || ((Number(y.s) || 0) - (Number(x.s) || 0));
+  }
+
+  /* 两种入参形状 → 扁平行 [{ it, ep, lab }]
+       { eps: { 集号: [条目] }, batch: [...] }（70-modal.js 的磁力视图 / 后端 live）
+       (eps, batch)（旧调用）
+     每个集号最多 3 条（旧口径）；batch 的行一律标「合集」，能解析出单个集号仍按集号排序。 */
+  function collectRows(a, b) {
     var eps = {}, batch = [];
     if (a && typeof a === 'object' && ('eps' in a || 'batch' in a)) {
       eps = a.eps || {};
@@ -414,30 +486,134 @@
       eps = a || {};
       batch = b || [];
     }
-    var nums = Object.keys(eps).map(Number)
-      .filter(function (n) { return n > 0; })
-      .sort(function (x, y) { return x - y; });
-    var rows = '', h = '';
-    nums.forEach(function (n) {
-      (eps[n] || []).slice(0, 3).forEach(function (c) { rows += rowOf(c, pad2(n)); });
+    var out = [];
+    Object.keys(eps).forEach(function (k) {
+      var n = Number(k);
+      if (!(n > 0)) return;                     // 非数字键（NaN）跳过，与旧实现一致
+      (eps[k] || []).slice(0, 3).forEach(function (c) {
+        out.push({ it: c, ep: n, lab: pad2(n) });
+      });
     });
-    if (rows) h += sectHtml('分集磁力', nums.length + ' 集 · 点击复制', rows);
-    /* 整季/合集：以前这些包（[01-12]、第01-26话、Batch）是被直接丢掉的，
-       实际它们往往是新番早期唯一能拿到的资源，单独成一段；.mgidx 位置写「合集」。 */
-    var brows = '';
-    (batch || []).forEach(function (c) { brows += rowOf(c, '合集'); });
-    if (brows) h += sectHtml('整季 / 合集', (batch || []).length + ' 个 · 点击复制', brows);
-    return h;
+    (batch || []).forEach(function (c) { out.push({ it: c, ep: epNoOf(c), lab: '合集' }); });
+    return out;
+  }
+
+  /* 扁平行 → 组 [{ name, rows }]，组序按 groupCmp、组内按 rowCmp */
+  function groupRows(rows) {
+    var map = Object.create(null), names = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (!r) continue;
+      var g = groupNameOf(r.it);
+      if (!map[g]) { map[g] = []; names.push(g); }
+      map[g].push(r);
+    }
+    names.sort(groupCmp);
+    return names.map(function (g) {
+      return { name: g, rows: map[g].slice().sort(rowCmp) };
+    });
+  }
+
+  /* 默认展开：组数 ≤ 6 全展开；> 6 只展开条目数最多的前 3 组（并列按组名序） */
+  function defaultOpen(groups) {
+    var open = Object.create(null), i;
+    if (groups.length <= 6) {
+      for (i = 0; i < groups.length; i++) open[groups[i].name] = 1;
+      return open;
+    }
+    var top = groups.map(function (g, j) { return j; })
+      .sort(function (p, q) { return groups[q].rows.length - groups[p].rows.length; })
+      .slice(0, 3);
+    for (i = 0; i < top.length; i++) open[groups[top[i]].name] = 1;
+    return open;
+  }
+
+  /* 全部组 → .tgs 容器。组头切换与行复制都走 arm() 挂在 #modal 上的委托。 */
+  function tgsHtml(groups) {
+    if (!groups.length) return '';
+    var open = defaultOpen(groups), h = '<div class="tgs">';
+    for (var i = 0; i < groups.length; i++) {
+      var g = groups[i], rows = '';
+      for (var j = 0; j < g.rows.length; j++) rows += rowOf(g.rows[j].it, g.rows[j].lab);
+      h += '<div class="mgteam" data-open="' + (open[g.name] ? '1' : '0') + '">'
+        + '<button class="tg-h" type="button" data-tg="' + escAttr(g.name) + '">'
+        + '<span class="tg-n">' + escText(g.name) + '</span>'
+        + '<span class="tg-c">' + g.rows.length + '</span>'
+        + '<span class="tg-x">›</span>'
+        + '</button>'
+        + '<div class="mgrows">' + rows + '</div>'
+        + '</div>';
+    }
+    return h + '</div>';
+  }
+
+  /* 按字幕组分组渲染（替换旧的「分集磁力」+「整季 / 合集」两段）。
+     入参两种形状都吃：
+       epsListHtml(entry)       { eps: { 集号: [条目] }, batch: [...] }（70-modal.js 的磁力视图）
+       epsListHtml(eps, batch)  旧调用：入参直接是 eps 映射，合集走第二个参数
+     同一组的条目在同一个 .mgrows 里平铺，.mgidx 写集号或「合集」。 */
+  function epsListHtml(a, b) {
+    return tgsHtml(groupRows(collectRows(a, b)));
   }
 
   function render(m, e) {
     var box = m.querySelector('#epsbox');
     if (!box) return;
-    /* 分集与整季/合集都由 epsListHtml 出（旧实现里单独拼的一段、以及「同范围多条
-       追加来源 N」的文本处理一并收进行渲染：合集行现在直接显示完整发布标题）。 */
+    /* 组头 + 行整段都由 epsListHtml 出（旧实现里「分集 / 整季 / 合集」两段拼接与
+       「同范围多条追加来源 N」的文本处理一并收进分组渲染）。 */
     var h = epsListHtml(e);
     box.innerHTML = h || '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
       + '<div class="eps-none">暂无按集索引</div></div>';
+  }
+
+  /* 入口带了可显示的内容吗：只有 batch、没有分集也算有 */
+  function hasRows(e) {
+    return !!(e && ((e.eps && Object.keys(e.eps).length) || (e.batch && e.batch.length)));
+  }
+
+  /* 把入口画进当前弹窗：详情页画 #epsbox；openMagView 那种整屏磁力视图画 #mgbody。 */
+  function paint(e) {
+    var m = document.getElementById('modal');
+    if (!m) return;
+    if (m.querySelector('#epsbox')) return render(m, e);
+    var body = m.querySelector('#mgbody');
+    if (body) {
+      var h = epsListHtml(e);
+      body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';
+    }
+  }
+
+  /* 手动刷新（详情页 ⟳）：清掉该片名的全部缓存层 → 重查静态索引 → 仍未命中就无条件透传
+     后端（不受 __CUR_SEASON 限制）→ 重画。返回 Promise，resolve 为最终入口或 null，不 reject。 */
+  function reload(name, epsN) {
+    var n = String(name == null ? '' : name).trim();
+    if (!n) return Promise.resolve(null);
+    delete LIVE[n];
+    delete CACHE[shardOf(n)];
+    MANIFEST = null;
+    BASE_I = 0;
+    LIVE_DOWN = false;
+    REV = String(Date.now());          // 本次刷新的清单/分片 URL 带 ?v= 绕 HTTP 缓存
+    var box = document.querySelector('#epsbox');
+    var body = document.querySelector('#mgbody');
+    if (box) {
+      box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
+        + '<div class="eps-none">正在刷新…</div></div>';
+    } else if (body) {
+      body.innerHTML = '<div class="eps-none">正在刷新…</div>';
+    }
+    function done(e) {
+      REV = '';                        // 时间戳只作用于这一次刷新
+      paint(e);
+      return e || null;
+    }
+    function fail() { return done(null); }
+    return resolveEntry(n).then(function (e) {
+      if (hasRows(e)) return e;
+      return fetchLive(n, Number(epsN) || 0, '').then(function (live) {
+        return live || e || null;
+      }, function () { return e || null; });
+    }).then(done, fail);
   }
 
   /* ---- 点击复制：clipboard API 优先，失败回退 execCommand。统一返回 Promise<boolean> ---- */
@@ -505,8 +681,21 @@
     m.__epsObs = true;
     /* 事件委托：弹窗内容会被反复重写，不能给行逐个绑。
        认 .mgrow（行式列表）与旧的 span 胶囊 .eps-chip（兼容层，还带 data-m）。 */
+    /* 组头（.tg-h）只切 data-open。它不是 .mgrow，若放行到复制分支会读到空 data-m */
+    function toggleTeam(h) {
+      var g = h && h.closest ? h.closest('.mgteam') : null;
+      if (!g) return false;
+      g.setAttribute('data-open', g.getAttribute('data-open') === '1' ? '0' : '1');
+      return true;
+    }
     function onChip(ev) {
-      var c = ev.target && ev.target.closest && ev.target.closest('.mgrow, .eps-chip');
+      var t = ev.target;
+      if (toggleTeam(t && t.closest ? t.closest('.tg-h') : null)) {
+        ev.preventDefault();
+        ev.stopPropagation();          // 别冒泡去触发卡片的开关逻辑
+        return;
+      }
+      var c = t && t.closest && t.closest('.mgrow, .eps-chip');
       if (!c) return;
       ev.preventDefault();
       ev.stopPropagation();            // 别冒泡去触发卡片的开关逻辑
@@ -519,10 +708,10 @@
     m.addEventListener('click', onChip);
     m.addEventListener('keydown', function (ev) {
       if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
-      /* <button class="mgrow"> 的 Enter/空格会原生发 click，这里只给旧的 span 胶囊补键位，
-         否则同一次按键会复制两次、连弹两次 toast */
+      /* .mgrow / .tg-h 都是 <button>，Enter/空格会原生发 click，这里只给旧的 span 胶囊补键位，
+         否则同一次按键既切换/复制一次、又再走一遍委托 */
       var t = ev.target;
-      if (t && t.closest && t.closest('.mgrow')) return;
+      if (t && t.closest && (t.closest('.mgrow') || t.closest('.tg-h'))) return;
       onChip(ev);
     });
     new MutationObserver(function () {
@@ -547,7 +736,10 @@
       else host.parentNode.insertBefore(box, host.nextSibling);
       resolveEntry(name).then(function (e) {
         /* 静态条目里可能只有整季包（batch）、没有分集，那种也算有内容 */
-        if (e && ((e.eps && Object.keys(e.eps).length) || (e.batch && e.batch.length))) return render(m, e);
+        if (hasRows(e)) return render(m, e);
+        /* 自动透传只限当季：__CUR_SEASON 由 70-modal.js 判定，undefined（还没判定）按允许处理。
+           非当季时静态索引没命中就到此为止；要透传只能点详情页 ⟳ 走 reload()。 */
+        if (window.__CUR_SEASON === false) return render(m, e);
         box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
           + '<div class="eps-none">索引里没有，正在向后端查询…</div></div>';
         var origEl = m.querySelector('.orig');
@@ -572,7 +764,7 @@
   }
   document.addEventListener('DOMContentLoaded', arm);
 
-  /* 测试钩子：让离线脚本能验证匹配 / 分片逻辑（生产路径不使用） */
+  /* 测试钩子：让离线脚本能验证匹配 / 分片 / 分组逻辑（生产路径不使用） */
   window.__epsTest = {
     find: findByName,
     norm: norm,
@@ -582,6 +774,15 @@
     render: render,
     hashOf: hashOf,
     setIdx: function (d) { ENTRY = d; return ENTRY; },
+    /* 分组 / 排序 / 组名抽取：纯函数，供离线单测逐项断言 */
+    cleanGroupName: cleanGroupName,
+    groupNameOf: groupNameOf,
+    epNoOf: epNoOf,
+    collectRows: collectRows,
+    groupRows: groupRows,
+    defaultOpen: defaultOpen,
+    tgsHtml: tgsHtml,
+    bustUrl: bustUrl,
   };
 
   /* 磁力独立页用：这些函数本身不依赖 #modal，导出后可安全复用 */
@@ -590,6 +791,8 @@
     findByName: findByName, chipOf: chipOf, copyText: copyText, toast: toast,
     fmtSize: fmtSize, norm: norm, shardOf: shardOf, buildEps: buildEps,
     epsListHtml: epsListHtml, batchLabel: batchLabel, descOf: descOf,
-    live: function (name, epsN, orig) { return fetchLive(name, epsN, orig); }
+    live: function (name, epsN, orig) { return fetchLive(name, epsN, orig); },
+    /* 详情页 ⟳：清缓存 + 重查静态索引 + 无条件透传，返回 Promise */
+    reload: reload
   };
 })();

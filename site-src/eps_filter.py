@@ -102,6 +102,31 @@ def tokens(text):
     return [norm(x) for x in parts if len(norm(x)) >= 2]
 
 
+# 字幕组：上游（pan-hub / AnimeGarden）每条结果都带 `group`，部分带 `fansub`
+# （实测 group 覆盖率更高），但历史上 item 只保留 {m,s,sd,sub,t}，组名在这里就被丢了。
+# 现在统一取一次随 item 下发（键名 g）。构建端走本函数；盒子上的 ops/server.py
+# 是 build_eps 的复制实现，那边有同口径的 _grp()，两处必须一起改。
+GROUP_MAX = 40
+# 黑名单 = 上游实测出现的「非字幕组」脏值：月历下载 / 台配国语 是分类标签而非组名，
+# V2_UPDATE_FIX 是发布方的补丁标记，接近完美的动漫 是资源站栏目名，Ñ 是单字符乱码。
+# 命中即视为该字段没有组名（继续用另一个字段兜底，两个都脏则为空串）。
+GROUP_BLACKLIST = {"月历下载", "台配国语", "v2_update_fix", "接近完美的动漫", "ñ"}
+
+
+def grp(r):
+    """取字幕组名：`group` 优先、`fansub` 兜底；strip → 截断 40 字 → 脏值丢弃。
+
+    不做「像不像组名」的形状过滤：含 字幕/组/Raws/Sub/Team/House/屋/社/工作室 的
+    当然保留，其余也原样保留——宁可留一个可疑原值，也不要因为不像组名就整条清空。
+    """
+    for key in ("group", "fansub"):
+        s = str(r.get(key) or "").strip()
+        if not s or s.lower() in GROUP_BLACKLIST:
+            continue
+        return s[:GROUP_MAX]
+    return ""
+
+
 def strip_suffix(text):
     t = re.sub(r"[（(][^）)]*[）)]", "", str(text or ""))
     t = re.split(r"\s*[-–—]\s*|第[一二三四五六七八九十\d]+[季期部分]|最终章|剧场版|特别篇|篇", t)[0]
@@ -185,8 +210,11 @@ def split_results(name, orig, eps_n, results, per_ep=2, max_batch=8, aliases=Non
         rs = seasons(t)
         if qs != rs and (qs or rs):
             continue
+        # 多带一个 g（字幕组）：上游 group/fansub 在构造 item 时被丢掉后，
+        # 索引与 /eps 全链路都不存在组名，前端无从显示。返回结构不变，仅多一个键。
         item = {"m": mg, "s": int(r.get("size") or 0), "sd": int(r.get("seeders") or 0),
-                "sub": str(r.get("subs") or r.get("sub") or "")[:12], "t": t[:120]}
+                "sub": str(r.get("subs") or r.get("sub") or "")[:12], "t": t[:120],
+                "g": grp(r)}
         nums = parse_eps(t)
         if RE_PACK.search(t) or len(nums) > 3:
             packs.append(item)

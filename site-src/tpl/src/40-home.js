@@ -96,6 +96,35 @@ function mountRanks() {
   blocks.forEach(function (b) { io.observe(b); });
 }
 
+/* ---------------- 我的追番：跨季度/星期的全局区块 ----------------
+   追番存在 localStorage（见 20-state.js），天然是全站视角：不参与 HOME.y/q/wd 筛选，
+   切季度或星期时这一块内容不变。只保留还能在 ANI.rows 里查到的 id（数据换过 / 条目下架
+   的直接跳过），顺序按追番时间 t 倒序；旧格式条目 t=0 排在最后，同一个 t 再按 id 升序，
+   保证每次渲染顺序一致（Array#sort 本身稳定，这里显式定序不依赖实现）。 */
+function favRows() {
+  var byId = {};
+  ANI.rows.forEach(function (r) { byId[String(r[0])] = r; });
+  return favEntries()
+    .filter(function (e) { return byId[e.id]; })
+    .sort(function (a, b) {
+      if (a.t !== b.t) return b.t - a.t;
+      var na = Number(a.id), nb = Number(b.id);      // id 是数字串：按数值升序更符合直觉
+      if (isFinite(na) && isFinite(nb) && na !== nb) return na - nb;
+      return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0);
+    })
+    .map(function (e) { return byId[e.id]; });
+}
+
+/* 空追番列表时整块不输出（不留空壳占位）。卡片走 animeCard，点击由 90-boot.js 的
+   .card 事件委托处理，和首页其它卡片同一条路径。 */
+function renderFavRow() {
+  var rows = favRows();
+  if (!rows.length) return '';
+  return '<div class="favrow"><h2>我的追番</h2><div class="grid" id="favgrid">'
+    + rows.map(function (r) { return animeCard(r, { showYear: 1, fav: 1 }); }).join('')
+    + '</div></div>';
+}
+
 function renderHome() {
   if (!HOME.y) homeDefaults();
   var rows = homeRows();
@@ -131,9 +160,11 @@ function renderHome() {
   }
 
   /* 榜单已搬到独立页（rank.html）：首页只放本周分组网格。
-     左侧面板由 renderLevels() 给出「排行榜」入口。 */
+     左侧面板由 renderLevels() 给出「排行榜」入口。
+     我的追番插在标题之后、星期分块之前：它是全站视角，不吃 HOME 的季度/星期筛选。 */
   main.innerHTML = '<div class="home-cols">' + renderLevels()
-    + '<div class="home-main"><div class="home-head">' + head + '</div>' + body
+    + '<div class="home-main"><div class="home-head">' + head + '</div>'
+    + renderFavRow() + body
     + '</div></div>';
 
   /* 交互 */

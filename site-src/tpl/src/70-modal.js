@@ -12,11 +12,37 @@
     }).join('');
   }
 
+  /* 每周更新行（纯函数）：next_at（下一话播出 unix 秒，extra[id][3]）→
+       「每周三 12:30 更新 · 下一话 11-05 20:30」
+     周几与时刻全按本地时区从 next_at 推算（WD 的下标 0 = 周一，getDay() 的 0 = 周日）；
+     没有 next_at 但有周几（rows[6]，1..7）时只给「每周三更新」；两者都无返回空串（不渲染该行）。 */
+  function fmtUpd(nextAt, wd) {
+    function pad2(n) { return ('0' + n).slice(-2); }    // 两位补零：MM-DD / HH:mm
+    var d = nextAt ? new Date(Number(nextAt) * 1000) : null;
+    var ok = !!d && !isNaN(d.getTime());
+    var wdTxt = ok ? WD[(d.getDay() + 6) % 7] : (wd >= 1 && wd <= 7 ? WD[wd - 1] : '');
+    if (!wdTxt) return '';
+    if (!ok) return '每' + wdTxt + '更新';
+    var hm = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    return '每' + wdTxt + ' ' + hm + ' 更新 · 下一话 '
+      + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + hm;
+  }
+
+  /* 当季判定：年份相同且月份落在当前季度（与首页 seasonOf 的口径一致：ceil(m / 3)） */
+  function isCurSeason(y, m) {
+    var now = new Date();
+    if (Number(y) !== now.getFullYear()) return false;
+    return Math.ceil(Number(m) / 3) === Math.ceil((now.getMonth() + 1) / 3);
+  }
+
   function openModal(id) {
     var r = ANI.rows.find(function (x) { return x[0] === id; });
     if (!r) return;
     var ex = ANI.extra[id] || [];
     var title = r[2] || r[1];
+    /* 当季标记按「这一条」重算：magnet-eps.js 后续插入磁力列表时会读它 */
+    window.__CUR_SEASON = isCurSeason(r[4], r[5]);
+    var upd = fmtUpd(ex[3], r[6]);
     var m = $('#modal');
     if (!m) return;                              // 页面没有 #modal 壳时别抛引用错
     var host = m, gen = ++MODAL_GEN;             // 这一代弹窗的容器引用与代号
@@ -33,24 +59,19 @@
       +       (r[3] ? '<span class="mbadge">' + esc(TYPE[r[3]] || r[3]) + '</span>' : '')
       +       (r[8] ? '<span class="mbadge">' + r[8] + ' 话</span>' : '')
       +     '</div>'
+      +     (upd ? '<div class="mupd" id="mupd">' + esc(upd) + '</div>' : '')
       +     '<div class="mrate-line">'
       +       (r[7] ? '<b class="score">' + Number(r[7]).toFixed(1) + '</b>'
                  + '<span class="stars" style="--p:' + Math.max(0, Math.min(100, Math.round(r[7] * 10))) + '"></span>'
                : '<b class="score dim">暂无评分</b>')
       +       '<span class="votes" id="mvotes"></span>'
       +     '</div>'
-      +     '<div class="mcollect">'
-      +       '<span><b>—</b><i>想看</i></span><span><b>—</b><i>在看</i></span><span><b>—</b><i>看过</i></span>'
-      +     '</div>'
+      /* .mcollect 不在首屏写占位：收藏统计要等分片数据，rec.co 全空时整块不出现（见 hydrate） */
       +     '<div class="acts">'
       +       '<span class="btn pri" id="watch" type="button">开始观看</span>'
       +       '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
-      +       '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
       +       (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
-      +       '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
-      +       '<button class="btn" id="mgopen" type="button">磁力详情</button>'
-      +       '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
-      +         encodeURIComponent(title) + '">B 站搜索</a>'
+      +       '<button class="btn" id="mrefresh">⟳ 刷新</button>'
       +     '</div>'
       +   '</div>'
       + '</div>'
@@ -72,7 +93,8 @@
     $('#mask').classList.add('on');
     m.querySelector('.x').onclick = close;
 
-    /* 开始观看：优先跳分集磁力（真能下载），其次 B 站弹幕播放，最后开 Bangumi 页 */
+    /* 开始观看：优先跳分集磁力（真能下载），其次（若还有 B 站播放入口）点它，最后开 Bangumi 页。
+       #bplay 入口已删，这里保留判空调用：80-bili.js 自己 querySelector 拿到 null 也有 if (bp) 保护。 */
     var wb = m.querySelector('#watch');
     if (wb) wb.onclick = function () {
       var box = host.querySelector('#epsbox');
@@ -101,10 +123,6 @@
       };
     }
 
-    /* 磁力详情：同一个弹窗内整屏切到该番的分集 / 合集磁力视图（见 openMagView） */
-    var mgb = m.querySelector('#mgopen');
-    if (mgb) mgb.onclick = function () { openMagView(id, title, r[8] || 0); };
-
     if (ex[2]) {
       $('#play').onclick = function () {
         if (host.querySelector('.trailer')) return;
@@ -117,7 +135,7 @@
     }
 
     /* 计数表首次可能晚到：数据到位后若这一代弹窗还活着就用它重绘标签。
-       rec 由下面的 pr.then 填；还没到位时直接跳过（那时的首次渲染会读到已就绪的 TAGCNT）。 */
+       rec 由下面的 hydrate 填；还没到位时直接跳过（那时的首次渲染会读到已就绪的 TAGCNT）。 */
     var rec = null;
     ensureTagCounts(function () {
       if (gen !== MODAL_GEN || !rec) return;
@@ -125,16 +143,9 @@
     });
     bindBili(id, title, r[4] || '');
     var sfx = id % 64;
-    var pr = shardCache[sfx];
-    if (!pr) {
-      pr = jd('s' + sfx + '.json').then(function (d) { return d; }, function () {
-        delete shardCache[sfx];          // 失败不缓存，下次还能重试
-        return null;
-      });
-      shardCache[sfx] = pr;
-    }
-    pr.then(function (list) {
-      if (gen !== MODAL_GEN) return;      // 这一代已被新打开的番取代：数据与 DOM 都不再属于它
+
+    /* 分片数据 → DOM。首次加载与「⟳ 刷新」共用这一段：刷新时同一代弹窗原地重绘。 */
+    function hydrate(list) {
       var plot = host.querySelector('#plot');
       if (!plot) return;      // close() 已清空 / 已切到磁力视图：这一代内容没了，别再往空节点写
       if (list === null) { plot.textContent = '简介加载失败，请重试'; return; }  // 分片拉不到，与「记录不存在」区分
@@ -165,7 +176,7 @@
         }
       }
       /* 角色 / 制作人员 / 收藏统计 —— 数据来自 CI 抓的 ch/st/co。
-         三块容器在 openModal 里已预置（#sect-chars / #sect-staff / .mcollect 的三个 b），
+         三块容器：前两块（#sect-chars / #sect-staff）由 openModal 预置，.mcollect 等数据确认后再建，
          这里只填内容、把 hidden 打开，不再往 #tags 后面插新节点。 */
       if (Array.isArray(rec.ch) && rec.ch.length) {
         var chars = host.querySelector('#sect-chars');
@@ -189,14 +200,30 @@
         if (staff) {
           staff.innerHTML = '<div class="sec-h"><h2>制作人员</h2></div><div class="staffgrid">'
             + rec.st.map(function (p2) {
-              return '<div class="staff"><b>' + esc(p2[0]) + '</b>'
+              /* st 每条 = [名, 关系, 头像]；头像镜像后是裸文件名，未镜像的 http(s)
+                 会被 avatarSrc 丢弃，此时不输出 .sph，布局回到纯文字。 */
+              var sv = avatarSrc(p2[2]);
+              return '<div class="staff">'
+                + (sv ? '<span class="sph"><img class="sav" src="' + esc(sv) + '" alt="" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.parentNode.remove()"></span>' : '')
+                + '<b>' + esc(p2[0]) + '</b>'
                 + (p2[1] ? '<em>' + esc(p2[1]) + '</em>' : '') + '</div>';
             }).join('') + '</div>';
           staff.hidden = false;
         }
       }
       if (Array.isArray(rec.co) && rec.co.some(Boolean)) {
-        var cos = host.querySelectorAll('.mcollect b');
+        /* 收藏统计：首屏不写占位，数据确认真有数字才把整块插到 .acts 之前；
+           rec.co 全空时这块根本不出现（旧实现恒渲染三个「—」）。 */
+        var mcol = host.querySelector('.mcollect');
+        if (!mcol) {
+          mcol = document.createElement('div');
+          mcol.className = 'mcollect';
+          mcol.innerHTML = '<span><b>—</b><i>想看</i></span><span><b>—</b><i>在看</i></span>'
+            + '<span><b>—</b><i>看过</i></span>';
+          var actsEl = host.querySelector('.acts');
+          if (actsEl && actsEl.parentNode) actsEl.parentNode.insertBefore(mcol, actsEl);
+        }
+        var cos = mcol.querySelectorAll('b');
         for (var ci = 0; ci < cos.length && ci < 3; ci++) {
           cos[ci].textContent = rec.co[ci] == null ? '—' : String(rec.co[ci]);
         }
@@ -210,7 +237,51 @@
         meta.push('排名 #' + rec.rank + (pct < 20 ? '（前 ' + pct.toFixed(1) + '%）' : ''));
       }
       var mv = host.querySelector('#mvotes'); if (mv) mv.textContent = meta.join(' · ');
+    }
+
+    /* 分片缓存取数：命中就复用，未命中才拉；失败不写缓存（下次还能重试） */
+    function getShard() {
+      var p = shardCache[sfx];
+      if (p) return p;
+      p = jd('s' + sfx + '.json').then(function (d) { return d; }, function () {
+        delete shardCache[sfx];
+        return null;
+      });
+      shardCache[sfx] = p;
+      return p;
+    }
+    getShard().then(function (list) {
+      if (gen !== MODAL_GEN) return;      // 这一代已被新打开的番取代：数据与 DOM 都不再属于它
+      hydrate(list);
     });
+
+    /* ⟳ 刷新：dropShard 后带 ?v= 重取本片分片并原地重绘；顺带让磁力列表重新拉索引。
+       点击期间禁用防连点，成败都恢复。__epsApi.reload 缺失时跳过（不报错）。 */
+    var rf = m.querySelector('#mrefresh');
+    if (rf) rf.onclick = function () {
+      if (rf.disabled) return;
+      rf.disabled = true;
+      var old = rf.textContent;
+      rf.textContent = '⟳ 刷新中…';
+      dropShard(sfx);
+      var api = window.__epsApi;
+      if (api && typeof api.reload === 'function') {
+        try { api.reload(title, r[8] || 0); } catch (e) { /* 磁力刷新失败不影响简介重取 */ }
+      }
+      jd('s' + sfx + '.json', { bust: true }).then(function (d) {
+        shardCache[sfx] = Promise.resolve(d);     // 回填缓存：关掉再开不必重拉
+        if (gen !== MODAL_GEN) return;
+        /* 评分分布有「只画一次」的保护，刷新先把旧图摘掉，否则新数据进不去 */
+        var rd = host.querySelector('#rdist');
+        if (rd && rd.parentNode) rd.parentNode.removeChild(rd);
+        hydrate(d);
+      }, function () {
+        if (gen === MODAL_GEN) hydrate(null);     // 走「简介加载失败，请重试」那条
+      }).then(function () {
+        rf.textContent = old;
+        rf.disabled = false;
+      });
+    };
   }
   /* 关弹窗要把内容一起清掉：旧实现只摘 #mask 的 on，预告 iframe 会在后台继续播放，
      下次打开还留着上一次的残留节点。容器 #modal 本身保留（openMagView 复用它当外壳）。 */
@@ -224,8 +295,9 @@
     $('#mask').classList.remove('on');
   }
 
-  /* ---------------- 详情内磁力视图（「磁力详情」按钮进来，不跳首页标签） ----------------
-     复用同一个 #modal 外壳整体换内容：.acts 里的 #mgopen 触发，‹ 返回详情 重新走
+  /* ---------------- 详情内磁力视图（整屏视图，不跳首页标签） ----------------
+     复用同一个 #modal 外壳整体换内容。（整屏磁力入口按钮已删除，磁力改在详情页内分组展示；
+     函数本体保留，供以后复用 / 已有调用方。）‹ 返回详情 重新走
      openModal（.mtabs / #epsbox 那套绑定与注入随之重建）。分集与合集的整段列表都交给
      magnet-eps.js 的 epsListHtml(entry)（自带 .mgsect + .sec-h + .mgrows，分集/合集标题
      与行都在里面），点击复制由 arm() 挂在 #modal 上的委托接管（带 data-m 的条目），这里不绑。 */
