@@ -103,7 +103,9 @@ def shard_of(title, n=SHARDS):
 buckets = [{} for _ in range(SHARDS)]
 skipped = 0
 for aid, rec in base.items():
-    if not isinstance(rec, dict) or not (rec.get("eps") or {}):
+    # 只要有分集或合集就发布：早先只认 eps，纯合集条目（电影/OVA 单文件）全被丢掉，
+    # 前端「整季 / 合集」组因此长期为空。
+    if not isinstance(rec, dict) or not (rec.get("eps") or rec.get("batch")):
         skipped += 1
         continue
     buckets[shard_of(rec.get("n"))][aid] = rec
