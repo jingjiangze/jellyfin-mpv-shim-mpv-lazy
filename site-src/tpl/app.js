@@ -25,10 +25,13 @@
      CF Pages 对缺失路径会回 200 + text/html，所以不能只看 r.ok，必须验 content-type。
      实测 content-type：同源/CF = application/json；数据集 = application/octet-stream
      （不是 json，所以单独放行，否则主源会被误判失败）；GitHub 镜像 = application/json。 */
+  /* 与刮削的产出去向一致：数据集优先 → GitHub 镜像 → 同源。
+     实测 content-type：数据集 = application/octet-stream（不是 json，单独放行，
+     否则主源会被误判失败）；GitHub 镜像与同源 = application/json。 */
   var D_BASES = [
-    './data/',
     'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/data/',
-    'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/'
+    'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/',
+    './data/'
   ];
   function jd(name) {
     var i = 0;
