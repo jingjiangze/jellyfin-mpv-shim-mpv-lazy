@@ -226,9 +226,9 @@ return '<i style="height:' + h + '%" title="' + (i + 1) + ' 分 · ' + n + ' 人
 var div = document.createElement('div');
 div.className = 'rdist';
 div.id = 'rdist';
-div.innerHTML = '<div class="rdhead">共 <b>' + sum + '</b> 人评分'
+div.innerHTML = '<div class="rdhead">星级分布合计 <b>' + sum + '</b> 人'
 + (rec.rank ? ' · 排名 <b>#' + rec.rank + '</b>' : '')
-+ (rec.votes ? ' · Bangumi ' + rec.votes + ' 人' : '') + '</div>' + bars;
++ (rec.votes ? ' · Bangumi 共 ' + rec.votes + ' 人评分' : '') + '</div>' + bars;
 host.appendChild(div);
 }
 }
