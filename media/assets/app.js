@@ -970,15 +970,114 @@ if ($('#mask')) close();
 repaint();
 };
 }
-function loginLinkHtml() {
-return '<a class="login" href="' + AUTH_BASE + '/auth/start?next=' + encodeURIComponent(location.href)
-+ '" target="_blank" rel="noopener">GitHub 登录</a>';
+function loginBtnHtml() {
+return '<button class="login" id="loginbtn" type="button">登录</button>';
+}
+function paintLoginEntry(el) {
+el.title = '';
+el.onclick = function (e) {
+if (e && e.target && e.target.id === 'loginbtn') openAuthPanel();
+};
+el.innerHTML = loginBtnHtml();
+}
+var authEsc = null;
+function openAuthPanel() {
+if (document.getElementById('authmask')) return;
+var mask = document.createElement('div');
+mask.className = 'authmask';
+mask.id = 'authmask';
+mask.innerHTML = '<div class="authcard" role="dialog" aria-modal="true">'
++ '<button class="authx" type="button" aria-label="关闭">×</button>'
++ '<div class="authtabs">'
++ '<button class="authtab on" data-t="email" type="button">邮箱</button>'
++ '<button class="authtab" data-t="github" type="button">GitHub</button>'
++ '</div>'
++ '<div class="authbody" data-t="email">'
++ '<label class="authfield"><span>邮箱</span><input id="authemail" type="email" autocomplete="username"'
++ ' placeholder="you@example.com"></label>'
++ '<label class="authfield"><span>密码</span><input id="authpw" type="password" autocomplete="current-password"'
++ ' placeholder="至少 8 位"></label>'
++ '<div class="autherr" id="autherr"></div>'
++ '<div class="authacts">'
++ '<button class="btn pri" id="authlogin" type="button">登录</button>'
++ '<button class="btn" id="authreg" type="button">注册</button>'
++ '</div>'
++ '</div>'
++ '<div class="authbody" data-t="github" hidden>'
++ '<p class="authhint">用 GitHub 账号登录（需要能访问 github.com）。</p>'
++ '<a class="btn pri" href="' + AUTH_BASE + '/auth/start?next=' + encodeURIComponent(location.href)
++ '" target="_blank" rel="noopener">去 GitHub 授权</a>'
++ '</div>'
++ '</div>';
+document.body.appendChild(mask);
+mask.querySelectorAll('.authtab').forEach(function (b) {
+b.onclick = function () {
+var t = b.getAttribute('data-t');
+mask.querySelectorAll('.authtab').forEach(function (x) { x.classList.toggle('on', x === b); });
+mask.querySelectorAll('.authbody').forEach(function (x) { x.hidden = x.getAttribute('data-t') !== t; });
+if (t === 'email') { var em = document.getElementById('authemail'); if (em) em.focus(); }
+};
+});
+mask.querySelector('.authx').onclick = closeAuthPanel;
+mask.addEventListener('click', function (e) { if (e.target.id === 'authmask') closeAuthPanel(); });
+mask.querySelector('#authlogin').onclick = function () { submitAuth('login'); };
+mask.querySelector('#authreg').onclick = function () { submitAuth('register'); };
+mask.querySelectorAll('.authfield input').forEach(function (inp) {
+inp.addEventListener('keydown', function (e) {
+if (e.key === 'Enter') { e.preventDefault(); submitAuth('login'); }
+});
+});
+authEsc = function (e) { if (e.key === 'Escape') closeAuthPanel(); };
+document.addEventListener('keydown', authEsc);
+var first = document.getElementById('authemail');
+if (first) first.focus();
+}
+function closeAuthPanel() {
+var m = document.getElementById('authmask');
+if (m && m.parentNode) m.parentNode.removeChild(m);
+if (authEsc) { document.removeEventListener('keydown', authEsc); authEsc = null; }
+}
+function submitAuth(kind) {
+var em = document.getElementById('authemail');
+var pw = document.getElementById('authpw');
+var err = document.getElementById('autherr');
+var bl = document.getElementById('authlogin');
+var br = document.getElementById('authreg');
+if (!em || !pw) return;
+if ((bl && bl.disabled) || (br && br.disabled)) return;
+if (err) err.textContent = '';
+if (bl) bl.disabled = true;
+if (br) br.disabled = true;
+fetch(AUTH_BASE + (kind === 'register' ? '/auth/register' : '/auth/login'), {
+method: 'POST',
+headers: { 'content-type': 'application/json' },
+body: JSON.stringify({ email: em.value.trim(), password: pw.value })
+}).then(function (r) {
+return r.json().catch(function () { return null; }).then(function (j) {
+return { status: r.status, ok: r.ok, j: j };
+});
+}).then(function (res) {
+var j = res.j || {};
+if (res.ok && j.token) {
+try { localStorage.setItem(TOKEN_KEY, j.token); } catch (e) { /* 隐私模式忽略 */ }
+closeAuthPanel();
+paintAuth();
+return;
+}
+if (res.status === 429) throw new Error(j.error || '尝试太频繁，稍后再试');
+throw new Error(j.error || '请求失败');
+}).catch(function (e) {
+if (err) err.textContent = (e && e.message) || '请求失败';
+}).then(function () {
+if (bl) bl.disabled = false;
+if (br) br.disabled = false;
+});
 }
 function paintAuth() {
 var el = document.getElementById('cnt');
 if (!el) return;
 var tk = authToken();
-if (!tk) { el.title = ''; el.innerHTML = loginLinkHtml(); return; }
+if (!tk) { paintLoginEntry(el); return; }
 el.innerHTML = '<span class="who">登录中…</span>';
 fetch(AUTH_BASE + '/auth/me', { headers: { authorization: 'Bearer ' + tk } }).then(function (r) {
 if (r.status === 401) { var e = new Error('login_required'); e.auth = 1; throw e; }
@@ -999,9 +1098,7 @@ location.reload();
 };
 }).catch(function (e) {
 if (e && e.auth) { try { localStorage.removeItem(TOKEN_KEY); } catch (err) { /* 忽略 */ } }
-el.onclick = null;
-el.title = '';
-el.innerHTML = loginLinkHtml();
+paintLoginEntry(el);
 });
 }
 function bootHeader() {
