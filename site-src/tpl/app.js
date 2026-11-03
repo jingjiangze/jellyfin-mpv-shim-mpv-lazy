@@ -852,7 +852,9 @@ function renderRank() {
       if (batch.length) {
         h += '<div class="relhead">整季 / 合集 · ' + batch.length + ' 个（点击复制）</div>'
           + '<div class="epsgrid">' + batch.map(function (c, i) {
-              return api.chipOf(c, api.batchLabel(c, i));
+              var lb = api.batchLabel(c, i);
+              var bd = api.descOf ? api.descOf(c, 46) : '';
+              return api.chipOf(c, lb + (bd ? ' · ' + bd : ''));
             }).join('') + '</div>';
       }
       body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';

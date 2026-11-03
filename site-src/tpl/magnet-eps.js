@@ -351,22 +351,22 @@
     return '合集 ' + (i + 1);
   }
 
-  /* 分集 chip 段（不含 .relhead 标题）。同一集有多条磁力＝多条「线路」（最多 3 条），
-     对应参考 App 里「某源 3 线 / 1 线 / 无尽③」那种多线路选择：多条时包成 .epgroup，
-     组标题只写一次集号，chip 只写「线路 i」——否则 4 列网格换行后同集的两条会分到两行。
-     单条保持原样、不加容器，避免布局无谓变化。 */
+  /* 每条磁力自己的发布标题就是最好的描述（用户要求：不要「线路 1/线路 2」这种人造标签）。
+     chip = 「第 N 集 · <标题摘要>」+ 体积/做种/字幕；完整标题放 title 悬停。
+     同一集仍最多 3 条（buildEps 已按做种/体积排过序），但不再包 .epgroup、不再编号。 */
+  function descOf(c, max) {
+    var t = String((c && c.t) || '').replace(/\s+/g, ' ').trim();
+    if (!t) return '';
+    return t.length > max ? t.slice(0, max) + '…' : t;
+  }
   function epsListHtml(eps) {
     var nums = Object.keys(eps || {}).map(Number).sort(function (a, b) { return a - b; });
     var h = '';
     nums.forEach(function (n) {
-      var top = (eps[n] || []).slice(0, 3);
-      if (top.length > 1) {
-        h += '<span class="epgroup"><em class="epglabel">第 ' + n + ' 集</em>';
-        top.forEach(function (c, i) { h += chipOf(c, '线路 ' + (i + 1)); });
-        h += '</span>';
-      } else {
-        top.forEach(function (c) { h += chipOf(c, '第 ' + n + ' 集'); });
-      }
+      (eps[n] || []).slice(0, 3).forEach(function (c) {
+        var d = descOf(c, 46);
+        h += chipOf(c, '第 ' + n + ' 集' + (d ? ' · ' + d : ''));
+      });
     });
     return h;
   }
@@ -397,7 +397,8 @@
           used[lb] = (used[lb] || 0) + 1;
           lb += ' · 来源 ' + used[lb];
         }
-        h += chipOf(c, lb);
+        var bd = descOf(c, 46);
+        h += chipOf(c, lb + (bd ? ' · ' + bd : ''));
       });
     }
     box.innerHTML = h || '<div class="relhead">分集磁力</div><div class="eps-none">暂无按集索引</div>';
@@ -538,7 +539,7 @@
     loadManifest: loadManifest, loadShard: loadShard, resolveEntry: resolveEntry,
     findByName: findByName, chipOf: chipOf, copyText: copyText, toast: toast,
     fmtSize: fmtSize, norm: norm, shardOf: shardOf, buildEps: buildEps,
-    epsListHtml: epsListHtml, batchLabel: batchLabel,
+    epsListHtml: epsListHtml, batchLabel: batchLabel, descOf: descOf,
     live: function (name, epsN, orig) { return fetchLive(name, epsN, orig); }
   };
 })();
