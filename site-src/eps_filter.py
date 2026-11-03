@@ -7,10 +7,33 @@
 """
 import re
 
+# 繁→简：目录名是简体、字幕组发布名常用繁体（「皎潔深宵之月」vs「皎洁迎宵之月」），
+# 不归一就永远匹配不上。zhconv 是纯 Python 小包，CI/服务器各装一次；
+# 装不上就退化成恒等，不影响其它规则。
+try:
+    from zhconv import convert as _zhconv
+
+    def to_simplified(text, _cache={}):
+        t = str(text or "")
+        if t in _cache:
+            return _cache[t]
+        try:
+            out = _zhconv(t, "zh-hans")
+        except Exception:
+            out = t
+        if len(_cache) < 20000:
+            _cache[t] = out
+        return out
+except Exception:                                    # 没装 zhconv
+    def to_simplified(text, _cache={}):
+        return str(text or "")
+
 RE_RANGE = re.compile(r"第\s*(\d{1,4})\s*[-–~〜]\s*(\d{1,4})\s*[話话集]")
 RE_SINGLE = re.compile(r"第\s*(\d{1,4})\s*[話话集](?!\d)")
 RE_BRACKET = re.compile(r"[\]\)\s\-–—]\s*\[?(\d{1,4})\]?(?=\s*(?:\[|\(|END|完|【|v\d|$))")
 RE_EP = re.compile(r"(?:^|[\s\-–—\[])E[P]?(\d{1,4})\b", re.I)
+# SxxExx：取 E 后面的集号，S 只作校验（`Season 1` 没有 E数字，不会误吃）
+RE_SXXEXX = re.compile(r"(?i)(?<![A-Za-z])S(\d{1,2})\s*E(\d{1,4})\b")
 RE_DASH = re.compile(r"\s-\s*(\d{1,4})(?:v\d)?\s*(?:\[|\(|$)")
 NOISE = re.compile(
     r"(OP\d?テーマ|ED\d?テーマ|OPテーマ|EDテーマ|主題歌|主题歌|挿入歌|"
@@ -26,7 +49,8 @@ NUM = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "�
 
 
 def norm(s):
-    return re.sub(r"[\s\-_.·・:：!！?？,，。'\"()\[\]（）【】～~]", "", str(s or "").lower())
+    s = to_simplified(s).lower()
+    return re.sub(r"[\s\-_.·・:：!！?？,，。'\"()\[\]（）【】～~]", "", s)
 
 
 def seasons(text):
@@ -45,10 +69,11 @@ def parse_eps(t):
     if m:
         a, b = int(m.group(1)), int(m.group(2))
         return set(range(a, b + 1)) if 0 <= b - a <= 200 else set()
-    for rx in (RE_SINGLE, RE_DASH, RE_EP, RE_BRACKET):
+    for rx in (RE_SINGLE, RE_DASH, RE_EP, RE_SXXEXX, RE_BRACKET):
         m = rx.search(t)
         if m:
-            n = int(m.group(1))
+            # SxxExx 的集号在 group(2)，季号 group(1) 不参与
+            n = int(m.group(2) if rx is RE_SXXEXX else m.group(1))
             return {n} if 0 < n <= 999 else set()
     return set()
 
@@ -84,9 +109,9 @@ def char_cover(q, nt):
     return len(qs & set(nt)) / len(qs) if qs else 0.0
 
 
-def build_keys(name, orig):
+def build_keys(name, orig, extra=None):
     keys = []
-    for raw in (name, orig, strip_suffix(name), strip_suffix(orig)):
+    for raw in (name, orig, strip_suffix(name), strip_suffix(orig)) + tuple(extra or ()):
         k = norm(raw)
         if k and k not in keys:
             keys.append(k)
@@ -128,12 +153,12 @@ def kw_variants(kw, orig):
     return uniq
 
 
-def split_results(name, orig, eps_n, results, per_ep=2, max_batch=8):
+def split_results(name, orig, eps_n, results, per_ep=2, max_batch=8, aliases=None):
     """返回 (eps, batch)。eps: {集号: [条目]}；batch: [整季/合集包条目]。"""
-    if eps_n and eps_n <= 2:
-        return {}, []
+    # 剧场版/OAD（集数 ≤2）天然没有稳定的集号：不再整条丢弃，只禁分集、合集照常收集。
+    only_batch = bool(eps_n and eps_n <= 2)
     q, qs = norm(name), seasons(name)
-    keys = build_keys(name, orig)
+    keys = build_keys(name, orig, aliases)
     qtoks = tokens(name) + tokens(orig)
     short = len(q) <= 3
     cand, packs = {}, []
@@ -159,6 +184,13 @@ def split_results(name, orig, eps_n, results, per_ep=2, max_batch=8):
             packs.append(item)
             continue
         if not nums:
+            # 单文件资源（电影/OVA 发布名没有「第12话」「[01-12]」）兜底进 batch，
+            # 别再整条丢弃——movie 只有 7.6% 匹配率的根因就是这里。
+            packs.append(item)
+            continue
+        if only_batch:
+            # 集数 ≤2：不建分集，但这条资源本身可用 → 收进 batch 而不是 eps。
+            packs.append(item)
             continue
         for n in nums:
             cand.setdefault(str(n), []).append(item)

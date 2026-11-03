@@ -119,8 +119,12 @@ def build_anime():
     if ep.is_file():
         try:
             for k, v in (json.loads(ep.read_text(encoding="utf-8")) or {}).items():
-                if isinstance(k, str) and k.startswith("bgm"):
-                    eps_ids.add(k[3:])
+                if isinstance(k, str):
+                    # 实测索引的键是纯数字 bgm id（8,797 个键全数字、bgm 前缀 0 个），
+                    # 旧版只认 "bgm" 前缀 -> eps_ids 恒空、有磁力少算 943 部。
+                    kk = k[3:] if k.startswith("bgm") else k
+                    if kk.isdigit():
+                        eps_ids.add(kk)
                 nm = norm((v or {}).get("n"))
                 if nm:
                     eps_names.add(nm)
@@ -184,6 +188,74 @@ def build_anime():
     print(f"anime: {len(rows)} 条（有评分 {sum(1 for r in rows if r[7])} / 有详情 "
           f"{sum(1 for r in rows if r[9])} / 有磁力 {sum(1 for r in rows if r[10])} / AniList 补充 {len(extra)}）")
     return rows
+
+
+def shard_of(title, n=16):
+    """片名 -> 分片号，必须与打包端（src/shard_eps.py）逐字符一致。
+
+    两边都是：按 Unicode 码点迭代 `h = (h*31 + ord(ch)) % 2**32`，取 `h % n`；
+    tpl/magnet-eps.js 的 shardOf 也是同一算法 —— 改任一处必须同步另外两处，
+    否则算出的片号对不上、永远查不到（src/test_shard_parity.py 对拍）。
+    """
+    h = 0
+    for ch in str(title or "").strip():
+        h = (h * 31 + ord(ch)) % 4294967296
+    return h % n
+
+
+def build_magnet_index():
+    """磁力列表页用：把整份 magnet-eps.json 收成一份轻量索引。
+
+    原来列表得按片名逐片拉 16 个分片（合计 7.5MB），这里直接给出
+    (id, 片名, 集数, 合集数, 片号)，单文件即可渲染整个列表。
+    """
+    ep = SITE / "magnet-eps.json"
+    if not ep.is_file():
+        print("magnet-index: 跳过（site/magnet-eps.json 不存在）")
+        return
+    try:
+        full = json.loads(ep.read_text(encoding="utf-8")) or {}
+    except (ValueError, OSError):
+        print("magnet-index: 跳过（site/magnet-eps.json 解析失败）")
+        return
+
+    # 兜底命名：索引里 n 缺失时用 anime.json 的中文名（build_anime 已落盘）
+    names = {}
+    ap = SITE / "data" / "anime.json"
+    if ap.is_file():
+        try:
+            for r in (json.loads(ap.read_text(encoding="utf-8")).get("rows") or []):
+                if isinstance(r, list) and len(r) > 2:
+                    names[str(r[0])] = r[2] or r[1] or ""
+        except (ValueError, OSError):
+            pass
+
+    items = []
+    for k, v in full.items():
+        if not isinstance(v, dict):
+            continue
+        # 键可能是 "305" 或 "bgm305"；老 179 条索引的键是种子哈希，跳过
+        kk = k[3:] if isinstance(k, str) and k.startswith("bgm") else str(k)
+        if not kk.isdigit():
+            continue
+        nm = str(v.get("n") or names.get(kk) or "").strip()
+        if not nm:
+            continue
+        eps = v.get("eps") or {}
+        batch = v.get("batch") or []
+        items.append({"id": int(kk), "n": nm,
+                      "e": len(eps) if isinstance(eps, dict) else 0,
+                      "b": len(batch) if isinstance(batch, list) else 0,
+                      "s": shard_of(nm)})
+    items.sort(key=lambda x: (-(x["e"] + x["b"]), x["id"]))
+    items = items[:4000]          # 控体积（实测 2469 条约 134KB）
+    out = SITE / "data"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "magnet-index.json").write_text(
+        json.dumps({"built": BUILD_TAG, "count": len(items), "items": items},
+                   ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"magnet-index: {len(items)} 条 / 分集 "
+          f"{sum(1 for x in items if x['e'])} / 合集 {sum(1 for x in items if x['b'])}")
 
 
 def build_movies():
@@ -261,11 +333,13 @@ PAGES = [
     ("anime.html", "anime", "番剧全收录 · 番组计划", "在 8,000+ 部里搜…", "", 'class="is-on"', ""),
     ("movie.html", "movie", "电影 · 番组计划", "搜索电影…", "", "", 'class="is-on"'),
     ("rank.html", "rank", "排行榜 · 番组计划", "搜索番剧…", "", "", ""),
+    ("magnet.html", "magnet", "磁力 · 番组计划", "搜索磁力…", "", "", ""),
 ]
 
 
 def main():
     build_anime()
+    build_magnet_index()
     build_movies()
 
     css = min_css((TPL / "style.css").read_text(encoding="utf-8"))

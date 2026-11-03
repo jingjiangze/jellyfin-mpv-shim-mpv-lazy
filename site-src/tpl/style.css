@@ -124,6 +124,8 @@ button, input, select { font: inherit; color: inherit; }
 /* ---------------------------------------------------------------- 版面 */
 main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 .loading { padding: var(--s7) 0; text-align: center; color: var(--dim); font-size: var(--fs-md); }
+/* 空态（app_v3.js 的 <div class="empty">）：之前只有 .loading，筛选无结果时整块无样式 */
+.empty { padding: var(--s6) var(--s4); text-align: center; color: var(--dim); font-size: var(--fs-sm); }
 
 .block { margin: 0 0 var(--s6); }
 /* 区块标题：左侧 3px 强调色竖条 + 标题 + 计数 */
@@ -303,6 +305,38 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
 .tabbtn:hover { color: var(--fg); border-color: var(--accent-line); }
 .tabbtn.on { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); font-weight: 600; }
 
+/* ---------------------------------------------------------------- 磁力索引页 */
+/* 版式沿用首页下钻：左侧 .levels 只放一个「磁力」组 + 总计，
+   右侧 .home-main 里是纵向条目列表，点条目换成 .mgdetail（分集 / 合集胶囊）。 */
+.mglist { display: flex; flex-direction: column; gap: var(--s2); margin: 0 0 var(--s5); }
+/* 整行可点：button 默认居中 + 系统灰底，这里逐项压回左对齐与卡片观感 */
+.mgrow {
+  display: flex; justify-content: space-between; align-items: center;
+  width: 100%; min-height: 36px; padding: 8px var(--s3); text-align: left;
+  border-radius: var(--r-sm); border: 1px solid var(--line);
+  background: var(--card2); color: var(--fg);
+  font-size: var(--fs-sm); cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: border-color .16s ease, color .16s ease;
+}
+.mgrow:hover { border-color: var(--accent); }
+.mgrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 右侧元信息（集数 / 合集数）不参与压缩，也不省略 */
+.mgmeta { flex: 0 0 auto; margin-left: var(--s3); font-size: var(--fs-xs); color: var(--dim); }
+/* 详情视图与列表同宽；不设 display —— 设了会盖掉 hidden 属性的收起效果 */
+.mgdetail { width: 100%; }
+/* 胶囊沿用 .eps-chip（本文件已定义），这里只管排布 */
+.epsgrid { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 var(--s4); }
+/* 返回按钮：形制照 .morebtn，尺寸收一档（它嵌在 .bhead span 里，别撑高标题行） */
+.mgback {
+  padding: 4px var(--s3); border-radius: 999px; cursor: pointer;
+  font-size: var(--fs-xs); color: var(--fg);
+  background: var(--card2); border: 1px solid var(--line);
+  transition: border-color .16s ease, color .16s ease;
+}
+.mgback:hover { border-color: var(--accent-line); color: var(--accent); }
+.mgback:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* ---------------------------------------------------------------- 弹窗 */
 .mask {
   position: fixed; inset: 0; z-index: 60; display: none;
@@ -478,6 +512,8 @@ main { padding: var(--s5) 0 var(--s7); min-height: 60vh; }
   .f-hint { margin-left: 0; flex-basis: 100%; }
   /* 提示占满一整行时必须允许换行，否则 h2 被挤窄折行（电影页第三块实测折成两行） */
   .bhead { flex-wrap: wrap; }
+  /* 磁力索引条目：窄屏片名本来就放不全，字号降一档、内边距收窄 */
+  .mgrow { font-size: var(--fs-xs); padding: 6px var(--s2); }
 
   /* 弹窗：海报 88px 与片名同排，其余整宽下沉；不再纵向堆叠 */
   .mask { padding: 0; align-items: stretch; }

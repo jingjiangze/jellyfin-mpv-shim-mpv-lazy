@@ -671,11 +671,268 @@ function renderRank() {
     applyMovie();
   }
 
+  /* ---------------- 磁力独立页（magnet.html）：索引列表 + 分集/合集详情 ----------------
+     列表数据走 ./data/magnet-index.json（{built, items:[{id,n,e,b,s}]}）；文件还没
+     产出时降级成「ANI.rows 里有 has_mag 的那些」，分片号现场用 shardOf 算。
+     分集/合集内容本身仍交给 magnet-eps.js 的 __epsApi（按片名哈希分 16 片）。
+     本页不调 bindSearch：搜索框由 bindMagnetSearch 独占，避免两套实现打架。 */
+  var MAGIDX = null;      // [{id,n,e,b,s}]；null = 还没拿到（initMagnet 里填）
+  var MGBUILT = '';       // 索引构建时间，仅用于左栏展示
+  var MG = { q: '', cur: null, entry: null, seq: 0, liveQ: '' };
+  var MG_MAX = 200;       // 列表最多渲染条数：一部一条，200 条足够滚，再多靠搜索
+
+  /* 统一成 {id, n, e, b, s}：e=分集数、b=合集数、s=分片号（0..15） */
+  function magnetItems() {
+    if (MAGIDX) return MAGIDX;
+    var api = window.__epsApi;
+    MAGIDX = ANI.rows.filter(function (r) { return r[10]; }).map(function (r) {
+      var n = r[2] || r[1] || '';
+      return {
+        id: Number(r[0]) || 0, n: n, e: Number(r[8]) || 0, b: 0,
+        s: api && api.shardOf ? api.shardOf(n) : 0
+      };
+    });
+    return MAGIDX;
+  }
+
+  function initMagnet() {
+    if (!window.__epsApi) {
+      $('#main').innerHTML = '<div class="empty">磁力模块未加载，请刷新页面</div>';
+      return;
+    }
+    $('#main').innerHTML = '<div class="loading">磁力索引加载中…</div>';
+    jd('magnet-index.json').then(function (d) {
+      if (d && d.items && d.items.length) {
+        MAGIDX = d.items.map(function (x) {
+          return {
+            id: Number(x.id) || 0, n: x.n || '', e: Number(x.e) || 0,
+            b: Number(x.b) || 0, s: Number(x.s) || 0
+          };
+        });
+        MGBUILT = d.built || '';
+      }
+    }).catch(function () { /* 文件未产出：下面 magnetItems() 用 ANI.rows 兜底 */ })
+      .then(function () {
+        paintMagnet();
+        bindMagnetSearch();
+        var q = $('#q');
+        if (q) q.placeholder = '搜索磁力…';
+      });
+  }
+
+  /* 骨架 + 列表 + 委托；刷新（切清晰度）时重建 DOM 但状态 MG 保留 */
+  function paintMagnet() {
+    var main = $('#main');
+    if (!main) return;
+    var total = magnetItems().length;
+    main.innerHTML = '<div class="home-cols">'
+      + '<aside class="levels"><div class="lv"><div class="lv-h">磁力</div>'
+      + '<div class="chips chips--col"><span class="mnote" id="mgtotal">共 ' + total + ' 部有磁力</span></div>'
+      + (MGBUILT ? '<div class="mnote">索引 ' + esc(MGBUILT) + '</div>' : '')
+      + '</div></aside>'
+      + '<div class="home-main">'
+      + '<div class="home-head"><div class="bhead"><h2>磁力索引</h2><span>点条目看分集/合集</span></div></div>'
+      + '<div class="mglist" id="mglist"></div>'
+      + '<div class="mgdetail" id="mgdetail" hidden></div>'
+      + '</div></div>';
+
+    var box = $('#mglist');
+    if (box) box.addEventListener('click', onMagnetClick);
+    var det = $('#mgdetail');
+    if (det) {
+      det.addEventListener('click', onMagnetDetailClick);
+      det.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') onMagnetDetailClick(e);
+      });
+    }
+    paintMagnetList();
+
+    /* 详情打开着就继续停在详情：先隐藏列表，避免重建后闪一下一堆条目 */
+    if (MG.cur) {
+      var ml = $('#mglist'), md = $('#mgdetail');
+      if (ml) ml.hidden = true;
+      if (md) { md.hidden = false; md.innerHTML = '<div class="loading">磁力详情加载中…</div>'; }
+    }
+  }
+
+  function paintMagnetList() {
+    var box = $('#mglist');
+    if (!box) return;
+    var items = magnetItems();
+    var q = nrm(MG.q);
+    var view = q ? items.filter(function (x) { return hit(x.n, q); }) : items.slice();
+    /* 资源多的排前面：分集数 + 合集数，倒序 */
+    view.sort(function (a, b) { return (b.e + b.b) - (a.e + a.b); });
+
+    var h = '';
+    if (MG.q) h += '<div class="mnote">搜索「' + esc(String(MG.q).trim()) + '」 ' + view.length + ' 部</div>';
+    if (!view.length) h += '<div class="empty">没有匹配的磁力条目</div>';
+    h += view.slice(0, MG_MAX).map(function (x) {
+      return '<button class="mgrow" type="button" data-id="' + esc(x.id) + '" data-n="' + esc(x.n)
+        + '" data-e="' + esc(x.e) + '" data-s="' + esc(x.s) + '">' + esc(x.n)
+        + '<span class="mgmeta">' + esc(x.e) + ' 集 · ' + esc(x.b) + ' 合集</span></button>';
+    }).join('');
+    if (view.length > MG_MAX) h += '<div class="mnote">仅显示前 ' + MG_MAX + ' 条，用搜索缩小</div>';
+    box.innerHTML = h;
+  }
+
+  function onMagnetClick(e) {
+    var b = e.target.closest && e.target.closest('.mgrow');
+    if (!b) return;
+    openMagnet({
+      id: Number(b.getAttribute('data-id')) || 0,
+      n: b.getAttribute('data-n') || '',
+      e: Number(b.getAttribute('data-e')) || 0,
+      s: Number(b.getAttribute('data-s')) || 0
+    });
+  }
+
+  /* 取详情：先分片 store[id]（新索引按 bgm id 存储），命不中再按片名找
+     （老分片是按归一化片名做 key 的），都没有才实时兜底一次。 */
+  function openMagnet(it) {
+    var d = $('#mgdetail');
+    var api = window.__epsApi;
+    if (!d || !api) return;
+    var seq = ++MG.seq;
+    MG.cur = it; MG.entry = null;
+    d.hidden = false;
+    d.innerHTML = '<div class="loading">磁力详情加载中…</div>';
+    var list = $('#mglist');
+    if (list) list.hidden = true;
+
+    api.loadShard(Number(it.s) || 0).then(function (store) {
+      if (!store) return null;
+      return store[it.id] || (api.findByName ? api.findByName(store, it.n) : null);
+    }).catch(function () { return null; }).then(function (entry) {
+      if (entry) return entry;
+      return api.live(it.n, Number(it.e) || 0, '').catch(function () { return null; });
+    }).then(function (entry) {
+      if (seq !== MG.seq) return;          // 期间点了别的条目，丢弃这次结果
+      MG.entry = entry;
+      showMagnetDetail(it, entry, false);
+    });
+  }
+
+  function showMagnetDetail(it, entry, keepList) {
+    var d = $('#mgdetail');
+    var api = window.__epsApi;
+    if (!d || !api) return;
+    var h = '<div class="bhead"><h2>' + esc(it.n) + '</h2><span>'
+      + '<button class="mgback" id="mgback" type="button">‹ 返回列表</button></span></div>';
+    if (entry) {
+      var eps = entry.eps || {}, batch = entry.batch || [];
+      var nums = Object.keys(eps).map(Number).sort(function (a, b) { return a - b; });
+      if (nums.length) {
+        h += '<div class="bhead lv2"><h2>分集磁力 · ' + nums.length + ' 集</h2></div>'
+          + '<div class="epsgrid">' + nums.map(function (n) {
+              var arr = eps[n] || [];
+              return arr.length ? api.chipOf(arr[0], '第 ' + n + ' 集') : '';
+            }).join('') + '</div>';
+      } else {
+        h += '<div class="empty">这部暂无按集索引</div>';
+      }
+      /* 整季 / 合集包单独成组：新番早期常常只有 batch 能拿到 */
+      if (batch.length) {
+        h += '<div class="bhead lv2"><h2>整季 / 合集 · ' + batch.length + ' 个</h2></div>'
+          + '<div class="epsgrid">' + batch.map(function (c, i) {
+              return api.chipOf(c, '合集 ' + (i + 1));
+            }).join('') + '</div>';
+      }
+    } else {
+      h += '<div class="empty">这部暂无分集磁力索引</div>';
+    }
+    d.innerHTML = h;
+    d.hidden = false;
+    var list = $('#mglist');
+    if (list) list.hidden = !keepList;
+  }
+
+  /* 胶囊的点击复制由这里统一接管：弹窗那套绑定只挂在 #modal 上，管不到本页 */
+  function onMagnetDetailClick(e) {
+    var back = e.target.closest && e.target.closest('#mgback');
+    if (back) { closeMagnetDetail(); return; }
+    var c = e.target.closest && e.target.closest('.eps-chip');
+    if (!c || !window.__epsApi) return;
+    e.preventDefault();
+    var m = c.getAttribute('data-m') || '';
+    if (!m) return;
+    window.__epsApi.copyText(m).then(function (ok) {
+      window.__epsApi.toast(ok ? '已复制磁力链接' : '复制失败，请长按手动复制');
+    });
+  }
+
+  function closeMagnetDetail() {
+    MG.cur = null; MG.entry = null; MG.seq++;
+    var d = $('#mgdetail');
+    if (d) { d.hidden = true; d.innerHTML = ''; }
+    var list = $('#mglist');
+    if (list) list.hidden = false;
+  }
+
+  function bindMagnetSearch() {
+    var q = $('#q');
+    if (!q || q.dataset.mg) return;
+    q.dataset.mg = '1';
+    var t = 0;
+    q.addEventListener('input', function () {
+      clearTimeout(t);
+      var v = q.value;
+      t = setTimeout(function () {
+        MG.q = v;
+        MG.liveQ = '';
+        if (MG.cur) closeMagnetDetail();     // 搜索即回到列表，别让详情挡着
+        paintMagnetList();
+        if (nrm(MG.q)) magnetLive(MG.q);
+      }, 220);
+    });
+  }
+
+  /* 静态索引里一条都没命中才问一次实时接口；同一词不重复查 */
+  function magnetLive(q) {
+    var api = window.__epsApi;
+    if (!api || !api.live) return;
+    var qq = nrm(q);
+    var any = magnetItems().some(function (x) { return hit(x.n, qq); });
+    if (any || MG.liveQ === qq) return;
+    MG.liveQ = qq;
+    var box = $('#mglist');
+    if (box) {
+      box.insertAdjacentHTML('afterbegin',
+        '<div class="mnote" data-live="1">实时查询「' + esc(String(q).trim()) + '」…</div>');
+    }
+    api.live(q, 0, '').then(function (entry) {
+      if (MG.liveQ !== qq) return;
+      var hint = box && box.querySelector('[data-live]');
+      if (!entry) {
+        if (hint) hint.textContent = '「' + String(q).trim() + '」本地与实时查询都没有磁力';
+        return;
+      }
+      if (hint) hint.textContent = '来自实时查询';
+      MG.cur = { id: 0, n: String(q).trim(), e: 0, s: 0 };
+      MG.entry = entry;
+      showMagnetDetail(MG.cur, entry, true);   // 保留列表：顶部那条提示还要看得见
+    }).catch(function () {
+      var hint = box && box.querySelector('[data-live]');
+      if (hint) hint.textContent = '实时查询失败，请稍后再试';
+    });
+  }
+
+  /* 只重画：搜索词、已打开的详情 id、已拿到的条目都留在 MG 里，
+     不重新 fetch 整个 index（MAGIDX 是模块级缓存）。 */
+  function refreshMagnet() {
+    if (!MAGIDX) return;                 // 首屏还没就绪，initMagnet 完成后自己会画
+    paintMagnet();
+    if (!MG.cur) return;
+    if (MG.entry) showMagnetDetail(MG.cur, MG.entry, false);
+    else openMagnet(MG.cur);
+  }
+
   /* ---------------- 海报清晰度开关（#psz 按钮由生成器输出） ---------------- */
   function repaint() {
     if (PAGE === 'anime') applyBrowse();
     else if (PAGE === 'movie') refreshMovie();
     else if (PAGE === 'rank') renderRank();
+    else if (PAGE === 'magnet') refreshMagnet();
     else renderHome();
   }
 
@@ -703,10 +960,10 @@ function renderRank() {
      注意：必须在任何 $('#q') / $('#psz') 绑定之前调用。 */
   function bootHeader() {
     var P = PAGE;
-    /* 首页 / 番剧 / 排行榜都搜番剧，只有电影页搜电影 */
-    var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
+    /* 首页 / 番剧 / 排行榜都搜番剧，电影页搜电影，磁力页搜磁力 */
+    var ph = P === 'movie' ? '搜索电影…' : P === 'magnet' ? '搜索磁力…' : '搜索番剧…';
     var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
-      ['rank', 'rank', '排行榜']]
+      ['magnet', 'magnet', '磁力'], ['rank', 'rank', '排行榜']]
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');
@@ -888,6 +1145,8 @@ function renderRank() {
     } else if (PAGE === 'rank') {
       renderRank();
       bindSearch(renderRank);
+    } else if (PAGE === 'magnet') {
+      initMagnet();          // 自带搜索绑定，不调 bindSearch
     } else {
       renderHome();
       bindSearch(renderHome);

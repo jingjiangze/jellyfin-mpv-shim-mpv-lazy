@@ -145,6 +145,10 @@
   var RE_BRACKET = /[\]\)\s\-–—]\s*\[?(\d{1,4})\]?(?=\s*(?:\[|\(|END|完|【|v\d|$))/;
   var RE_EP = /(?:^|[\s\-–—\[])[Ee][Pp]?(\d{1,4})\b/i;
   var RE_DASH = /\s-\s*(\d{1,4})(?:v\d)?\s*(?:\[|\(|$)/;
+  /* SxxExx 发布名（如「xxx - S01E05 1080p」）；集号取 E 后面的数字（分组 2）。
+     前缀用 (?:^|[^A-Za-z]) 而不是 (?![A-Za-z])：前瞻检查的是 S 自己那个位置
+     （必然是字母）→ 永远不命中；也不用后行断言，老 Safari 会直接解析报错。 */
+  var RE_SXXEXX = /(?:^|[^A-Za-z])S(\d{1,2})\s*E(\d{1,4})\b/i;
   var NOISE = /(OP\d?テーマ|ED\d?テーマ|OPテーマ|EDテーマ|主題歌|主题歌|挿入歌|オリジナルサウンドトラック|サントラ|Soundtrack|\bBatch\b|全集|合集|Complete|BDBOX|BOX\s*SET|DVDISO|BDISO|\bvol\.?\s*\d+|\d+\s*[巻卷]|漫画|コミック|小説|小说)/i;
   var RE_PACK = /[\[\(【]\s*\d{1,3}\s*[-–~〜]\s*\d{1,3}\s*[\]\)】]|\b\d{1,3}\s*[-–~〜]\s*\d{1,3}\s*[话話集]/;
 
@@ -156,11 +160,11 @@
       for (var i = a; i <= b; i++) out.push(i);
       return out;
     }
-    var rxs = [RE_SINGLE, RE_DASH, RE_EP, RE_BRACKET];
+    var rxs = [RE_SINGLE, RE_DASH, RE_EP, RE_SXXEXX, RE_BRACKET];
     for (var k = 0; k < rxs.length; k++) {
       var x = rxs[k].exec(t);
       if (x) {
-        var n = +x[1];
+        var n = +(x[2] != null ? x[2] : x[1]);   // SxxExx 取 E 后面的集号
         return (n > 0 && n <= 999) ? [n] : [];
       }
     }
@@ -169,12 +173,13 @@
 
   function buildEps(name, orig, epsN, results) {
     var q = norm(name), qo = norm(orig), qs = seasonsOf(name), short = q.length <= 3;
-    var cand = {};
+    var onlyBatch = !!(epsN && epsN <= 2);   // 剧场版/OAD：只留合集，不给分集
+    var cand = {}, batch = [];
     for (var i = 0; i < results.length; i++) {
       var r = results[i];
       var t = String(r.title || r.name || '');
-      if (!t || NOISE.test(t) || RE_PACK.test(t)) continue;
-      if (epsN && epsN <= 2) return {};             // 剧场版/OAD 不给分集
+      if (!t || NOISE.test(t)) continue;
+      var pack = RE_PACK.test(t);
       var mg = String(r.magnet || r.m || '');
       if (mg.indexOf('magnet:') !== 0) continue;
       var nt = norm(t);
@@ -187,7 +192,6 @@
       }
       if (!sameSeasons(qs, seasonsOf(t))) continue;
       var nums = parseEpsTitle(t);
-      if (!nums.length || nums.length > 3) continue;
       var item = {
         m: mg,
         s: Number(r.size || 0),
@@ -195,11 +199,16 @@
         sub: String(r.subs || r.sub || '').slice ? String(r.subs || r.sub || '').slice(0, 12) : '',
         t: t.slice(0, 120)
       };
+      /* 合集包（[01-12]、Batch）与解析不出集号的单文件都进 batch 兜底：
+         新番早期往往只有这两种资源，丢了就等于「暂无按集索引」。 */
+      if (pack || !nums.length) { batch.push(item); continue; }
+      if (nums.length > 3) { batch.push(item); continue; }  // 一条命中多集：与后端 packs 口径一致，进合集
+      if (onlyBatch) continue;              // epsN<=2：只收 batch，不写分集
       for (var j = 0; j < nums.length; j++) {
         var n = nums[j];
         /* 不再用「<= 目录话数 + 2」过滤：很多片用连续编号（黄金神威最终章
            目录 13 集、发布名是第 60 集），那条上限会把整片判成无结果。
-           「剧场版/OVA 不给分集」已由上面的 epsN<=2 规则兜住。 */
+           「剧场版/OVA 不给分集」已由上面的 onlyBatch 规则兜住。 */
         (cand[n] = cand[n] || []).push(item);
       }
     }
@@ -208,7 +217,8 @@
       cand[key].sort(function (a, b) { return (b.sd - a.sd) || (b.s - a.s); });
       eps[key] = cand[key].slice(0, 2);
     }
-    return eps;
+    batch.sort(function (a, b) { return (b.sd - a.sd) || (b.s - a.s); });
+    return { eps: eps, batch: batch };
   }
   function episodeCount(m) {
     var dts = m.querySelectorAll('.infobox dt');
@@ -234,12 +244,16 @@
     }).then(function (d) {
       /* 服务端现在优先查 SQLite，命中就直接回 {eps}；未命中才走上游并回 {eps}。
          两种形状都兼容：有 eps 就用，没有就退回本地过滤（旧版 responses）。 */
-      var eps = (d && d.eps && Object.keys(d.eps).length)
-        ? d.eps
-        : buildEps(name, orig, epsN, (d && d.results) || []);
+      var eps = (d && d.eps && Object.keys(d.eps).length) ? d.eps : null;
+      var batch = (d && d.batch) || [];
+      if (!eps) {
+        var b = buildEps(name, orig, epsN, (d && d.results) || []);
+        eps = b.eps;
+        if (!batch.length) batch = b.batch;
+      }
       /* 只有整季包、没有可按集索引的片名（早期新番常见）也要保留条目 */
-      if (!Object.keys(eps).length && !(d && d.batch && d.batch.length)) return null;
-      var e = { n: name, eps: eps, batch: (d && d.batch) || [], live: 1 };
+      if (!Object.keys(eps).length && !batch.length) return null;
+      var e = { n: name, eps: eps, batch: batch, live: 1 };
       LIVE[name] = e;
       /* 回传给服务器队列：CI 每轮把它并进静态索引，下次就是静态命中。
          用 text/plain 发（简单请求，浏览器不预检），失败静默。 */
@@ -305,12 +319,19 @@
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   }
 
+  /* 上游把 Python 列表 str() 成了 "['中']" / "['无']"（实测 16,681/30,485 条）；
+     只放行纯字幕语言串，其余一律当没有。 */
+  function cleanSub(s) {
+    s = String(s || '').replace(/[\[\]'"\s]/g, '');
+    return /^[无中简繁英日]+$/.test(s) ? s : '';
+  }
+
   function chipOf(c, label) {
     var mg = escAttr(c.m);
-    var bits = [];
+    var bits = [], sub = cleanSub(c.sub);
     if (c.s) bits.push(fmtSize(c.s));
     if (c.sd) bits.push(c.sd + ' 种');
-    if (c.sub) bits.push(c.sub);
+    if (sub) bits.push(sub);
     return '<span class="eps-chip" role="button" tabindex="0" data-m="' + mg + '" title="' +
       escAttr(c.t) + '">' + label +
       (bits.length ? ' · ' + bits.join(' · ') : '') + '</span>';
@@ -479,5 +500,13 @@
     buildEps: buildEps,
     hashOf: hashOf,
     setIdx: function (d) { ENTRY = d; return ENTRY; },
+  };
+
+  /* 磁力独立页用：这些函数本身不依赖 #modal，导出后可安全复用 */
+  window.__epsApi = {
+    loadManifest: loadManifest, loadShard: loadShard, resolveEntry: resolveEntry,
+    findByName: findByName, chipOf: chipOf, copyText: copyText, toast: toast,
+    fmtSize: fmtSize, norm: norm, shardOf: shardOf, buildEps: buildEps,
+    live: function (name, epsN, orig) { return fetchLive(name, epsN, orig); }
   };
 })();
