@@ -10,7 +10,10 @@ site/data/s<N>.json 供前端按需拉。本脚本两边都写：只改 data/ �
 
 为什么逐条翻译而不是拼块翻译：拼成 2000 字再按原文/译文长度比例切回各条目，
 在换行、标点、专有名词处会漂移（实测切错条目），逐条一次请求最可靠。
-代价是 3451 条 × 0.5s ≈ 29 分钟，CI 里 timeout 要留到 45 分钟以上。
+
+并发：串行 3451 条 × 1–1.5s ≈ 50–85 分钟，超过 CI 的 45 分钟上限（实测跑到
+40 分钟仍 in_progress、被 timeout 杀掉）。改为按分片分段 + 片内 WORKERS 线程并行，
+每条请求前加 0–GAP 随机抖动避免同时打同一毫秒。实测 ≈10 分钟跑完 3451 条。
 
 幂等：写回时新增 overview_ja 存日文原文（便于回滚 / 人工复核），
 该字段已存在即视为「翻译过」，跳过。每写完一个分片立即落盘，
@@ -24,12 +27,15 @@ site/data/s<N>.json 供前端按需拉。本脚本两边都写：只改 data/ �
   cd site-src && python -u translate_overviews.py --dry-run  # 只统计，不联网不写盘
 """
 import json
+import os
 import pathlib
+import random
 import re
 import sys
 import time
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 HERE = pathlib.Path(__file__).resolve().parent
 SITE = HERE / "site"
@@ -38,7 +44,8 @@ ANIME = SITE / "anime"        # <N>.json（抓取真源）
 SHARD_TOTAL = 64
 
 GTX = "https://translate.googleapis.com/translate_a/single"
-GAP = 0.5                     # 请求间隔：公共接口无官方配额，0.5s 实测不被限流
+GAP = 0.5                     # 单条请求前的随机抖动上限（秒），避免同刻并发
+WORKERS = int(os.environ.get("TR_WORKERS", "8") or 8)   # 片内并发数
 
 # 假名：平假名 3041-3096 / 309D-309F，片假名 30A1-30FA / 30FD-30FE。
 # ・(U+30FB) 间隔号、ー(U+30FC) 长音符都不是假名（日文片假名名也常用），
@@ -133,6 +140,13 @@ def sync_source(n, changes):
     return hit
 
 
+def _job(item):
+    """线程池任务：随机抖动后翻译一条，返回 (rec, 日文原文, 中文)。"""
+    rec, ov = item
+    time.sleep(random.uniform(0, GAP))
+    return rec, ov, translate_one(ov)
+
+
 def main():
     dry = "--dry-run" in sys.argv[1:]
     if hasattr(sys.stdout, "reconfigure"):
@@ -150,8 +164,7 @@ def main():
             print(f"! s{n}.json 不是合法 JSON 数组，跳过")
             continue
         files += 1
-        changes = {}
-        wrote = False
+        todo = []
         for rec in rows:
             if not isinstance(rec, dict):
                 continue
@@ -166,8 +179,18 @@ def main():
             if dry:
                 translated += 1
                 continue
-            zh = translate_one(ov)
-            time.sleep(GAP)
+            todo.append((rec, ov))
+        if not todo:
+            continue
+
+        if WORKERS > 1:
+            with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+                results = list(ex.map(_job, todo))
+        else:
+            results = [(_rec, _ov, translate_one(_ov)) for _rec, _ov in todo]
+
+        changes = {}
+        for rec, ov, zh in results:
             if not zh:
                 failed.append(rec.get("id"))
                 continue
@@ -175,15 +198,13 @@ def main():
             rec["overview_ja"] = ov
             changes[rec.get("id")] = (zh, ov)
             translated += 1
-            wrote = True
-            if translated % 100 == 0:
-                print(f"  进度：已翻译 {translated} 条（当前 s{n}.json）")
-        if wrote:
+        if changes:
             # 每个分片写完立刻落盘：超时被杀时前面的成果不会白费
             dump(p, rows)
             back = sync_source(n, changes)
             print(f"  s{n}.json：写入 {len(changes)} 条中文简介"
-                  f"（同步到 anime/{n}.json {back} 条）")
+                  f"（同步到 anime/{n}.json {back} 条，累计 {translated}）",
+                  flush=True)
 
     tag = "（dry-run，未翻译未写盘）" if dry else ""
     print(f"扫描 {files} 个分片{tag}")

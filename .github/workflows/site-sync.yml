@@ -174,9 +174,11 @@ jobs:
       # 已有 overview_ja 的跳过（幂等）。翻完写回 site/anime/*.json + site/data/s*.json，
       # 失败不阻断构建。
       - name: Translate Japanese overviews
-        timeout-minutes: 45
+        timeout-minutes: 60
         continue-on-error: true
         working-directory: site-src
+        env:
+          TR_WORKERS: "8"
         run: python -u translate_overviews.py
 
       - name: Build pages
