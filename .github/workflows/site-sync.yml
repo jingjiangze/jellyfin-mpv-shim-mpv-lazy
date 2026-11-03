@@ -107,6 +107,15 @@ jobs:
           PEOPLE_WORKERS: "3"
         run: python -u fetch_people.py
 
+      # 分片/状态用 Git Data API 直推：publish 那步的 git rebase 会被同轮的
+      # 两次 API 推送撞成冲突（实测 "rebase conflict, skip push" 丢掉整轮数据）。
+      - name: Push shards (Git Data API)
+        timeout-minutes: 10
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -u site-src/push_shards.py
+
       - name: Fill missing posters
         timeout-minutes: 20
         working-directory: site-src
