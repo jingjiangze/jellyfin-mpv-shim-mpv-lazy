@@ -277,18 +277,19 @@ if (b > a) return '合集 ' + pad2(a) + '–' + pad2(b);
 }
 return '合集 ' + (i + 1);
 }
+function descOf(c, max) {
+var t = String((c && c.t) || '').replace(/\s+/g, ' ').trim();
+if (!t) return '';
+return t.length > max ? t.slice(0, max) + '…' : t;
+}
 function epsListHtml(eps) {
 var nums = Object.keys(eps || {}).map(Number).sort(function (a, b) { return a - b; });
 var h = '';
 nums.forEach(function (n) {
-var top = (eps[n] || []).slice(0, 3);
-if (top.length > 1) {
-h += '<span class="epgroup"><em class="epglabel">第 ' + n + ' 集</em>';
-top.forEach(function (c, i) { h += chipOf(c, '线路 ' + (i + 1)); });
-h += '</span>';
-} else {
-top.forEach(function (c) { h += chipOf(c, '第 ' + n + ' 集'); });
-}
+(eps[n] || []).slice(0, 3).forEach(function (c) {
+var d = descOf(c, 46);
+h += chipOf(c, '第 ' + n + ' 集' + (d ? ' · ' + d : ''));
+});
 });
 return h;
 }
@@ -314,7 +315,8 @@ if (dup[lb] > 1) {
 used[lb] = (used[lb] || 0) + 1;
 lb += ' · 来源 ' + used[lb];
 }
-h += chipOf(c, lb);
+var bd = descOf(c, 46);
+h += chipOf(c, lb + (bd ? ' · ' + bd : ''));
 });
 }
 box.innerHTML = h || '<div class="relhead">分集磁力</div><div class="eps-none">暂无按集索引</div>';
@@ -442,6 +444,7 @@ window.__epsApi = {
 loadManifest: loadManifest, loadShard: loadShard, resolveEntry: resolveEntry,
 findByName: findByName, chipOf: chipOf, copyText: copyText, toast: toast,
 fmtSize: fmtSize, norm: norm, shardOf: shardOf, buildEps: buildEps,
+epsListHtml: epsListHtml, batchLabel: batchLabel, descOf: descOf,
 live: function (name, epsN, orig) { return fetchLive(name, epsN, orig); }
 };
 })();
