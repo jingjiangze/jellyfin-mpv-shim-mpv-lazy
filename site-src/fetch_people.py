@@ -19,6 +19,7 @@ site/posters/ch-<id>-<i>.jpg（CI 的 Sync posters to ModelScope 会顺带上云
 
 用法：PEOPLE_MAX=1500 python fetch_people.py
       AVATAR_MAX=200 python fetch_people.py --avatars-only   # 只镜像头像
+      AVATAR_TIMEOUT=20 AVATAR_RETRIES=1 AVATAR_PER=3 ...     # runner 慢时放宽下载参数
 每轮只补 PEOPLE_MAX 条，已有 ch 的跳过，多轮收敛。
 """
 import concurrent.futures as cf
@@ -31,6 +32,15 @@ import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+
+def env_int(name, default):
+    """读整数环境变量；缺失或非数字时回落到默认值。"""
+    try:
+        return int(os.environ.get(name, "") or default)
+    except (TypeError, ValueError):
+        return default
+
+
 BASE = pathlib.Path(__file__).resolve().parent
 SHARDS = BASE / "site" / "anime"
 API = "https://api.bgm.tv/v0/subjects/%s"
@@ -42,11 +52,11 @@ SLEEP = float(os.environ.get("PEOPLE_SLEEP", "0.25") or 0.25)
 POSTERS = BASE / "site" / "posters"
 AVATAR_MAX = int(os.environ.get("AVATAR_MAX", "200") or 200)          # 本轮最多处理多少部作品
 AVATAR_WORKERS = int(os.environ.get("AVATAR_WORKERS", "6") or 6)
-AVATAR_PER = 6            # 每条记录最多处理前 6 个角色
+AVATAR_PER = env_int("AVATAR_PER", 6)            # 每条记录最多处理前 6 个角色
 AVATAR_MIN = 800          # < 这个字节数的响应视为坏图（占位图 / 报错页）
-AVATAR_TIMEOUT = 8        # 单张下载上限（runner 上 lain 也慢，不能等 20s）
-AVATAR_RETRIES = 0        # 不重试：失败留给下一轮，别把整步拖死
-AVATAR_PROBE_TIMEOUT = 6  # 开工前探一次来源可达性的上限
+AVATAR_TIMEOUT = env_int("AVATAR_TIMEOUT", 8)    # 单张下载上限（runner 慢可由 workflow 放宽）
+AVATAR_RETRIES = env_int("AVATAR_RETRIES", 0)    # 重试次数（默认 0，失败留给下一轮）
+AVATAR_PROBE_TIMEOUT = 6  # 预检固定 6s 单次，不受上面两个环境变量影响
 AVATAR_STREAK_FAIL = 5    # 连续失败达到这个数就停止派发新任务
 # 零下载成功 + 失败数达到这个量，判定为网络整体不可达（而不是零星 404），放弃本轮改写
 AVATAR_ABORT_FAIL = int(os.environ.get("AVATAR_ABORT_FAIL", "3") or 3)

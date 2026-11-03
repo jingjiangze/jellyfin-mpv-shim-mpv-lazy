@@ -107,8 +107,11 @@ jobs:
           PEOPLE_WORKERS: "3"
           # 头像镜像：实测 runner 到 lain.bgm.tv 很快（2,683 张 / 65 秒），
           # 每轮 1,200 部，4,490 部大约 4 轮补完。源不可达时脚本 6 秒预检即跳过。
+          # 2026-11-03 第二轮实测 8s/0 重试在全挂（dl=0 fail=10），放宽到 20s/1 次重试。
           AVATAR_MAX: "1200"
-          AVATAR_WORKERS: "6"
+          AVATAR_WORKERS: "4"
+          AVATAR_TIMEOUT: "20"
+          AVATAR_RETRIES: "1"
         run: python -u fetch_people.py
 
       # 分片/状态用 Git Data API 直推：publish 那步的 git rebase 会被同轮的
