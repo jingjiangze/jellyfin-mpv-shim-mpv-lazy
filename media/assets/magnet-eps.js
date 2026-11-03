@@ -260,7 +260,7 @@ var mg = escAttr(c.m);
 var bits = [], sub = cleanSub(c.sub);
 if (c.s) bits.push(fmtSize(c.s));
 if (c.sd) bits.push(c.sd + ' 种');
-if (sub) bits.push(sub);
+if (sub) bits.push('字幕 ' + sub);   // 不带字段名时「· 无 / · 中」看不出是什么
 return '<span class="eps-chip" role="button" tabindex="0" data-m="' + mg + '" title="' +
 escAttr(c.t) + '">' + label +
 (bits.length ? ' · ' + bits.join(' · ') : '') + '</span>';
@@ -277,6 +277,21 @@ if (b > a) return '合集 ' + pad2(a) + '–' + pad2(b);
 }
 return '合集 ' + (i + 1);
 }
+function epsListHtml(eps) {
+var nums = Object.keys(eps || {}).map(Number).sort(function (a, b) { return a - b; });
+var h = '';
+nums.forEach(function (n) {
+var top = (eps[n] || []).slice(0, 3);
+if (top.length > 1) {
+h += '<span class="epgroup"><em class="epglabel">第 ' + n + ' 集</em>';
+top.forEach(function (c, i) { h += chipOf(c, '线路 ' + (i + 1)); });
+h += '</span>';
+} else {
+top.forEach(function (c) { h += chipOf(c, '第 ' + n + ' 集'); });
+}
+});
+return h;
+}
 function render(m, e) {
 var box = m.querySelector('#epsbox');
 if (!box) return;
@@ -286,16 +301,21 @@ var nums = Object.keys(eps).map(Number).sort(function (a, b) { return a - b; });
 var h = '';
 if (nums.length) {
 h += '<div class="relhead">分集磁力 · ' + nums.length + ' 集（点击复制）</div>';
-nums.forEach(function (n) {
-var arr = eps[n] || [];
-arr.slice(0, 3).forEach(function (c, i) {
-h += chipOf(c, '第 ' + n + ' 集' + (arr.length > 1 ? ' · 线路 ' + (i + 1) : ''));
-});
-});
+h += epsListHtml(eps);
 }
 if (batch.length) {
 h += '<div class="relhead" style="margin-top:10px">整季 / 合集 · ' + batch.length + ' 个（点击复制）</div>';
-batch.forEach(function (c, i) { h += chipOf(c, batchLabel(c, i)); });
+var labels = batch.map(function (c, i) { return batchLabel(c, i); });
+var dup = {}, used = {};
+labels.forEach(function (s) { dup[s] = (dup[s] || 0) + 1; });
+batch.forEach(function (c, i) {
+var lb = labels[i];
+if (dup[lb] > 1) {
+used[lb] = (used[lb] || 0) + 1;
+lb += ' · 来源 ' + used[lb];
+}
+h += chipOf(c, lb);
+});
 }
 box.innerHTML = h || '<div class="relhead">分集磁力</div><div class="eps-none">暂无按集索引</div>';
 }
@@ -413,6 +433,8 @@ find: findByName,
 norm: norm,
 shardOf: shardOf,
 buildEps: buildEps,
+epsListHtml: epsListHtml,
+render: render,
 hashOf: hashOf,
 setIdx: function (d) { ENTRY = d; return ENTRY; },
 };

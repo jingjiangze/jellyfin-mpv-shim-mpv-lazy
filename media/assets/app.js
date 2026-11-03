@@ -79,6 +79,11 @@ function posterSrc(id) {
 var base = PSZ.mode === 'sd' ? (ANI.posterSd || ANI.poster) : ANI.poster;
 return base + id + '.jpg';
 }
+function avatarSrc(u) {
+if (!u) return '';
+if (/^https?:/i.test(u)) return u;
+return String(ANI.poster || '').replace(/bgm-$/, '') + u;
+}
 function titleHTML(s) {
 return esc(s).replace(/-/g, '-⁠');
 }
@@ -230,10 +235,13 @@ var cb = document.createElement('div');
 cb.className = 'relbox';
 cb.innerHTML = '<div class="relhead">角色</div><div class="chgrid">'
 + rec.ch.map(function (c) {
-return '<div class="chcard">'
-+ (c[2] ? '<img src="' + esc(c[2]) + '" alt="" loading="lazy" onerror="this.remove()">'
-: '<i class="chph"></i>')
-+ '<div class="chinfo"><b>' + esc(c[0]) + '</b><em>' + esc(c[1]) + '</em></div></div>';
+var av = avatarSrc(c[2]);
+var nm = esc(c[0]);
+return '<div class="chcard"><span class="ph">'
++ '<span class="chin">' + esc(Array.from(String(c[0] == null ? '' : c[0]))[0] || '?') + '</span>'
++ (av ? '<img class="chav" src="' + esc(av) + '" alt="" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.remove()">' : '')
++ '</span>'
++ '<div class="chinfo"><b>' + nm + '</b><em>' + esc(c[1]) + '</em></div></div>';
 }).join('') + '</div>';
 var tbox = document.querySelector('#tags');
 if (tbox && tbox.parentNode) tbox.parentNode.insertBefore(cb, tbox.nextSibling);
@@ -970,6 +978,12 @@ return BILI[id];
 function renderDm(box, d, pages, curPage) {
 if (!d || !d.ok) { box.innerHTML = '<div class="mnote">弹幕取不到（' + ((d && d.error) || '网络') + '）</div>'; return; }
 if (!d.items.length) { box.innerHTML = '<div class="mnote">这一集还没有弹幕</div>'; return; }
+var DM_SYM = /^[\\/\-_.·…~=*\s]+$/;
+var dmItems = d.items.filter(function (it) {
+var m = String(it.m == null ? '' : it.m).trim();
+return m.length >= 2 && !DM_SYM.test(m);
+});
+if (!dmItems.length) { box.innerHTML = '<div class="mnote">这一集还没有弹幕</div>'; return; }
 var sel = '';
 if (pages.length > 1) {
 sel = '<div class="pgsel">' + pages.slice(0, 24).map(function (p) {
@@ -977,7 +991,7 @@ return '<button class="chip' + (p.page === curPage ? ' on' : '') + '" type="butt
 + p.page + '" data-cid="' + p.cid + '">第 ' + p.page + ' 集</button>';
 }).join('') + '</div>';
 }
-var rows = d.items.slice(0, 300).map(function (it) {
+var rows = dmItems.slice(0, 300).map(function (it) {
 var mm = Math.floor(it.t / 60), ss = ('0' + Math.floor(it.t % 60)).slice(-2);
 return '<div class="dmrow"><em>' + mm + ':' + ss + '</em><span>' + esc(it.m) + '</span></div>';
 }).join('');
@@ -991,7 +1005,7 @@ box.innerHTML = '<div class="mnote">共 ' + d.total + ' 条 · 来源 B 站</div
 + d.items.map(function (it) {
 var dt = it.t ? new Date(it.t * 1000) : null;
 var day = dt ? (dt.getFullYear() + '-' + ('0' + (dt.getMonth() + 1)).slice(-2) + '-' + ('0' + dt.getDate()).slice(-2)) : '';
-return '<div class="rprow">'
+return '<div class="rprow' + (it.re === 1 ? ' re' : '') + '">'
 + (it.a ? '<img src="' + esc(it.a) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '')
 + '<div><b>' + esc(it.u || '匿名') + '</b><em>' + day + (it.l ? ' · 赞 ' + it.l : '') + '</em>'
 + '<p>' + esc(it.m) + '</p></div></div>';
