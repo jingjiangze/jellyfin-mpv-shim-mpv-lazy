@@ -17,9 +17,9 @@ return String(x == null ? '' : x).toLowerCase()
 function hit(hay, q) { return !q || nrm(hay).indexOf(q) !== -1; }
 function j(u) { return fetch(u).then(function (r) { if (!r.ok) throw 0; return r.json(); }); }
 var D_BASES = [
-'./data/',
 'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/data/',
-'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/'
+'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/',
+'./data/'
 ];
 function jd(name) {
 var i = 0;
