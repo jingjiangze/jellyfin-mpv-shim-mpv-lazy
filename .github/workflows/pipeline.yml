@@ -55,7 +55,7 @@ jobs:
             for i in $(seq 1 $((LIMIT*6))); do
               S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
               case "$S" in
-                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || return 1 ;;
+                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || { echo "::error::$WF 失败，后续步骤可能受影响"; return 1; } ;;
               esac
               sleep 10
             done
@@ -90,7 +90,7 @@ jobs:
             for i in $(seq 1 $((LIMIT*6))); do
               S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
               case "$S" in
-                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || return 1 ;;
+                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || { echo "::error::$WF 失败，后续步骤可能受影响"; return 1; } ;;
               esac
               sleep 10
             done
@@ -125,7 +125,7 @@ jobs:
             for i in $(seq 1 $((LIMIT*6))); do
               S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
               case "$S" in
-                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || return 1 ;;
+                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || { echo "::error::$WF 失败，后续步骤可能受影响"; return 1; } ;;
               esac
               sleep 10
             done
@@ -160,7 +160,7 @@ jobs:
             for i in $(seq 1 $((LIMIT*6))); do
               S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
               case "$S" in
-                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || return 1 ;;
+                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || { echo "::error::$WF 失败，后续步骤可能受影响"; return 1; } ;;
               esac
               sleep 10
             done

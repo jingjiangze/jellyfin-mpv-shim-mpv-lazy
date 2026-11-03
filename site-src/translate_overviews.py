@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""把分片里还是日文的 overview 自动翻成中文（公共谷歌 gtx 接口）。
+
+数据链路：site/anime/<N>.json 是抓取产物（真源），build_site.py 每轮把它平铺成
+site/data/s<N>.json 供前端按需拉。本脚本两边都写：只改 data/ 会被下一轮构建
+用旧的 anime/ 分片覆盖回去。
+
+翻译接口：https://translate.googleapis.com/translate_a/single?client=gtx
+（免 key 的公共接口，实测返回 [[["译文","原文",...],...], ...]）。
+
+为什么逐条翻译而不是拼块翻译：拼成 2000 字再按原文/译文长度比例切回各条目，
+在换行、标点、专有名词处会漂移（实测切错条目），逐条一次请求最可靠。
+代价是 3451 条 × 0.5s ≈ 29 分钟，CI 里 timeout 要留到 45 分钟以上。
+
+幂等：写回时新增 overview_ja 存日文原文（便于回滚 / 人工复核），
+该字段已存在即视为「翻译过」，跳过。每写完一个分片立即落盘，
+超时被杀也只丢当前分片，已翻译的部分保留。
+
+容错：单条请求失败（429 / 5xx / 网络）重试 2 次（退避 2s / 4s），
+仍失败就跳过该条并记入 failed，不影响其它条目。
+
+用法：
+  cd site-src && python -u translate_overviews.py            # 正式翻译并写回
+  cd site-src && python -u translate_overviews.py --dry-run  # 只统计，不联网不写盘
+"""
+import json
+import pathlib
+import re
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+HERE = pathlib.Path(__file__).resolve().parent
+SITE = HERE / "site"
+DATA = SITE / "data"          # s<N>.json（build_site.py 平铺出来的前端分片）
+ANIME = SITE / "anime"        # <N>.json（抓取真源）
+SHARD_TOTAL = 64
+
+GTX = "https://translate.googleapis.com/translate_a/single"
+GAP = 0.5                     # 请求间隔：公共接口无官方配额，0.5s 实测不被限流
+
+# 假名：平假名 3041-3096 / 309D-309F，片假名 30A1-30FA / 30FD-30FE。
+# ・(U+30FB) 间隔号、ー(U+30FC) 长音符都不是假名（日文片假名名也常用），
+# 落在区间外才不会把「ア・イ」「コーヒー」这类算错。
+KANA = re.compile(r"[\u3041-\u3096\u309D-\u309F\u30A1-\u30FA\u30FD-\u30FE]")
+HAN = re.compile(r"[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]")
+LATIN = re.compile(r"[A-Za-z]")
+
+
+def detect_lang(text):
+    """返回 'ja' / 'zh' / 'en' / ''。假名占比 >= 0.30 判日文。
+
+    中文条目里夹日文专名（「…的《進撃の巨人》」）假名占比远低于 0.30，
+    判 zh；纯日文条目（kana / (kana + han) 通常 0.45 以上）判 ja。
+    """
+    t = (text or "").strip()
+    if not t:
+        return ""
+    kana = len(KANA.findall(t))
+    han = len(HAN.findall(t))
+    if kana + han == 0:
+        return "en" if LATIN.search(t) else ""
+    if kana / (kana + han) >= 0.30:
+        return "ja"
+    if han:
+        return "zh"
+    return "en" if LATIN.search(t) else ""
+
+
+def gtx_translate(text, sl="ja", tl="zh-CN"):
+    """调 gtx 接口，返回译文。失败抛异常，由调用方重试。"""
+    params = urllib.parse.urlencode(
+        {"client": "gtx", "sl": sl, "tl": tl, "dt": "t", "q": text})
+    req = urllib.request.Request(GTX + "?" + params, headers={
+        "user-agent": "Mozilla/5.0 (compatible; anime-site/1.0)"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        data = json.loads(r.read().decode("utf-8"))
+    # 返回格式：[[["译","原",...],["译2","原2",...]], ...]
+    return "".join(seg[0] for seg in (data[0] or []) if len(seg) > 0)
+
+
+def translate_one(text):
+    """单条翻译，失败重试 2 次（退避 2s / 4s）；仍失败返回 ''。"""
+    for attempt in range(3):
+        try:
+            out = (gtx_translate(text) or "").strip()
+            if out:
+                return out
+        except Exception:
+            pass
+        if attempt < 2:
+            time.sleep(2 * (attempt + 1))
+    return ""
+
+
+def load_list(path):
+    try:
+        rows = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return rows if isinstance(rows, list) else None
+
+
+def dump(path, rows):
+    path.write_text(json.dumps(rows, ensure_ascii=False, separators=(",", ":")),
+                    encoding="utf-8")
+
+
+def sync_source(n, changes):
+    """把 {id: (中文, 日文原文)} 同步到 site/anime/<n>.json（真源分片）。
+
+    只在源分片里找得到对应 id 时改那几条，不整表覆盖，避免用 data/ 的旧副本
+    盖掉源分片里更完整的记录。
+    """
+    src = ANIME / f"{n}.json"
+    if not src.is_file():
+        return 0
+    rows = load_list(src)
+    if rows is None:
+        return 0
+    hit = 0
+    for rec in rows:
+        if not isinstance(rec, dict):
+            continue
+        ch = changes.get(rec.get("id"))
+        if not ch:
+            continue
+        rec["overview"], rec["overview_ja"] = ch
+        hit += 1
+    if hit:
+        dump(src, rows)
+    return hit
+
+
+def main():
+    dry = "--dry-run" in sys.argv[1:]
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+    translated = skipped = 0
+    failed = []
+    files = 0
+    for n in range(SHARD_TOTAL):
+        p = DATA / f"s{n}.json"
+        if not p.is_file():
+            continue
+        rows = load_list(p)
+        if rows is None:
+            print(f"! s{n}.json 不是合法 JSON 数组，跳过")
+            continue
+        files += 1
+        changes = {}
+        wrote = False
+        for rec in rows:
+            if not isinstance(rec, dict):
+                continue
+            ov = (rec.get("overview") or "").strip()
+            if not ov:
+                continue
+            if rec.get("overview_ja"):
+                skipped += 1
+                continue
+            if detect_lang(ov) != "ja":
+                continue
+            if dry:
+                translated += 1
+                continue
+            zh = translate_one(ov)
+            time.sleep(GAP)
+            if not zh:
+                failed.append(rec.get("id"))
+                continue
+            rec["overview"] = zh
+            rec["overview_ja"] = ov
+            changes[rec.get("id")] = (zh, ov)
+            translated += 1
+            wrote = True
+            if translated % 100 == 0:
+                print(f"  进度：已翻译 {translated} 条（当前 s{n}.json）")
+        if wrote:
+            # 每个分片写完立刻落盘：超时被杀时前面的成果不会白费
+            dump(p, rows)
+            back = sync_source(n, changes)
+            print(f"  s{n}.json：写入 {len(changes)} 条中文简介"
+                  f"（同步到 anime/{n}.json {back} 条）")
+
+    tag = "（dry-run，未翻译未写盘）" if dry else ""
+    print(f"扫描 {files} 个分片{tag}")
+    if dry:
+        print(f"待翻译 {translated} 条 / 跳过（已翻译）{skipped} 条 / 失败 0 条")
+        return
+    print(f"翻译完成 {translated} 条 / 跳过（已翻译）{skipped} 条 / 失败 {len(failed)} 条")
+    if failed:
+        print("失败 id（前 20）：" + ", ".join(str(x) for x in failed[:20]))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        print(f"! translate 失败：{type(e).__name__}: {e}", file=sys.stderr)

@@ -170,6 +170,15 @@ jobs:
         working-directory: site-src
         run: python -u fetch_douban_intro.py
 
+      # 日文简介自动翻译：公共谷歌 gtx 接口（无需 key），只翻 overview 为日文的条目，
+      # 已有 overview_ja 的跳过（幂等）。翻完写回 site/anime/*.json + site/data/s*.json，
+      # 失败不阻断构建。
+      - name: Translate Japanese overviews
+        timeout-minutes: 45
+        continue-on-error: true
+        working-directory: site-src
+        run: python -u translate_overviews.py
+
       - name: Build pages
         timeout-minutes: 6
         working-directory: site-src

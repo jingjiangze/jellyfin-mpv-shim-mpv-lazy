@@ -86,6 +86,9 @@ jobs:
           EOF
 
       - name: Report coverage
+        # 只是打印统计：分片里出现坏 JSON / catalog 读不到时 python 退出 1，
+        # 不能因此 skip 掉后面的 Commit shards（2026-11-01 起就卡在这里）。
+        continue-on-error: true
         run: |
           python - <<'PY'
           import json, glob, os

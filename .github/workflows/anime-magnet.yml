@@ -103,21 +103,6 @@ jobs:
           PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
         run: python -u site-src/magnet_publish.py
 
-      # 抓 bgm infobox 别名（炒翻天→铁锅料理王/Tetsunabe no Jan 这一档，
-      # bangumi-data 里没有）。只抓索引里还空着的条目，增量合并进
-      # data/bgm-alias.json，下轮 fetch 直接用（炒翻天用主标题查是 3 条、
-      # 用别名 Tetsunabe no Jan 是 135 条）。bgm 有速率限制，1.1s/条，
-      # 400 条 ≈ 8 分钟，所以单独一步、失败不阻断。
-      - name: Fetch Bangumi aliases
-        timeout-minutes: 15
-        continue-on-error: true
-        working-directory: site-src
-        env:
-          ALIAS_MAX: "400"
-        run: |
-          python -u fetch_bgm_alias.py
-          cp -f site/bgm-alias.json data/bgm-alias.json 2>/dev/null || true
-
       # 数据集优先：分片一发布就镜像过去，不等下一个 site-sync（最长滞后 4h）。
       - name: Sync eps shards to ModelScope
         timeout-minutes: 10
