@@ -31,6 +31,7 @@ jobs:
       - name: Run anime-catalog
         id: catalog
         if: always()
+        continue-on-error: true
         timeout-minutes: 20
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -65,6 +66,7 @@ jobs:
       - name: Run anime-detail
         id: detail
         if: always()
+        continue-on-error: true
         timeout-minutes: 30
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -99,6 +101,7 @@ jobs:
       - name: Run anime-covers
         id: covers
         if: always()
+        continue-on-error: true
         timeout-minutes: 30
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -133,6 +136,7 @@ jobs:
       - name: Run anime-magnet
         id: magnet
         if: always()
+        continue-on-error: true
         timeout-minutes: 35
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
