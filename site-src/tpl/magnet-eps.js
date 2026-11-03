@@ -1,7 +1,7 @@
 /* 分集磁力层（架构无关附加层）
  *
  * 不依赖任何一方的数据/key 体系：监听 #modal 的内容变化，从弹窗标题取片名，
- * 按片名查分集索引，把「第 N 集」chip 渲染进弹窗。
+ * 按片名查分集索引，把分集 / 整季合集渲染成行式列表（.mgsect > .mgrows > .mgrow）。
  *
  * 索引已分片：整份 7.5MB 在手机上首次点开卡片就要下完，太重。
  *   media/eps/index.json     清单（shards / count，几百字节）
@@ -9,7 +9,7 @@
  * 客户端只拉当前片名所在的那一片。哈希函数必须与构建端（src/shard_eps.py）
  * 逐字符一致：都按 Unicode 码点、h = (h*31 + cp) mod 2^32。改一边必须改另一边。
  * 来源级联：gcore jsDelivr → gh-proxy → raw.githubusercontent。
- * 点 chip 复制磁力（navigator.clipboard 优先，失败回退 execCommand）。
+ * 点行复制磁力（navigator.clipboard 优先，失败回退 execCommand）。
  */
 (function () {
   'use strict';
@@ -331,6 +331,8 @@
     return /^[无中简繁英日]+$/.test(s) ? s : '';
   }
 
+  /* 胶囊渲染（兼容层）：分集/合集行已改走 rowOf，这里只为还调用 chipOf 的旧代码
+     （如 openMagView 的合集段）保留原样，不再由本文件产出。 */
   function chipOf(c, label) {
     var mg = escAttr(c.m);
     var bits = [], sub = cleanSub(c.sub);
@@ -357,56 +359,85 @@
   }
 
   /* 每条磁力自己的发布标题就是最好的描述（用户要求：不要「线路 1/线路 2」这种人造标签）。
-     chip = 「第 N 集 · <标题摘要>」+ 体积/做种/字幕；完整标题放 title 悬停。
-     同一集仍最多 3 条（buildEps 已按做种/体积排过序），但不再包 .epgroup、不再编号。 */
+     descOf 只负责折空白 + 短标题，仍供外部调用方（batchLabel + desc 的旧组合）使用；
+     分集/合集行本身用完整标题，单行省略交给 CSS（.mgt）。
+     同一集仍最多 3 条（buildEps 已按做种/体积排过序），每条各占一行。 */
   function descOf(c, max) {
     var t = String((c && c.t) || '').replace(/\s+/g, ' ').trim();
     if (!t) return '';
     return t.length > max ? t.slice(0, max) + '…' : t;
   }
-  function epsListHtml(eps) {
-    var nums = Object.keys(eps || {}).map(Number).sort(function (a, b) { return a - b; });
-    var h = '';
+
+  /* 文本节点转义：发布标题里实测出现过 & < >，属性另走 escAttr（那只管 & 和 "） */
+  function escText(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /* 元信息：体积 · 做种数 · 字幕（沿用 chipOf 的老格式，字段间用 ` · `） */
+  function metaOf(c) {
+    var bits = [], sub = cleanSub(c && c.sub);
+    if (c && c.s) bits.push(fmtSize(c.s));
+    if (c && c.sd) bits.push(c.sd + ' 种');
+    if (sub) bits.push('字幕 ' + sub);   // 不带字段名时「· 无 / · 中」看不出是什么
+    return bits.join(' · ');
+  }
+
+  /* 一行 = <button class="mgrow" data-m>：集号 / 「合集」+ 完整标题 + 元信息 + 复制。
+     点击复制由 arm() 挂在 #modal 上的委托接管（认 .mgrow 与旧 .eps-chip）。 */
+  function rowOf(c, idx) {
+    var t = String((c && c.t) || '').replace(/\s+/g, ' ').trim();
+    return '<button class="mgrow" type="button" data-m="' + escAttr(c && c.m) + '"'
+      + (t ? ' title="' + escAttr(t) + '"' : '') + '>'
+      + '<span class="mgidx">' + escText(idx) + '</span>'
+      + '<span class="mgmain"><span class="mgt">' + escText(t) + '</span>'
+      + '<span class="mgmeta">' + escText(metaOf(c)) + '</span></span>'
+      + '<span class="mgcopy">复制</span>'
+      + '</button>';
+  }
+
+  /* 一段 = .mgsect（.sec-h 区块标题 + .mgrows 行容器），与 DESIGN-SPEC §2.3 逐字一致 */
+  function sectHtml(title, sub, rows) {
+    return '<div class="mgsect"><div class="sec-h"><h2>' + escText(title) + '</h2>'
+      + '<span class="sec-sub">' + escText(sub) + '</span></div>'
+      + '<div class="mgrows">' + rows + '</div></div>';
+  }
+
+  /* 分集 + 整季/合集两段（顺序同旧 render）。入参两种形状都吃：
+       epsListHtml(entry)       { eps: { 集号: [条目] }, batch: [...] }（70-modal.js 的 openMagView）
+       epsListHtml(eps, batch)  旧调用：入参直接是 eps 映射，合集走第二个参数 */
+  function epsListHtml(a, b) {
+    var eps = {}, batch = [];
+    if (a && typeof a === 'object' && ('eps' in a || 'batch' in a)) {
+      eps = a.eps || {};
+      batch = a.batch || [];
+    } else {
+      eps = a || {};
+      batch = b || [];
+    }
+    var nums = Object.keys(eps).map(Number)
+      .filter(function (n) { return n > 0; })
+      .sort(function (x, y) { return x - y; });
+    var rows = '', h = '';
     nums.forEach(function (n) {
-      (eps[n] || []).slice(0, 3).forEach(function (c) {
-        var d = descOf(c, 46);
-        h += chipOf(c, '第 ' + n + ' 集' + (d ? ' · ' + d : ''));
-      });
+      (eps[n] || []).slice(0, 3).forEach(function (c) { rows += rowOf(c, pad2(n)); });
     });
+    if (rows) h += sectHtml('分集磁力', nums.length + ' 集 · 点击复制', rows);
+    /* 整季/合集：以前这些包（[01-12]、第01-26话、Batch）是被直接丢掉的，
+       实际它们往往是新番早期唯一能拿到的资源，单独成一段；.mgidx 位置写「合集」。 */
+    var brows = '';
+    (batch || []).forEach(function (c) { brows += rowOf(c, '合集'); });
+    if (brows) h += sectHtml('整季 / 合集', (batch || []).length + ' 个 · 点击复制', brows);
     return h;
   }
 
   function render(m, e) {
     var box = m.querySelector('#epsbox');
     if (!box) return;
-    var eps = (e && e.eps) || {};
-    var batch = (e && e.batch) || [];
-    var nums = Object.keys(eps).map(Number).sort(function (a, b) { return a - b; });
-    var h = '';
-    if (nums.length) {
-      h += '<div class="relhead">分集磁力 · ' + nums.length + ' 集（点击复制）</div>';
-      h += epsListHtml(eps);
-    }
-    /* 整季/合集：以前这些包（[01-12]、第01-26话、Batch）是被直接丢掉的，
-       实际它们往往是新番早期唯一能拿到的资源，单独成一组。 */
-    if (batch.length) {
-      h += '<div class="relhead" style="margin-top:10px">整季 / 合集 · ' + batch.length + ' 个（点击复制）</div>';
-      /* 同一集数范围常有多条（实测两个都是「合集 27–28」，只差 666MB/665MB），
-         显示文本完全相同的几条追加「来源 N」（组内从 1 起）；不同的保持原样。 */
-      var labels = batch.map(function (c, i) { return batchLabel(c, i); });
-      var dup = {}, used = {};
-      labels.forEach(function (s) { dup[s] = (dup[s] || 0) + 1; });
-      batch.forEach(function (c, i) {
-        var lb = labels[i];
-        if (dup[lb] > 1) {
-          used[lb] = (used[lb] || 0) + 1;
-          lb += ' · 来源 ' + used[lb];
-        }
-        var bd = descOf(c, 46);
-        h += chipOf(c, lb + (bd ? ' · ' + bd : ''));
-      });
-    }
-    box.innerHTML = h || '<div class="relhead">分集磁力</div><div class="eps-none">暂无按集索引</div>';
+    /* 分集与整季/合集都由 epsListHtml 出（旧实现里单独拼的一段、以及「同范围多条
+       追加来源 N」的文本处理一并收进行渲染：合集行现在直接显示完整发布标题）。 */
+    var h = epsListHtml(e);
+    box.innerHTML = h || '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
+      + '<div class="eps-none">暂无按集索引</div></div>';
   }
 
   /* ---- 点击复制：clipboard API 优先，失败回退 execCommand。统一返回 Promise<boolean> ---- */
@@ -472,9 +503,10 @@
     if (!m) return;
     if (m.__epsObs) return;
     m.__epsObs = true;
-    /* 事件委托：弹窗内容会被反复重写，不能给 chip 逐个绑 */
+    /* 事件委托：弹窗内容会被反复重写，不能给行逐个绑。
+       认 .mgrow（行式列表）与旧的 span 胶囊 .eps-chip（兼容层，还带 data-m）。 */
     function onChip(ev) {
-      var c = ev.target && ev.target.closest && ev.target.closest('.eps-chip');
+      var c = ev.target && ev.target.closest && ev.target.closest('.mgrow, .eps-chip');
       if (!c) return;
       ev.preventDefault();
       ev.stopPropagation();            // 别冒泡去触发卡片的开关逻辑
@@ -487,6 +519,10 @@
     m.addEventListener('click', onChip);
     m.addEventListener('keydown', function (ev) {
       if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+      /* <button class="mgrow"> 的 Enter/空格会原生发 click，这里只给旧的 span 胶囊补键位，
+         否则同一次按键会复制两次、连弹两次 toast */
+      var t = ev.target;
+      if (t && t.closest && t.closest('.mgrow')) return;
       onChip(ev);
     });
     new MutationObserver(function () {
@@ -495,23 +531,32 @@
       var name = h3.textContent.trim();
       if (name === LAST_NAME && m.querySelector('#epsbox')) return;
       LAST_NAME = name;
-      var host = m.querySelector('.acts') || m.querySelector('.mb');
-      if (!host || host.parentNode.querySelector('#epsbox')) return;
+      /* 插入锚点：单栏区块流里磁力是最后一节，挂在 .mbody[data-p="detail"] 末尾
+         （.acts 现在在 .mh-info 内部，插在它后面会落进封面右侧信息栏）。
+         没有 .mbody 时（如 openMagView 那种整屏换内容的视图）退回旧的 .acts 相邻逻辑。 */
+      var body = m.querySelector('.mbody[data-p="detail"]');
+      var host = body ? null : (m.querySelector('.acts') || m.querySelector('.mb'));
+      if (!body && !host) return;
+      if ((body || host.parentNode).querySelector('#epsbox')) return;   // 已有就不重复插
       var box = document.createElement('div');
       box.className = 'relbox';
       box.id = 'epsbox';
-      box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引加载中…</div>';
-      host.parentNode.insertBefore(box, host.nextSibling);
+      box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
+        + '<div class="eps-none">索引加载中…</div></div>';
+      if (body) body.appendChild(box);
+      else host.parentNode.insertBefore(box, host.nextSibling);
       resolveEntry(name).then(function (e) {
         /* 静态条目里可能只有整季包（batch）、没有分集，那种也算有内容 */
         if (e && ((e.eps && Object.keys(e.eps).length) || (e.batch && e.batch.length))) return render(m, e);
-        box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引里没有，正在向后端查询…</div>';
+        box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
+          + '<div class="eps-none">索引里没有，正在向后端查询…</div></div>';
         var origEl = m.querySelector('.orig');
         var origName = origEl ? origEl.textContent.trim() : '';
         return fetchLive(name, episodeCount(m), origName).then(function (live) {
           if (live) return render(m, live);
           if (LIVE_DOWN) {                       // 后端连不上：说清楚，别装作"没有"
-            box.innerHTML = '<div class="relhead">分集磁力</div><div class="eps-none">索引里没有，后端暂时连不上</div>';
+            box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
+              + '<div class="eps-none">索引里没有，后端暂时连不上</div></div>';
             return;
           }
           render(m, e);
