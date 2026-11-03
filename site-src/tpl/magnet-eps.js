@@ -6,6 +6,8 @@
  * 组名口径：条目 g 键（后端算）→ 发布标题前缀 `[组名]` / `【组名】` → 「其他」。
  * 自动向后端透传只在当季发生（只读 window.__CUR_SEASON；undefined = 还没判定 = 允许）；
  * 非当季要透传只能点详情页 ⟳（window.__epsApi.reload）。
+ * 取源顺序：打开详情页时静态分片与后端 SQLite（/eps?db=1，no-store 无副作用）**并行**发，
+ * 先到先画、后到者条目数严格更多才重画；两边都空才按当季规则透传完整 /eps。
  *
  * 索引已分片：整份 7.5MB 在手机上首次点开卡片就要下完，太重。
  *   media/eps/index.json     清单（shards / count，几百字节）
@@ -251,10 +253,13 @@
     }
     return 0;
   }
-  function fetchLive(name, epsN, orig) {
-    if (LIVE[name]) return Promise.resolve(LIVE[name]);
+  /* force=1：跳过服务端 SQLite、强制重查上游并写回（详情页 ⟳ 用）。
+     强制刷新时不读 LIVE 缓存，但仍以最新结果覆盖它。 */
+  function fetchLive(name, epsN, orig, force) {
+    if (!force && LIVE[name]) return Promise.resolve(LIVE[name]);
     var u = LIVE_URL + '?kw=' + encodeURIComponent(name);
     if (orig) u += '&o=' + encodeURIComponent(orig);
+    if (force) u += '&force=1';
     var ctl = typeof AbortController === 'function' ? new AbortController() : null;
     var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
     return fetch(u, ctl ? { signal: ctl.signal } : undefined).then(function (r) {
@@ -289,6 +294,21 @@
       } catch (err) { /* 忽略：只是入库，不影响展示 */ }
       return e;
     }).catch(function () { LIVE_DOWN = true; return null; });
+  }
+
+  /* 只查服务端 SQLite（db=1）：响应 no-store、不打上游、不写库，所以和静态分片
+     并行发是安全的（无副作用）。命中/未命中都只想抢个先手：未命中、坏响应、
+     SQLite 挂掉一律 null，**不置 LIVE_DOWN**（库挂了不该把整条透传关掉）。 */
+  function dbLive(name) {
+    var u = LIVE_URL + '?kw=' + encodeURIComponent(name) + '&db=1';
+    return getJSON(u, 9000).then(function (d) {
+      /* miss:true 是「库里没有」，ok:false 视作坏响应；两者都当空 */
+      if (!d || d.miss || d.ok === false) return null;
+      var eps = (d.eps && Object.keys(d.eps).length) ? d.eps : {};
+      var batch = d.batch || [];
+      if (!Object.keys(eps).length && !batch.length) return null;
+      return { n: name, eps: eps, batch: batch, db: 1 };
+    }).catch(function () { return null; });
   }
 
   function resolveEntry(name) {
@@ -571,6 +591,12 @@
     return !!(e && ((e.eps && Object.keys(e.eps).length) || (e.batch && e.batch.length)));
   }
 
+  /* 条目数（与渲染同口径：collectRows 的行数）。两个数据源竞争时只有
+     「严格多于已渲染行数」才允许重画，等量/更少一律忽略，避免列表闪一下。 */
+  function epCount(e) {
+    return e ? collectRows(e).length : 0;
+  }
+
   /* 把入口画进当前弹窗：详情页画 #epsbox；openMagView 那种整屏磁力视图画 #mgbody。 */
   function paint(e) {
     var m = document.getElementById('modal');
@@ -583,8 +609,10 @@
     }
   }
 
-  /* 手动刷新（详情页 ⟳）：清掉该片名的全部缓存层 → 重查静态索引 → 仍未命中就无条件透传
-     后端（不受 __CUR_SEASON 限制）→ 重画。返回 Promise，resolve 为最终入口或 null，不 reject。 */
+  /* 手动刷新（详情页 ⟳）：清掉该片名的全部缓存层 → 分片（A）与 `force=1` 完整查询
+     并行（force 跳过 SQLite、强制重查上游并写回，回灌仍走 fetchLive 里的 /eps-save）。
+     force 拿到内容就以它为准；force 空/失败则回落到 A 的结果，而不是直接显示错误。
+     刷新不受 __CUR_SEASON 限制。返回 Promise，resolve 为最终入口或 null，不 reject。 */
   function reload(name, epsN) {
     var n = String(name == null ? '' : name).trim();
     if (!n) return Promise.resolve(null);
@@ -607,13 +635,13 @@
       paint(e);
       return e || null;
     }
-    function fail() { return done(null); }
-    return resolveEntry(n).then(function (e) {
-      if (hasRows(e)) return e;
-      return fetchLive(n, Number(epsN) || 0, '').then(function (live) {
-        return live || e || null;
-      }, function () { return e || null; });
-    }).then(done, fail);
+    var aP = resolveEntry(n);          // A：数据集分片（内部已 catch → null）
+    return fetchLive(n, Number(epsN) || 0, '', 1).then(function (live) {
+      if (hasRows(live)) return live;  // 强制查询拿到内容：以最新结果为准
+      return aP.then(function (a) {    // 否则回落分片，实在没有才交 null
+        return hasRows(a) ? a : (live || a || null);
+      });
+    }).then(done, function () { return done(null); });
   }
 
   /* ---- 点击复制：clipboard API 优先，失败回退 execCommand。统一返回 Promise<boolean> ---- */
@@ -734,26 +762,49 @@
         + '<div class="eps-none">索引加载中…</div></div>';
       if (body) body.appendChild(box);
       else host.parentNode.insertBefore(box, host.nextSibling);
-      resolveEntry(name).then(function (e) {
-        /* 静态条目里可能只有整季包（batch）、没有分集，那种也算有内容 */
-        if (hasRows(e)) return render(m, e);
-        /* 自动透传只限当季：__CUR_SEASON 由 70-modal.js 判定，undefined（还没判定）按允许处理。
-           非当季时静态索引没命中就到此为止；要透传只能点详情页 ⟳ 走 reload()。 */
-        if (window.__CUR_SEASON === false) return render(m, e);
+      /* 两条源并行：A = 数据集分片（resolveEntry，镜像备用），B = 服务端 SQLite
+         （dbLive → /eps?db=1，无副作用）。先到先画；后到者条目数**严格多于**
+         已渲染的才重画，等量/更少忽略（防闪烁）。A/B 都空才讨论透传。 */
+      var state = { e: null, cnt: 0, live: false, settled: 0, got: false };
+      var origEl = m.querySelector('.orig');
+      var origName = origEl ? origEl.textContent.trim() : '';
+      /* 弹窗已被换片 / #epsbox 被重插：这次响应作废，别画进别人的框 */
+      function stale() { return !box.parentNode || m.querySelector('#epsbox') !== box; }
+      function take(e) {
+        if (stale() || !hasRows(e)) return false;
+        var c = epCount(e);
+        if (c <= state.cnt) return false;
+        state.e = e;
+        state.cnt = c;
+        render(m, e);
+        return true;
+      }
+      function finish() {
+        /* A/B 都空：自动透传只限当季（__CUR_SEASON 由 70-modal.js 判定，
+           undefined = 还没判定 = 允许）。非当季到此为止，要查只能点详情页 ⟳。 */
+        if (stale() || state.cnt || state.live) return;
+        state.live = true;
+        if (window.__CUR_SEASON === false) { render(m, state.e); return; }
         box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
           + '<div class="eps-none">索引里没有，正在向后端查询…</div></div>';
-        var origEl = m.querySelector('.orig');
-        var origName = origEl ? origEl.textContent.trim() : '';
         return fetchLive(name, episodeCount(m), origName).then(function (live) {
+          if (stale()) return;
           if (live) return render(m, live);
           if (LIVE_DOWN) {                       // 后端连不上：说清楚，别装作"没有"
             box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
               + '<div class="eps-none">索引里没有，后端暂时连不上</div></div>';
             return;
           }
-          render(m, e);
+          render(m, state.e);
         });
-      });
+      }
+      function one(e) {
+        state.settled++;
+        if (take(e)) state.got = true;
+        if (!state.got && state.settled >= 2) finish();
+      }
+      resolveEntry(name).then(one, function () { one(null); });
+      dbLive(name).then(one, function () { one(null); });
     }).observe(m, { childList: true, subtree: false });
   }
 

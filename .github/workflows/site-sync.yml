@@ -117,15 +117,6 @@ jobs:
           AVATAR_RETRIES: "1"
         run: python -u fetch_people.py
 
-      # 分片/状态用 Git Data API 直推：publish 那步的 git rebase 会被同轮的
-      # 两次 API 推送撞成冲突（实测 "rebase conflict, skip push" 丢掉整轮数据）。
-      - name: Push shards (Git Data API)
-        timeout-minutes: 10
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -u site-src/push_shards.py
-
       - name: Fill missing posters
         timeout-minutes: 20
         working-directory: site-src
@@ -181,8 +172,22 @@ jobs:
         continue-on-error: true
         working-directory: site-src
         env:
-          TR_WORKERS: "8"
+          # 2026-11-04 由 8 降到 4：并发 8 实测约 1,624 条后 gtx 连片限流
+          # （run 41678297541 失败 1,671 条）。脚本侧另加了失败直方图 + 熔断。
+          TR_WORKERS: "4"
         run: python -u translate_overviews.py
+
+      # 分片/状态用 Git Data API 直推：publish 那步的 git rebase 会被同轮的
+      # 两次 API 推送撞成冲突（实测 "rebase conflict, skip push" 丢掉整轮数据）。
+      # 必须排在 Translate 之后：Translate 写的是 site/anime/*.json（真源），
+      # 只有这条 Git Data API 路径能可靠落盘；后面的 Publish data + posters + state
+      # 有 rebase 冲突静默跳过的分支，实测丢过整轮 1,624 条翻译（run 41678297541）。
+      - name: Push shards (Git Data API)
+        timeout-minutes: 10
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -u site-src/push_shards.py
 
       - name: Build pages
         timeout-minutes: 6
