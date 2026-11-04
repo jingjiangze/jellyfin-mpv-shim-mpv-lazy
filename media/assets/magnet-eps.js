@@ -349,8 +349,9 @@ if (brows) h += sectHtml('整季 / 合集', (batch || []).length + ' 个 · 点�
 return h;
 }
 function loginNoteHtml() {
-return '<div class="mnote">实时查询需登录 · <a href="' + AUTH_BASE + '/auth/start?next='
-+ encodeURIComponent(location.href) + '" target="_blank" rel="noopener">GitHub 登录</a></div>';
+return '<div class="mnote">实时查询需登录 · '
++ '<button class="mnote-btn" type="button" data-login="1">登录</button>'
++ '</div>';
 }
 function render(m, e) {
 var box = m.querySelector('#epsbox');
@@ -418,6 +419,12 @@ if (!m) return;
 if (m.__epsObs) return;
 m.__epsObs = true;
 function onChip(ev) {
+var lb = ev.target && ev.target.closest && ev.target.closest('[data-login]');
+if (lb) {
+ev.preventDefault();
+if (window.__openLogin) window.__openLogin();
+return;
+}
 var c = ev.target && ev.target.closest && ev.target.closest('.mgrow, .eps-chip');
 if (!c) return;
 ev.preventDefault();
@@ -432,7 +439,7 @@ m.addEventListener('click', onChip);
 m.addEventListener('keydown', function (ev) {
 if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
 var t = ev.target;
-if (t && t.closest && t.closest('.mgrow')) return;
+if (t && t.closest && (t.closest('.mgrow') || t.closest('[data-login]'))) return;
 onChip(ev);
 });
 new MutationObserver(function () {

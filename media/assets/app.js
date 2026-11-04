@@ -936,6 +936,29 @@ if (fr) fr.src = mkSrc(Number(selEl.value) || 1);
 };
 }
 }
+var THEME_KEY = 'theme';
+function currentTheme() {
+try {
+var t = localStorage.getItem(THEME_KEY);
+if (t === 'light' || t === 'dark') return t;
+} catch (e) { /* 隐私模式 */ }
+return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+}
+function applyTheme(t) {
+document.documentElement.setAttribute('data-theme', t);
+var b = document.getElementById('thm');
+if (b) {
+b.textContent = t === 'dark' ? '☾' : '☀';
+b.setAttribute('aria-label', t === 'dark' ? '切到浅色' : '切到深色');
+b.title = b.getAttribute('aria-label');
+}
+}
+function toggleTheme() {
+var next = currentTheme() === 'dark' ? 'light' : 'dark';
+try { localStorage.setItem(THEME_KEY, next); } catch (e) { }
+applyTheme(next);
+}
+applyTheme(currentTheme());
 var AUTH_BASE = 'https://120.48.56.189';
 var TOKEN_KEY = 'gh_token';
 var AUTH_PENDING = '';
@@ -989,10 +1012,6 @@ mask.className = 'authmask';
 mask.id = 'authmask';
 mask.innerHTML = '<div class="authcard" role="dialog" aria-modal="true">'
 + '<button class="authx" type="button" aria-label="关闭">×</button>'
-+ '<div class="authtabs">'
-+ '<button class="authtab on" data-t="email" type="button">邮箱</button>'
-+ '<button class="authtab" data-t="github" type="button">GitHub</button>'
-+ '</div>'
 + '<div class="authbody" data-t="email">'
 + '<label class="authfield"><span>邮箱</span><input id="authemail" type="email" autocomplete="username"'
 + ' placeholder="you@example.com"></label>'
@@ -1014,21 +1033,8 @@ mask.innerHTML = '<div class="authcard" role="dialog" aria-modal="true">'
 + '<button class="btn" id="authresend" type="button">重新发送</button>'
 + '</div>'
 + '</div>'
-+ '<div class="authbody" data-t="github" hidden>'
-+ '<p class="authhint">用 GitHub 账号登录（需要能访问 github.com）。</p>'
-+ '<a class="btn pri" href="' + AUTH_BASE + '/auth/start?next=' + encodeURIComponent(location.href)
-+ '" target="_blank" rel="noopener">去 GitHub 授权</a>'
-+ '</div>'
 + '</div>';
 document.body.appendChild(mask);
-mask.querySelectorAll('.authtab').forEach(function (b) {
-b.onclick = function () {
-var t = b.getAttribute('data-t');
-mask.querySelectorAll('.authtab').forEach(function (x) { x.classList.toggle('on', x === b); });
-mask.querySelectorAll('.authbody').forEach(function (x) { x.hidden = x.getAttribute('data-t') !== t; });
-if (t === 'email') { var em = document.getElementById('authemail'); if (em) em.focus(); }
-};
-});
 mask.querySelector('.authx').onclick = closeAuthPanel;
 mask.addEventListener('click', function (e) { if (e.target.id === 'authmask') closeAuthPanel(); });
 mask.querySelector('#authlogin').onclick = function () { submitAuth('login'); };
@@ -1050,6 +1056,7 @@ document.addEventListener('keydown', authEsc);
 var first = document.getElementById('authemail');
 if (first) first.focus();
 }
+window.__openLogin = openAuthPanel;
 function closeAuthPanel() {
 var m = document.getElementById('authmask');
 if (m && m.parentNode) m.parentNode.removeChild(m);
@@ -1227,9 +1234,13 @@ host.innerHTML = '<div class="wrap"><a class="brand" href="./"><i></i>番组<b>�
 + '<nav class="mainnav">' + nav + '</nav><div class="head-spacer"></div>'
 + '<div class="searchbox"><input id="q" type="search" placeholder="' + ph + '" autocomplete="off"></div>'
 + '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
++ '<button class="thm" id="thm" type="button" aria-label="切换主题">☀</button>'
 + '<span class="cnt" id="cnt"></span>'
 + '<span class="build" id="build">' + (document.body.dataset.build || '') + '</span></div>';
 paintAuth();
+applyTheme(currentTheme());
+var thm = $('#thm');
+if (thm) thm.onclick = toggleTheme;
 }
 function bootAnime() {
 return jd('anime.json').then(function (d) {
