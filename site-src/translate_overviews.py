@@ -18,8 +18,9 @@ site/data/s<N>.json 供前端按需拉。本脚本两边都写：只改 data/ �
 （site-sync run 41678297541）约 1,624 条成功后连片失败、白跑 20 分钟。
 
 幂等：写回时新增 overview_ja 存日文原文（便于回滚 / 人工复核），
-该字段已存在即视为「翻译过」，跳过。每写完一个分片立即落盘，
-超时被杀也只丢当前分片，已翻译的部分保留。
+该字段已存在即视为「翻译过」，跳过。每写完 CHUNK 条（默认 8 条）立即落盘，
+超时被杀最多丢当前一批，已翻译的部分保留。同步真源 anime/<n>.json 在整片结束时
+只做一次，不每批重写。
 
 容错：单条请求失败（429 / 5xx / 网络）最多尝试 4 次，退避 2s / 4s / 8s / 16s
 （每档 ±30% 随机抖动），仍失败就跳过该条并记入 failed。失败原因按 HTTP 状态码 /
@@ -27,8 +28,15 @@ site/data/s<N>.json 供前端按需拉。本脚本两边都写：只改 data/ �
 到底是 429 还是超时，限流与网络故障分不开。
 
 熔断：连续失败（按条目计，一条 4 次尝试全挂算 1 条）达到 CIRCUIT=25 就全体暂停
-CIRCUIT_SLEEP=120 秒再继续；自上次成功起连续失败达到 CIRCUIT_HARD=120 就停止
-整轮：没翻的条目原样保留在分片里（不写盘），下轮接着翻，不空转到 workflow 超时。
+CIRCUIT_SLEEP=120 秒再继续；累计失败（成功只衰减 1，不清零）达到
+CIRCUIT_HARD=30 就停止整轮：没翻的条目原样保留在分片里（不写盘），下轮接着翻。
+原 CIRCUIT_HARD=120 在限流态（每条约 34s）要 ~17 分钟才触发，超过 workflow
+10 分钟步长 ⇒ 每轮必被 SIGTERM 杀掉，所以下调到 30。
+
+本轮预算（2026-11-04）：无论限流多严重，本轮必须在步长内自己收尾并落盘。
+BUDGET=420 秒墙钟预算（每批提交前检查）、TR_MAX=300 条整轮上限，到点即
+打印「提前收尾」并正常退出，剩余条目留待下轮。三个参数都可用环境变量
+TR_BUDGET / TR_MAX / TR_CHUNK 覆盖。
 
 用法：
   cd site-src && python -u translate_overviews.py            # 正式翻译并写回
@@ -62,15 +70,22 @@ WORKERS = int(os.environ.get("TR_WORKERS", "4") or 4)   # 片内并发数
 RETRIES = 4                   # 单条最多尝试次数（原 3 次）
 BACKOFF = (2, 4, 8, 16)       # 第 N 次重试前的基准退避（秒），实乘 0.7–1.3
 CIRCUIT = 25                  # 连续失败达到即全体休息
-CIRCUIT_HARD = 120            # 自上次成功起连续失败达到即停止整轮
+# 累计失败达到即停止整轮。原 120：限流态每条约 34s，要 ~17 分钟才触发，
+# 而 workflow 步长只有 10 分钟 ⇒ 每轮必被 SIGTERM 杀掉。下调到 30。
+CIRCUIT_HARD = int(os.environ.get("TR_CIRCUIT_HARD", "30") or 30)
 CIRCUIT_SLEEP = 120           # 熔断休息时长（秒）
+
+# ---- 本轮预算：限流时必须在 workflow 步长内自己收尾，不能空转到被 kill ----
+BUDGET = float(os.environ.get("TR_BUDGET", "420") or 420)   # 本轮墙钟预算（秒），留出 dump/推送余量
+TR_MAX = int(os.environ.get("TR_MAX", "300") or 300)        # 本轮最多翻多少条
+CHUNK = max(2, int(os.environ.get("TR_CHUNK", "8") or 8))   # 每次提交多少个任务就落一次盘
 
 FAIL_REASONS = Counter()      # 本次运行的失败原因直方图：{"429": 1600, "TimeoutError": 71}
 _fail_lock = threading.Lock() # Counter 的 += 不是原子读改写，多线程必须加锁
 _gate = threading.Event()     # clear = 全体暂停（限流休息中）；worker 请求前等它
 _gate.set()
 _consec = 0                   # 连续失败（条目计；成功或休息一次后清零）
-_consec_total = 0             # 自上次成功起连续失败总数（判硬熔断）
+_consec_total = 0             # 累计失败（成功只衰减 1，不清零；判硬熔断）
 hard_stop = False             # 硬熔断已触发：本轮不再发起翻译
 
 # 假名：平假名 3041-3096 / 309D-309F，片假名 30A1-30FA / 30FD-30FE。
@@ -144,7 +159,10 @@ def note_result(reason):
     """
     global _consec, _consec_total, hard_stop
     if not reason:
-        _consec = _consec_total = 0
+        _consec = 0
+        # 成功只衰减不清零：429 与成功交错时若把 _consec_total 归零，
+        # 累计失败永远攒不到 CIRCUIT_HARD，硬熔断等于失效（原实现即如此）。
+        _consec_total = max(0, _consec_total - 1)
         return False
     with _fail_lock:
         FAIL_REASONS[reason] += 1
@@ -249,11 +267,22 @@ def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+    t0 = time.monotonic()
+    print(f"本轮上限：{TR_MAX} 条 / 墙钟预算 {BUDGET:.0f}s / 每 {CHUNK} 条一批落盘",
+          flush=True)
     translated = skipped = 0
     failed = []
     files = 0
-    remaining = 0                # 硬熔断后没翻的条目数（原样留待下轮）
+    remaining = 0                # 本轮没翻的条目数（原样留待下轮）
+    quota = TR_MAX               # 本轮还剩多少条可翻（TR_MAX 是整轮上限，不是单片上限）
+    timed_out = False            # 时间预算用尽：当前分片收尾后退出外层循环
     for n in range(SHARD_TOTAL):
+        if quota <= 0:
+            print(f"! 已达本轮条数上限 {TR_MAX} 条，提前收尾（剩余留待下轮）")
+            break
+        if time.monotonic() - t0 > BUDGET:
+            print(f"! 到达本轮时间预算 {BUDGET:.0f}s，提前收尾（剩余留待下轮）")
+            break
         p = ANIME / f"{n}.json"   # site-sync 里 Translate 排在 Build pages 之前，此时 data/ 还不存在，真源在 anime/
         if not p.is_file():
             continue
@@ -283,31 +312,58 @@ def main():
         if hard_stop:
             remaining += len(todo)    # 已熔断：这些条目原样留在分片里
             continue
-
-        results, pending = run_batch(todo)
-        remaining += pending
+        if len(todo) > quota:
+            print(f"  s{n}.json：候选 {len(todo)} 条，本轮上限 {TR_MAX} 条"
+                  f"，只翻前 {quota} 条（其余留待下轮）")
+            todo = todo[:quota]
 
         changes = {}
-        for rec, ov, zh, _reason in results:
-            if not zh:
-                failed.append(rec.get("id"))
-                continue
-            rec["overview"] = zh
-            rec["overview_ja"] = ov
-            changes[rec.get("id")] = (zh, ov)
-            translated += 1
+        for i in range(0, len(todo), CHUNK):
+            # 每批提交前都看一次预算：单片最坏情况（429 全是 34s/条）也要收得住，
+            # 只在分片边界判断会多跑一整片，仍可能越过 workflow 步长。
+            if time.monotonic() - t0 > BUDGET:
+                print(f"! 到达本轮时间预算 {BUDGET:.0f}s，提前收尾（剩余留待下轮）")
+                remaining += len(todo) - i
+                timed_out = True
+                break
+            batch = todo[i:i + CHUNK]
+            results, pending = run_batch(batch)
+            remaining += pending
+            quota = max(0, quota - len(batch))
+
+            saved = 0
+            for rec, ov, zh, _reason in results:
+                if not zh:
+                    failed.append(rec.get("id"))
+                    continue
+                rec["overview"] = zh
+                rec["overview_ja"] = ov
+                changes[rec.get("id")] = (zh, ov)
+                translated += 1
+                saved += 1
+            if saved:
+                # 每批写完立刻落盘：被 SIGTERM 杀时最多丢当前一批，不再是整片归零
+                dump(p, rows)
+            if hard_stop:
+                remaining += len(todo) - (i + len(batch))
+                break
+
         if changes:
-            # 每个分片写完立刻落盘：超时被杀时前面的成果不会白费
-            dump(p, rows)
+            # 同步真源只在整个分片结束时做一次，避免每批都整表重写 anime/
             back = sync_source(n, changes)
             print(f"  s{n}.json：写入 {len(changes)} 条中文简介"
                   f"（同步到 anime/{n}.json {back} 条，累计 {translated}）",
                   flush=True)
+        if timed_out:
+            break
 
+    elapsed = time.monotonic() - t0
     tag = "（dry-run，未翻译未写盘）" if dry else ""
     print(f"扫描 {files} 个分片{tag}")
     if dry:
-        print(f"待翻译 {translated} 条 / 跳过（已翻译）{skipped} 条 / 失败 0 条")
+        print(f"待翻译 {translated} 条（本轮上限 {TR_MAX} 条，超出部分留待后续轮次）"
+              f" / 跳过（已翻译）{skipped} 条 / 失败 0 条")
+        print(f"本轮耗时 {elapsed:.0f}s")
         return
     print(f"翻译完成 {translated} 条 / 跳过（已翻译）{skipped} 条 / 失败 {len(failed)} 条")
     if FAIL_REASONS:
@@ -316,6 +372,10 @@ def main():
         print("失败 id（前 20）：" + ", ".join(str(x) for x in failed[:20]))
     if hard_stop:
         print(f"! 触发限流熔断，剩余 {remaining} 条留待下轮", flush=True)
+    elif timed_out:
+        print(f"! 时间预算/条数上限用尽，剩余 {remaining} 条（未扫分片同理）留待下轮",
+              flush=True)
+    print(f"本轮耗时 {elapsed:.0f}s")
 
 
 if __name__ == "__main__":
