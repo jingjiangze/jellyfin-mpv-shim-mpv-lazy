@@ -2510,3 +2510,49 @@ main {
 .favpage > .bhead {
   margin-bottom: var(--s5);
 }
+
+/* ── 2026-11-05 视觉验收修正 ─────────────────────────────────────────────
+   ① 首页筛选条：组内不折行、组间按容器宽度整体换行（修「第4季度 / 周四–周日」被挤到第二行的问题）；
+      榜单入口改内联宽度，消掉下拉下方 52px 空洞。
+   ② 浏览页筛选：桌面 4 个下拉等宽（标签下拉原本是其它下拉的 2 倍宽），并与页头留出上边距。
+   ③ 手机详情 hero：海报只占首行，标题/评分走右列，想看 + 操作按钮通栏，消掉海报下方整块空白。 */
+
+.levels { align-items: flex-start; }
+
+.levels .lv { flex: 0 1 auto; }
+
+.levels .chips { flex-wrap: nowrap; }
+
+.levels .chips--col .lv-link { width: auto; padding: 0 var(--s4); }
+
+@media (max-width: 1100px) {
+  .levels .lv { flex: 1 1 100%; }
+  .levels .chips { flex-wrap: wrap; }
+  .levels .chips--col .lv-link { width: 100%; }
+}
+
+@media (min-width: 761px) {
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+    gap: var(--s3) var(--s4);
+    margin-top: var(--s3);
+  }
+  .filters > .f-label { display: flex; }
+  .filters > .f-label > select { flex: 1 1 auto; width: 100%; min-width: 0; }
+  .filters > .f-hint { margin-left: 0; white-space: nowrap; }
+}
+
+@media (max-width: 560px) {
+  .mhero, .mhd { grid-template-columns: 96px minmax(0, 1fr); gap: var(--s2) var(--s3); }
+  .mhero > .mposter, .mhd > .mposter { grid-column: 1; grid-row: 1; }
+  .mhero > .mh-info, .mhd > .mh-info { display: contents; }
+  .mhero > .mh-info > *, .mhd > .mh-info > * { grid-column: 2; }
+  .mhero > .mh-info > .mcollect, .mhd > .mh-info > .mcollect,
+  .mhero > .mh-info > .acts, .mhd > .mh-info > .acts { grid-column: 1 / -1; }
+}
+
+/* 星期组写死 4 列网格导致 8 个胶囊必分两行；宽屏恢复单行，窄屏仍用网格/横滑。 */
+@media (min-width: 1101px) {
+  .levels .chips.chips--wd { display: flex; flex-wrap: nowrap; }
+}
