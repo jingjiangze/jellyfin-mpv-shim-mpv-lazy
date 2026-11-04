@@ -474,11 +474,9 @@ main {
   border-radius: var(--r);
 }
 
+/* 首页去侧栏：筛选条移到内容上方，内容区占满全宽（DOM 顺序不变，.levels 仍在前） */
 .home-cols {
-  display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: var(--s5);
-  align-items: start;
+  display: block;
 }
 
 .home-main {
@@ -486,20 +484,33 @@ main {
 }
 
 .levels {
-  position: sticky;
-  top: calc(var(--header-h) + var(--s4));
+  position: static;
   display: flex;
-  flex-direction: column;
-  padding: var(--s4);
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--s3) var(--s5);
+  padding: var(--s3) var(--s4);
+  margin: 0 0 var(--s4);
   border-radius: var(--r);
   background: var(--card);
   border: 1px solid var(--line);
 }
 
-.levels .lv + .lv {
-  margin-top: var(--s4);
-  padding-top: var(--s4);
-  border-top: 1px solid var(--line);
+.levels .lv {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+/* 季度原为侧栏内纵向长列表，横排后走胶囊横向换行，避免顶栏被撑高。
+   选择器带 .chips 重复类名是为了压过下方 .chips.chips--col 的纵向声明。 */
+.levels .chips.chips--col {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.levels .chips.chips--col .chip {
+  width: auto;
+  justify-content: flex-start;
 }
 
 .lv-h {
@@ -1811,10 +1822,6 @@ main {
 }
 
 @media (max-width: 1200px) {
-  .home-cols {
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: var(--s4);
-  }
   .grid, .mgrid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
@@ -1859,27 +1866,13 @@ main {
 }
 
 @media (max-width: 900px) {
-  .home-cols {
-    display: block;
-  }
+  /* 顶部筛选条：窄屏收窄组间距，并让每个 .lv 更早换行 */
   .levels {
-    position: static;
-    flex-direction: row;
-    flex-wrap: wrap;
     gap: var(--s3);
     margin: 0 0 var(--s5);
   }
   .levels .lv {
     flex: 1 1 140px;
-    min-width: 0;
-    margin-top: 0;
-    padding-top: 0;
-    border-top: 0;
-  }
-  .levels .lv + .lv {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: 0;
   }
   .chips.chips--col {
     flex-direction: row;
@@ -2023,9 +2016,8 @@ main {
     font-size: var(--fs-lg);
   }
 
-  /* 左栏筛选：季度 / 星期纵向堆叠，避免季度 5 行撑高面板 */
+  /* 顶部筛选条在手机上纵向堆叠：季度 / 星期各占整宽 */
   .levels {
-    display: flex;
     flex-direction: column;
     gap: var(--s3);
   }
