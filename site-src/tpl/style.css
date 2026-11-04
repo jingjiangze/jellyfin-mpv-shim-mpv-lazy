@@ -2174,3 +2174,198 @@ main {
     padding-left: var(--s2);
   }
 }
+
+/* ---------------------------------------------------------------- 20 磁力字幕组 / 制作人头像 / 详情刷新 / 每周更新 / 首页追番 */
+
+/* 20.1 磁力字幕组：一组一个 .mgteam，组头 .tg-h 整行可点；展开后的行仍用 .mgrows / .mgrow */
+.tgs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mgteam {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tg-h {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  height: 36px;
+  padding: 0 var(--s3);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-align: left;
+  color: var(--fg);
+  background: var(--card2);
+  border: 1px solid var(--line);
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color .16s ease, background .16s ease, color .16s ease;
+}
+
+.tg-h:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--card);
+}
+
+.tg-h:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mgteam[data-open="1"] .tg-h {
+  border-color: var(--accent-line);
+}
+
+.tg-n {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tg-c {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+}
+
+.tg-x {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: var(--fs-sm);
+  line-height: 1;
+  color: var(--dim2);
+  transition: transform .18s ease, color .16s ease;
+}
+
+.mgteam[data-open="1"] .tg-x {
+  color: var(--accent);
+  transform: rotate(90deg);
+}
+
+/* 收起态：行列表整体不占位（.mgrows 自身仍是 flex 列，见 16 节） */
+.mgteam[data-open="0"] .mgrows {
+  display: none;
+}
+
+/* 20.2 制作人头像：.sph 圆形位 + img.sav；44px 对齐 .staff 两行文本（b + em）的高度。
+ * 用 float 而不是父级 flex：DOM 里 b/em 可能直接挂 .staff，也可能包一层，
+ * float 两种结构都不会把「名字 / 职位」挤成一行；.staff b / em 自带 overflow:hidden
+ * 会形成 BFC，文字自动让开头像，省略号照旧生效。 */
+.staff .sph {
+  float: left;
+  width: 44px;
+  height: 44px;
+  margin: 0 var(--s2) 2px 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.staff img.sav {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 20.3 详情页刷新按钮：主体复用 .btn，这里只补禁用态（含属性 / 类两种写法） */
+#mrefresh[disabled], #mrefresh:disabled, #mrefresh[aria-disabled="true"] {
+  opacity: .5;
+  color: var(--dim);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+
+#mrefresh[disabled]:hover, #mrefresh:disabled:hover, #mrefresh[aria-disabled="true"]:hover {
+  color: var(--dim);
+  border-color: var(--line);
+}
+
+/* 20.4 每周更新行：次要色小字号，单行横向滚动，不换行（滚条沿用 .modal 的细滚条口径） */
+.mupd {
+  min-width: 0;
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-hi) transparent;
+}
+
+.mupd::-webkit-scrollbar {
+  height: 6px;
+}
+
+.mupd::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--line-hi);
+}
+
+.mupd::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------------------------------------------------------------- 20.6 窄屏补充（与 19 节同断点，独立成段避免插入既有规则块） */
+@media (max-width: 760px) {
+  .tgs {
+    gap: var(--s1);
+  }
+
+  .mgteam {
+    gap: var(--s1);
+  }
+
+  .tg-h {
+    height: 32px;
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .tg-c {
+    padding: 0 6px;
+    font-size: 10px;
+  }
+
+  .staff .sph {
+    width: 36px;
+    height: 36px;
+    margin-right: 6px;
+  }
+}
+
+/* ---------------------------------------------------------------- 21 追番页（fav.html） */
+/* .favpage 是 main.wrap 里的整页容器：.wrap{padding:0 var(--s6)} 压掉 main 的纵向 padding，
+ * 这里补顶部 24px，与首页 .home-head 对齐；标题 / 栅格 / 卡片 / 空态复用 5 节与 7 节，不另立一份。 */
+.favpage {
+  margin-top: var(--s5);
+}
+
+.favpage > .bhead {
+  margin-bottom: var(--s5);
+}

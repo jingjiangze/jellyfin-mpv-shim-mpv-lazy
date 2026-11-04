@@ -29,16 +29,21 @@
     return esc(s).replace(/-/g, '-⁠');
   }
 
+  /* 卡片：首页 / 番剧 / 排行榜 / 我的追番共用这一份 DOM 结构与 class（.card > .pw + .t + .sub2）。
+     点击不用调用方绑定——90-boot.js 顶层有 .card 的事件委托，统一走 openModal(Number(data-id))。
+     opt 可选：showYear 在副标题里带上年份；fav 把右下角徽标换成追番角标「★ 已追」
+     （与 ep 集数同位置，二选一，避免两个徽标叠在同一个角）。 */
   function animeCard(r, opt) {
     var id = r[0], name = r[2] || r[1];
     var ex = ANI.extra[id] || [];
     var alCover = ex[1] || '';
     var src = posterSrc(id);
     var fb = PSZ.mode === 'sd' ? [alCover, ANI.poster + id + '.jpg'] : [alCover];
+    var corner = (opt && opt.fav) ? '★ 已追' : (r[8] ? r[8] + ' 集' : '');
     var h = '<article class="card" data-id="' + id + '"><div class="pw">'
       + '<img src="' + esc(src) + '"' + fbAttr(fb) + ' loading="lazy" decoding="async" alt="">'
       + (r[7] ? '<span class="rate">★ ' + Number(r[7]).toFixed(1) + '</span>' : '')
-      + (r[8] ? '<span class="ep">' + r[8] + ' 集</span>' : '')
+      + (corner ? '<span class="ep">' + corner + '</span>' : '')
       + '</div><div class="t">' + titleHTML(name) + '</div><div class="sub2">'
       + [(opt && opt.showYear ? (r[4] || '') : ''), TYPE[r[3]] || r[3] || ''].filter(Boolean).join(' · ')
       + '</div></article>';
