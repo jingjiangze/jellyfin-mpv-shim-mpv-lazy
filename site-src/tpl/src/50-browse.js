@@ -50,6 +50,10 @@
   /* 标签索引按需加载：tags.json 只在上万人点开「标签」筛选时才拉，
      8,851 条的 tag→id 映射有几百 KB，进站不背这个包袱。 */
   var TAGS = null;
+  /* 深链：/anime.html?tag=xxx 直接把标签筛选选中（标签下拉是异步填的，所以要在填完之后再应用） */
+  function pickTagFromUrl() {
+    try { return new URLSearchParams(location.search).get('tag') || ''; } catch (e) { return ''; }
+  }
   function ensureTags() {
     if (TAGS) return Promise.resolve(TAGS);
     return jd('tags.json').then(function (d) {
@@ -61,6 +65,9 @@
     var sel = $('#f-tag');
     if (!sel) return;
     sel.onchange = function () {
+      /* 手选标签时清空年份：默认年份会再叠一层过滤，容易筛成 0 部。
+         复用这一个 change 处理器，不再额外 addEventListener（否则一次改选重绘两次）。 */
+      var y = $('#f-year'); if (y) y.value = '';
       if (!TAGS) {
         ensureTags().then(function () { applyBrowse(); });
         return;
@@ -75,6 +82,14 @@
         + names.map(function (n) {
           return '<option value="' + esc(n) + '">' + esc(n) + '（' + t[n].length + '）</option>';
         }).join('');
+      /* 选项到齐后再认 ?tag=（早于这里没有 option 可选中）；键不存在就忽略，不报错 */
+      var want = pickTagFromUrl();
+      if (want && TAGS && TAGS[want]) {
+        sel.value = want;
+        /* 标签深链跨年份：默认年份会再叠一层过滤，这里清空 */
+        var y = $('#f-year'); if (y) y.value = '';
+        applyBrowse();
+      }
     });
   }
 
@@ -101,5 +116,8 @@
     $('#morebtn').onclick = function () { renderBrowse(false); };
     ['#f-year', '#f-type', '#f-sort'].forEach(function (s) { $(s).addEventListener('change', applyBrowse); });
     mountTagFilter();
+    /* 首屏：标签索引若已在手就先选中再筛；还没加载时上面 mountTagFilter 会在拉完后补一次 */
+    var deepTag = pickTagFromUrl();
+    if (deepTag && TAGS && TAGS[deepTag]) { $('#f-tag').value = deepTag; $('#f-year').value = ''; }
     applyBrowse();
   }
