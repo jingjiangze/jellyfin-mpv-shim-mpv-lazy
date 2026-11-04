@@ -1,7 +1,13 @@
 /* 分集磁力层（架构无关附加层）
  *
  * 不依赖任何一方的数据/key 体系：监听 #modal 的内容变化，从弹窗标题取片名，
- * 按片名查分集索引，把分集 / 整季合集渲染成行式列表（.mgsect > .mgrows > .mgrow）。
+ * 按片名查分集索引，按字幕组渲染成可折叠的行式列表
+ * （.tgs > .mgteam[data-open] > .tg-h + .mgrows > .mgrow），不再分「分集 / 整季」两段。
+ * 组名口径：条目 g 键（后端算）→ 发布标题前缀 `[组名]` / `【组名】` → 「其他」。
+ * 自动向后端透传只在当季发生（只读 window.__CUR_SEASON；undefined = 还没判定 = 允许）；
+ * 非当季要透传只能点详情页 ⟳（window.__epsApi.reload）。
+ * 取源顺序：打开详情页时静态分片与后端 SQLite（/eps?db=1，no-store 无副作用）**并行**发，
+ * 先到先画、后到者条目数严格更多才重画；两边都空才按当季规则透传完整 /eps。
  *
  * 索引已分片：整份 7.5MB 在手机上首次点开卡片就要下完，太重。
  *   media/eps/index.json     清单（shards / count，几百字节）
@@ -14,6 +20,13 @@
 (function () {
   'use strict';
   var ENTRY = null, LOADING = false, LAST_NAME = null, BASE_I = -1, MANIFEST = null;
+  var REV = '';                        // reload() 期间的时间戳：只用于绕 HTTP 缓存
+  /* 刷新代号：每次 reload() 自增。打开详情页时发出的 A/B 在发起时记下当时的 EPOCH，
+     响应回来若已不是最新代号就整条作废（慢网下它可能比刷新结果更晚到）。 */
+  var EPOCH = 0;
+  /* 当前注入的 #epsbox 与它的渲染状态（{ e, cnt, ... }，arm() 里创建）。
+     reload() 拿新结果覆盖后要同步它，否则随后的旧响应会因「行数更多」把刷新盖回去。 */
+  var CUR_BOX = null, CUR_STATE = null;
   var BASES = [
     /* 数据集为主源：国内 CDN，实测 0.2–0.5s；后续几个只作兜底 */
     'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/eps/',
@@ -23,14 +36,6 @@
   ];
   var SHARDS = 16;
   var CACHE = {};                      // shardNo -> { 归一化片名: 条目 }
-
-  /* 登录态：/eps 的实时查询（不带 db=1）现在要 Bearer，公开索引分片与 /eps-save
-     回写仍匿名。与 src/90-boot.js 各定义一份——两个文件独立加载，不跨文件依赖。 */
-  var AUTH_BASE = 'https://120.48.56.189';
-  var TOKEN_KEY = 'gh_token';
-  function authToken() {
-    try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
-  }
 
   /* 与 src/shard_eps.py 的 shard_of 必须逐字节等价 */
   function hashOf(str) {
@@ -103,6 +108,16 @@
     });
   }
 
+  /* 防缓存参数。优先级：reload() 的时间戳（REV）> 构建版本（MANIFEST.v）> 不带。
+     时间戳必须在最前：线上清单一直带 `{"v":2,...}`，若让 v 优先，⟳ 刷新取到的
+     仍是同一个 URL，浏览器/CDN 缓存原样返回，刷新按钮就成了摆设。
+     BASES 全部以 `/` 结尾，query 必须接在文件名后面，别缀到目录上。 */
+  function bustUrl() {
+    if (REV) return '?v=' + REV;
+    if (MANIFEST && MANIFEST.v) return '?v=' + encodeURIComponent(String(MANIFEST.v));
+    return '';
+  }
+
   function loadManifest() {
     if (MANIFEST) return Promise.resolve(MANIFEST);
     var i = 0;
@@ -110,7 +125,7 @@
       (function next() {
         if (i >= BASES.length) return reject(new Error('no manifest'));
         var at = i++;
-        getJSON(BASES[at] + 'index.json').then(function (m) {
+        getJSON(BASES[at] + 'index.json' + bustUrl()).then(function (m) {
           if (!m || !m.shards || !m.count) throw new Error('bad manifest');
           MANIFEST = m;
           BASE_I = at;
@@ -130,7 +145,7 @@
       (function next() {
         if (k >= order.length) return reject(new Error('shard ' + n + ' unavailable'));
         var at = order[k++];
-        getJSON(BASES[at] + 's' + (n < 10 ? '0' + n : n) + '.json').then(function (d) {
+        getJSON(BASES[at] + 's' + (n < 10 ? '0' + n : n) + '.json' + bustUrl()).then(function (d) {
           if (!d) throw new Error('empty shard');
           CACHE[n] = d;
           resolve(d);
@@ -142,13 +157,24 @@
 
   /* 静态索引没覆盖到的片名，直接问边缘函数（它在服务端代打 pan-hub）。
      返回与索引条目同形状；拿不到就 null，界面照常显示「暂无按集索引」。 */
-  var LIVE = {}, LIVE_DOWN = false, NEED_LOGIN = false;
+  var LIVE = {}, LIVE_DOWN = false;
+  /* 401（实时查询要登录）与「后端连不上」必须分开：前者置 NEED_LOGIN、**不动** LIVE_DOWN，
+     否则界面会把「没登录」报成「后端暂时连不上」。reload() 每次开头清掉，手动重试。 */
+  var NEED_LOGIN = false;
 
   /* ---- 按需查询：浏览器直接调 120.48.56.189 的 /eps（nginx 服务端注入
      BasicAuth，客户端拿不到凭据）。盒子未备案、域名入口被百度墙拦，但
      https://120.48.56.189/ 用的是 IP 证书、浏览器直接信任，所以跨域可用；
      nginx 那边已放行本站来源的 CORS。---- */
   var LIVE_URL = 'https://120.48.56.189/eps';
+
+  /* 实时查询要登录：token 由 90-boot.js 的登录面板写入 localStorage['gh_token']。
+     本文件是独立 IIFE，拿不到 90-boot.js 的 authToken()，故各写一份。
+     `db=1`（纯 SQLite 查询）匿名可用，不要带这个头。 */
+  var TOKEN_KEY = 'gh_token';
+  function authToken() {
+    try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+  }
 
   /* 以下过滤规则与构建端 site-src/index_eps.py 一一对应：
      噪声（音乐单曲/整卷/合集）、整季包、剧场版、季号一致性、话数上限。
@@ -244,25 +270,33 @@
     }
     return 0;
   }
-  function fetchLive(name, epsN, orig) {
-    if (LIVE[name]) return Promise.resolve(LIVE[name]);
-    NEED_LOGIN = false;
+  /* force=1：跳过服务端 SQLite、强制重查上游并写回（详情页 ⟳ 用）。
+     强制刷新时不读 LIVE 缓存，但仍以最新结果覆盖它。 */
+  function fetchLive(name, epsN, orig, force) {
+    if (!force && LIVE[name]) return Promise.resolve(LIVE[name]);
     var u = LIVE_URL + '?kw=' + encodeURIComponent(name);
     if (orig) u += '&o=' + encodeURIComponent(orig);
+    if (force) u += '&force=1';
     var ctl = typeof AbortController === 'function' ? new AbortController() : null;
     var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
+    /* 登录态才带头：没 token 时连 headers 都不给（保持匿名简单请求的原样） */
     var tk = authToken();
-    var opt = ctl ? { signal: ctl.signal } : {};
+    var opt = {};
+    if (ctl) opt.signal = ctl.signal;
     if (tk) opt.headers = { authorization: 'Bearer ' + tk };
     return fetch(u, opt).then(function (r) {
       clearTimeout(timer);
-      /* 401 不按普通失败处理：未登录时重试多少次都是 401，也不写 LIVE 缓存，
-         由调用方在该条目位置挂登录入口（见 loginNoteHtml）。 */
-      if (r.status === 401) { NEED_LOGIN = true; throw new Error('login_required'); }
+      /* 401 = 实时查询要登录（后端已强制），不是网络故障：置 NEED_LOGIN，
+         并让错误带上 status，下面的 catch 才不会把它记成 LIVE_DOWN。 */
+      if (r.status === 401) {
+        NEED_LOGIN = true;
+        var e401 = new Error('login_required');
+        e401.status = 401;
+        throw e401;
+      }
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function (d) {
-      if (d && d.error === 'login_required') { NEED_LOGIN = true; return null; }
       /* 服务端现在优先查 SQLite，命中就直接回 {eps}；未命中才走上游并回 {eps}。
          两种形状都兼容：有 eps 就用，没有就退回本地过滤（旧版 responses）。 */
       var eps = (d && d.eps && Object.keys(d.eps).length) ? d.eps : null;
@@ -277,23 +311,52 @@
       var e = { n: name, eps: eps, batch: batch, live: 1 };
       LIVE[name] = e;
       /* 回传给服务器队列：CI 每轮把它并进静态索引，下次就是静态命中。
-         用 text/plain 发（简单请求，浏览器不预检），失败静默。 */
+         入库同样要登录态（带 Bearer）；text/plain 仍是简单请求，浏览器不预检。 */
       try {
+        var tk2 = authToken();
+        var hdr2 = { 'content-type': 'text/plain;charset=UTF-8' };
+        if (tk2) hdr2.authorization = 'Bearer ' + tk2;
         var ctl2 = typeof AbortController === 'function' ? new AbortController() : null;
         var t2 = setTimeout(function () { if (ctl2) ctl2.abort(); }, 8000);
         fetch(LIVE_URL + '-save', {
           method: 'POST',
-          headers: { 'content-type': 'text/plain;charset=UTF-8' },
+          headers: hdr2,
           body: JSON.stringify({ n: name, eps: eps, batch: (e && e.batch) || [] }),
           signal: ctl2 ? ctl2.signal : undefined
-        }).then(function () { clearTimeout(t2); }, function () { clearTimeout(t2); });
+        }).then(function (r) {
+          clearTimeout(t2);
+          /* 现在真的看 r.ok（旧代码连状态码都不读，401 被当成功）：失败只是这次没入库，
+             静默吞掉、不打断已渲染内容，也不再假装成功。 */
+          if (!r || !r.ok) return;
+        }, function () { clearTimeout(t2); });
       } catch (err) { /* 忽略：只是入库，不影响展示 */ }
       return e;
-    }).catch(function () {
-      /* 401 已由 NEED_LOGIN 单独标记：别把它算成「后端连不上」，也别进 LIVE 缓存 */
-      if (!NEED_LOGIN) LIVE_DOWN = true;
+    }).catch(function (err) {
+      /* 401 是「要登录」，不是「后端挂了」：只置 NEED_LOGIN，别碰 LIVE_DOWN，
+         否则界面会把没登录报成后端暂时连不上。 */
+      if (err && err.status === 401) { NEED_LOGIN = true; return null; }
+      LIVE_DOWN = true;
       return null;
     });
+  }
+
+  /* 只查服务端 SQLite（db=1）：响应 no-store、不打上游、不写库，所以和静态分片
+     并行发是安全的（无副作用）。命中/未命中都只想抢个先手：未命中、坏响应、
+     SQLite 挂掉一律 null，**不置 LIVE_DOWN**（库挂了不该把整条透传关掉）。 */
+  function dbLive(name) {
+    /* `&_=` 破缓存：服务端给了 cache-control: no-store，但 nginx 在同一个响应上
+       **又**加了一条 `Cache-Control: public, max-age=600`（双头并存），CF 有可能按
+       后者缓存 —— 那样「点进详情先读 SQLite」会读到 10 分钟前的库。URL 每次不同即
+       绕开，代价只是这条请求不复用缓存（SQLite 命中本来就只有几毫秒）。 */
+    var u = LIVE_URL + '?kw=' + encodeURIComponent(name) + '&db=1&_=' + Date.now();
+    return getJSON(u, 9000).then(function (d) {
+      /* miss:true 是「库里没有」，ok:false 视作坏响应；两者都当空 */
+      if (!d || d.miss || d.ok === false) return null;
+      var eps = (d.eps && Object.keys(d.eps).length) ? d.eps : {};
+      var batch = d.batch || [];
+      if (!Object.keys(eps).length && !batch.length) return null;
+      return { n: name, eps: eps, batch: batch, db: 1 };
+    }).catch(function () { return null; });
   }
 
   function resolveEntry(name) {
@@ -422,10 +485,67 @@
       + '<div class="mgrows">' + rows + '</div></div>';
   }
 
-  /* 分集 + 整季/合集两段（顺序同旧 render）。入参两种形状都吃：
-       epsListHtml(entry)       { eps: { 集号: [条目] }, batch: [...] }（70-modal.js 的 openMagView）
-       epsListHtml(eps, batch)  旧调用：入参直接是 eps 映射，合集走第二个参数 */
-  function epsListHtml(a, b) {
+  /* ---------------- 字幕组分组（纯函数，无副作用，可离线单测） ----------------
+     条目只有 { m, s, sd, sub, t }（后端新增 g），组名多数只能从发布标题前缀取：
+     实测 95% 的发布名以 `[组名]` / `【组名】` 开头。 */
+
+  var G_OTHER = '其他';
+  /* 前缀：[组名] / 【组名】，1–40 字且不含括号本身 */
+  var RE_GPREFIX = /^[\[【]([^\]】]{1,40})[\]】]/;
+
+  /* 前缀清洗：去首尾 【】[] 残片（`[【A】]` 会把 `【A` 抓进捕获组）；
+     分隔符两侧空格归一（`[Lilith - Raws]` 与 `[Lilith-Raws]` 落同一组）；
+     连续空格折叠成一个、**不删**（`[Nekomoe kissaten]` 要正常显示，不能挤成
+     `Nekomoekissaten`）；清完是空串时由调用方兜底成「其他」。 */
+  function cleanGroupName(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    s = s.replace(/^[\[\]【】\s]+/, '').replace(/[\[\]【】\s]+$/, '');
+    s = s.replace(/\s*([\-–—_/~|&+·・])\s*/g, '$1');
+    s = s.replace(/\s+/g, ' ');
+    return s.trim();
+  }
+
+  /* 组名判定顺序：g 键 → 标题前缀 → 「其他」 */
+  function groupNameOf(item) {
+    var g = cleanGroupName(item && item.g);
+    if (g) return g;
+    var m = RE_GPREFIX.exec(String((item && item.t) || '').trim());
+    return cleanGroupName(m && m[1]) || G_OTHER;
+  }
+
+  /* 集号：eps 映射的键优先；合集包（[01-12] / 第1-12话）与解析不出的返回 null → 排后面 */
+  function epNoOf(item, hint) {
+    var n = Number(hint);
+    if (n > 0) return n;
+    var t = String((item && item.t) || '');
+    if (!t || RE_PACK.test(t)) return null;
+    var nums = parseEpsTitle(t);
+    return nums.length === 1 ? nums[0] : null;
+  }
+
+  /* 组排序：中文排序，「其他」恒在最后（不再靠 localeCompare 把汉字排到英文后碰运气） */
+  function groupCmp(a, b) {
+    if (a === b) return 0;
+    if (a === G_OTHER) return 1;
+    if (b === G_OTHER) return -1;
+    return String(a).localeCompare(String(b), 'zh');
+  }
+
+  /* 组内排序：集号升序（合集垫底）→ 做种降序 → 体积降序 */
+  function rowCmp(a, b) {
+    var an = a.ep == null, bn = b.ep == null;
+    if (an !== bn) return an ? 1 : -1;
+    if (!an && a.ep !== b.ep) return a.ep - b.ep;
+    var x = a.it || {}, y = b.it || {};
+    return ((Number(y.sd) || 0) - (Number(x.sd) || 0))
+      || ((Number(y.s) || 0) - (Number(x.s) || 0));
+  }
+
+  /* 两种入参形状 → 扁平行 [{ it, ep, lab }]
+       { eps: { 集号: [条目] }, batch: [...] }（70-modal.js 的磁力视图 / 后端 live）
+       (eps, batch)（旧调用）
+     每个集号最多 3 条（旧口径）；batch 的行一律标「合集」，能解析出单个集号仍按集号排序。 */
+  function collectRows(a, b) {
     var eps = {}, batch = [];
     if (a && typeof a === 'object' && ('eps' in a || 'batch' in a)) {
       eps = a.eps || {};
@@ -434,39 +554,200 @@
       eps = a || {};
       batch = b || [];
     }
-    var nums = Object.keys(eps).map(Number)
-      .filter(function (n) { return n > 0; })
-      .sort(function (x, y) { return x - y; });
-    var rows = '', h = '';
-    nums.forEach(function (n) {
-      (eps[n] || []).slice(0, 3).forEach(function (c) { rows += rowOf(c, pad2(n)); });
+    var out = [];
+    Object.keys(eps).forEach(function (k) {
+      var n = Number(k);
+      if (!(n > 0)) return;                     // 非数字键（NaN）跳过，与旧实现一致
+      (eps[k] || []).slice(0, 3).forEach(function (c) {
+        out.push({ it: c, ep: n, lab: pad2(n) });
+      });
     });
-    if (rows) h += sectHtml('分集磁力', nums.length + ' 集 · 点击复制', rows);
-    /* 整季/合集：以前这些包（[01-12]、第01-26话、Batch）是被直接丢掉的，
-       实际它们往往是新番早期唯一能拿到的资源，单独成一段；.mgidx 位置写「合集」。 */
-    var brows = '';
-    (batch || []).forEach(function (c) { brows += rowOf(c, '合集'); });
-    if (brows) h += sectHtml('整季 / 合集', (batch || []).length + ' 个 · 点击复制', brows);
-    return h;
+    (batch || []).forEach(function (c) { out.push({ it: c, ep: epNoOf(c), lab: '合集' }); });
+    return out;
   }
 
-  /* 实时查询 401：给一行登录入口（.mnote 是既有的旁注样式，不用改 CSS）。
-     按钮走顶栏同一个登录面板（src/90-boot.js 在 window.__openLogin 上暴露），
-     不再跳外站：登录成功后回到当前页，面板自己重绘顶栏。 */
-  function loginNoteHtml() {
-    return '<div class="mnote">实时查询需登录 · '
-      + '<button class="mnote-btn" type="button" data-login="1">登录</button>'
-      + '</div>';
+  /* 扁平行 → 组 [{ name, rows }]，组序按 groupCmp、组内按 rowCmp */
+  function groupRows(rows) {
+    var map = Object.create(null), names = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (!r) continue;
+      var g = groupNameOf(r.it);
+      if (!map[g]) { map[g] = []; names.push(g); }
+      map[g].push(r);
+    }
+    names.sort(groupCmp);
+    return names.map(function (g) {
+      return { name: g, rows: map[g].slice().sort(rowCmp) };
+    });
+  }
+
+  /* 默认展开：组数 ≤ 6 全展开；> 6 只展开条目数最多的前 3 组（并列按组名序） */
+  function defaultOpen(groups) {
+    var open = Object.create(null), i;
+    if (groups.length <= 6) {
+      for (i = 0; i < groups.length; i++) open[groups[i].name] = 1;
+      return open;
+    }
+    var top = groups.map(function (g, j) { return j; })
+      .sort(function (p, q) { return groups[q].rows.length - groups[p].rows.length; })
+      .slice(0, 3);
+    for (i = 0; i < top.length; i++) open[groups[top[i]].name] = 1;
+    return open;
+  }
+
+  /* 全部组 → .tgs 容器。组头切换与行复制都走 arm() 挂在 #modal 上的委托。 */
+  function tgsHtml(groups) {
+    if (!groups.length) return '';
+    var open = defaultOpen(groups), h = '<div class="tgs">';
+    for (var i = 0; i < groups.length; i++) {
+      var g = groups[i], rows = '';
+      for (var j = 0; j < g.rows.length; j++) rows += rowOf(g.rows[j].it, g.rows[j].lab);
+      h += '<div class="mgteam" data-open="' + (open[g.name] ? '1' : '0') + '">'
+        + '<button class="tg-h" type="button" data-tg="' + escAttr(g.name) + '">'
+        + '<span class="tg-n">' + escText(g.name) + '</span>'
+        + '<span class="tg-c">' + g.rows.length + '</span>'
+        + '<span class="tg-x">›</span>'
+        + '</button>'
+        + '<div class="mgrows">' + rows + '</div>'
+        + '</div>';
+    }
+    return h + '</div>';
+  }
+
+  /* 按字幕组分组渲染（替换旧的「分集磁力」+「整季 / 合集」两段）。
+     入参两种形状都吃：
+       epsListHtml(entry)       { eps: { 集号: [条目] }, batch: [...] }（70-modal.js 的磁力视图）
+       epsListHtml(eps, batch)  旧调用：入参直接是 eps 映射，合集走第二个参数
+     同一组的条目在同一个 .mgrows 里平铺，.mgidx 写集号或「合集」。 */
+  function epsListHtml(a, b) {
+    return tgsHtml(groupRows(collectRows(a, b)));
   }
 
   function render(m, e) {
     var box = m.querySelector('#epsbox');
     if (!box) return;
-    /* 分集与整季/合集都由 epsListHtml 出（旧实现里单独拼的一段、以及「同范围多条
-       追加来源 N」的文本处理一并收进行渲染：合集行现在直接显示完整发布标题）。 */
+    /* 组头 + 行整段都由 epsListHtml 出（旧实现里「分集 / 整季 / 合集」两段拼接与
+       「同范围多条追加来源 N」的文本处理一并收进分组渲染）。 */
     var h = epsListHtml(e);
     box.innerHTML = h || '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
       + '<div class="eps-none">暂无按集索引</div></div>';
+  }
+
+  /* 入口带了可显示的内容吗：只有 batch、没有分集也算有 */
+  function hasRows(e) {
+    return !!(e && ((e.eps && Object.keys(e.eps).length) || (e.batch && e.batch.length)));
+  }
+
+  /* 条目数（与渲染同口径：collectRows 的行数）。两个数据源竞争时只有
+     「严格多于已渲染行数」才允许重画，等量/更少一律忽略，避免列表闪一下。 */
+  function epCount(e) {
+    return e ? collectRows(e).length : 0;
+  }
+
+  /* 片名身份键：只折空白与大小写，保留标点符号。paint() 用它判断「这块框现在装的是不是
+     同一部片」。不用现成的 norm()：它会把 ! ？ 【 】 一起去掉，《工作细胞》与《工作细胞!!》
+     会被判成同一部，正好就是「把 A 的磁力画进 B」的错法；也不用严格 ===：DOM 文本可能有
+     空白差异（全角空格 / 折叠空格），宁可少画也不能画错。 */
+  function titleKey(s) {
+    return String(s == null ? '' : s).replace(/\s+/g, '').toLowerCase();
+  }
+  function sameTitle(a, b) {
+    var x = titleKey(a);
+    return !!x && x === titleKey(b);
+  }
+
+  /* 把入口画进当前弹窗：详情页画 #epsbox；openMagView 那种整屏磁力视图画 #mgbody。
+     画之前先核对身份：取 #modal 里 h3 的片名与本次请求的片名比对，不一致（或取不到）就直接
+     返回不画 —— 刷新是 fire-and-forget、fetchLive 最长 15s，这期间用户完全可能已经打开另一部番，
+     旧结果必须整条丢掉。返回是否真的画了（reload 靠它决定要不要同步 state）。 */
+  function paint(e, titleHint) {
+    var m = document.getElementById('modal');
+    if (!m) return false;
+    var h3 = m.querySelector('h3');
+    var cur = h3 ? String(h3.textContent == null ? '' : h3.textContent).trim() : '';
+    /* 比对基准优先用调用方给的本次请求片名（详情页 title），没有才退回 e.n。
+       为什么不是只用 e.n：`resolveEntry` 交回来的是**分片里的索引名**（如
+       「进击的巨人 最终季 完结篇」），而 h3 显示的是站点标题（r[2]||r[1]），
+       两者在该片名上未必逐字相同 —— 只用 e.n 会把「刷新失败后回落静态分片」
+       这条路也一并误杀。 */
+    if (!sameTitle(cur, titleHint || (e && e.n))) return false;
+    if (m.querySelector('#epsbox')) { render(m, e); return true; }
+    var body = m.querySelector('#mgbody');
+    if (body) {
+      var h = epsListHtml(e);
+      body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';
+      return true;
+    }
+    return false;
+  }
+
+  /* reload() 的成功结果落地后，把「当前已渲染」推进到这份新结果：还在飞的旧响应随后到达时，
+     即使行数更多也过不了 take() 的 state.cnt 比较（与 epoch 守卫互为兜底）。 */
+  function syncState(e) {
+    if (!CUR_STATE || !CUR_BOX || !CUR_BOX.parentNode) return false;
+    var m = document.getElementById('modal');
+    if (!m || m.querySelector('#epsbox') !== CUR_BOX) return false;
+    CUR_STATE.e = e;
+    CUR_STATE.cnt = epCount(e);
+    CUR_STATE.got = true;
+    return true;
+  }
+
+  /* 手动刷新（详情页 ⟳）：清掉该片名的全部缓存层 → 分片（A）与 `force=1` 完整查询
+     并行（force 跳过 SQLite、强制重查上游并写回，回灌仍走 fetchLive 里的 /eps-save）。
+     force 拿到内容就以它为准；force 空/失败则回落到 A 的结果，而不是直接显示错误。
+     刷新不受 __CUR_SEASON 限制。orig 是本片原名（中文标题与发布名差得远时全靠它命中）。
+     返回 Promise，resolve 为最终入口或 null，不 reject。 */
+  function reload(name, epsN, orig) {
+    var n = String(name == null ? '' : name).trim();
+    var o = String(orig == null ? '' : orig).trim();   // 两参旧调用 → ''，保持向后兼容
+    if (!n) return Promise.resolve(null);
+    EPOCH++;                            // 作废打开详情页时还在飞的 A/B（见 take 的 epoch 守卫）
+    var my = EPOCH;
+    delete LIVE[n];
+    delete CACHE[shardOf(n)];
+    MANIFEST = null;
+    BASE_I = 0;
+    LIVE_DOWN = false;
+    NEED_LOGIN = false;                // 每次手动刷新都当「重新试一次登录」
+    REV = String(Date.now());          // 本次刷新的清单/分片 URL 带 ?v= 绕 HTTP 缓存
+    /* 占位只在框里还没有内容时写：已有内容保持不动，刷新失败也不会把列表清空
+       （进度反馈由 70-modal.js 的 ⟳ 按钮文字负责）。 */
+    var box = document.querySelector('#epsbox');
+    var body = box ? null : document.querySelector('#mgbody');
+    var phBox = null, phFail = '';
+    if (box && !String(box.innerHTML || '').trim()) {
+      phBox = box;
+      phFail = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
+        + '<div class="eps-none">磁力刷新失败，请重试</div></div>';
+      box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
+        + '<div class="eps-none">正在刷新…</div></div>';
+    } else if (body && !String(body.innerHTML || '').trim()) {
+      phBox = body;
+      phFail = '<div class="eps-none">磁力刷新失败，请重试</div>';
+      body.innerHTML = '<div class="eps-none">正在刷新…</div>';
+    }
+    function done(e) {
+      if (my !== EPOCH) return e || null;  // 期间又刷新了一次：这份结果作废，别回滚更新的那次
+      REV = '';                          // 时间戳只作用于这一次刷新
+      if (!e) {
+        /* 刷新没拿到内容：说成「失败」，别伪装成「暂无按集索引」；框里已有内容就原样留着 */
+        toast('磁力刷新失败，请重试');
+        if (phBox && phBox.parentNode) phBox.innerHTML = phFail;
+        return null;
+      }
+      if (!paint(e, n)) return e;         // 框里已经是别的番：宁可不画，也不串台
+      syncState(e);                       // 行数与 state 推进到新结果，旧响应再也盖不回来
+      return e;
+    }
+    var aP = resolveEntry(n);          // A：数据集分片（内部已 catch → null）
+    return fetchLive(n, Number(epsN) || 0, o, 1).then(function (live) {
+      if (hasRows(live)) return live;  // 强制查询拿到内容：以最新结果为准
+      return aP.then(function (a) {    // 否则回落分片，实在没有才交 null
+        return hasRows(a) ? a : (live || a || null);
+      });
+    }).then(done, function () { return done(null); });
   }
 
   /* ---- 点击复制：clipboard API 优先，失败回退 execCommand。统一返回 Promise<boolean> ---- */
@@ -534,15 +815,28 @@
     m.__epsObs = true;
     /* 事件委托：弹窗内容会被反复重写，不能给行逐个绑。
        认 .mgrow（行式列表）与旧的 span 胶囊 .eps-chip（兼容层，还带 data-m）。 */
+    /* 组头（.tg-h）只切 data-open。它不是 .mgrow，若放行到复制分支会读到空 data-m */
+    function toggleTeam(h) {
+      var g = h && h.closest ? h.closest('.mgteam') : null;
+      if (!g) return false;
+      g.setAttribute('data-open', g.getAttribute('data-open') === '1' ? '0' : '1');
+      return true;
+    }
     function onChip(ev) {
-      /* 401 登录入口：唤起顶栏登录面板（只暴露函数，拿不到内部状态就静默跳过） */
-      var lb = ev.target && ev.target.closest && ev.target.closest('[data-login]');
-      if (lb) {
+      var t = ev.target;
+      /* 登录提示（401 时渲染的 .mnote-btn）：先于复制分支接走，别落到 data-m 空值那一步 */
+      if (t && t.closest && t.closest('[data-login]')) {
         ev.preventDefault();
+        ev.stopPropagation();
         if (window.__openLogin) window.__openLogin();
         return;
       }
-      var c = ev.target && ev.target.closest && ev.target.closest('.mgrow, .eps-chip');
+      if (toggleTeam(t && t.closest ? t.closest('.tg-h') : null)) {
+        ev.preventDefault();
+        ev.stopPropagation();          // 别冒泡去触发卡片的开关逻辑
+        return;
+      }
+      var c = t && t.closest && t.closest('.mgrow, .eps-chip');
       if (!c) return;
       ev.preventDefault();
       ev.stopPropagation();            // 别冒泡去触发卡片的开关逻辑
@@ -555,10 +849,10 @@
     m.addEventListener('click', onChip);
     m.addEventListener('keydown', function (ev) {
       if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
-      /* <button class="mgrow"> 的 Enter/空格会原生发 click，这里只给旧的 span 胶囊补键位，
-         否则同一次按键会复制两次、连弹两次 toast（登录按钮同理：原生 click 已够，别重复唤起面板） */
+      /* .mgrow / .tg-h / .mnote-btn 都是 <button>，Enter/空格会原生发 click，这里只给旧的
+         span 胶囊补键位，否则同一次按键既切换/复制/登录一次、又再走一遍委托 */
       var t = ev.target;
-      if (t && t.closest && (t.closest('.mgrow') || t.closest('[data-login]'))) return;
+      if (t && t.closest && (t.closest('.mgrow') || t.closest('.tg-h') || t.closest('[data-login]'))) return;
       onChip(ev);
     });
     new MutationObserver(function () {
@@ -581,18 +875,45 @@
         + '<div class="eps-none">索引加载中…</div></div>';
       if (body) body.appendChild(box);
       else host.parentNode.insertBefore(box, host.nextSibling);
-      resolveEntry(name).then(function (e) {
-        /* 静态条目里可能只有整季包（batch）、没有分集，那种也算有内容 */
-        if (e && ((e.eps && Object.keys(e.eps).length) || (e.batch && e.batch.length))) return render(m, e);
+      /* 两条源并行：A = 数据集分片（resolveEntry，镜像备用），B = 服务端 SQLite
+         （dbLive → /eps?db=1，无副作用）。先到先画；后到者条目数**严格多于**
+         已渲染的才重画，等量/更少忽略（防闪烁）。A/B 都空才讨论透传。 */
+      var state = { e: null, cnt: 0, live: false, settled: 0, got: false };
+      var my = EPOCH;                 // 发起这次 A/B 的刷新代号：期间点过 ⟳ 就把结果作废
+      CUR_BOX = box;                  // 供 reload() 把行数 / state 同步到最新结果
+      CUR_STATE = state;
+      var origEl = m.querySelector('.orig');
+      var origName = origEl ? origEl.textContent.trim() : '';
+      /* 弹窗已被换片 / #epsbox 被重插：这次响应作废，别画进别人的框 */
+      function stale() { return !box.parentNode || m.querySelector('#epsbox') !== box; }
+      function take(e) {
+        if (my !== EPOCH) return false;          // 这几条是刷新前发出的旧响应
+        if (stale() || !hasRows(e)) return false;
+        var c = epCount(e);
+        if (c <= state.cnt) return false;
+        state.e = e;
+        state.cnt = c;
+        render(m, e);
+        return true;
+      }
+      function finish() {
+        /* A/B 都空：自动透传只限当季（__CUR_SEASON 由 70-modal.js 判定，
+           undefined = 还没判定 = 允许）。非当季到此为止，要查只能点详情页 ⟳。
+           刷新过就别再把「正在向后端查询…」写进已经换成新结果的框。 */
+        if (my !== EPOCH || stale() || state.cnt || state.live) return;
+        state.live = true;
+        if (window.__CUR_SEASON === false) { render(m, state.e); return; }
         box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
           + '<div class="eps-none">索引里没有，正在向后端查询…</div></div>';
-        var origEl = m.querySelector('.orig');
-        var origName = origEl ? origEl.textContent.trim() : '';
         return fetchLive(name, episodeCount(m), origName).then(function (live) {
+          if (stale()) return;
           if (live) return render(m, live);
-          if (NEED_LOGIN) {                      // 401：挂登录入口，别显示成「没有资源」
+          /* 401 先判：实时查询要登录，别报成「后端暂时连不上」。登录按钮由 #modal 上
+             的点击委托（[data-login] 分支）接走，调 90-boot.js 暴露的 window.__openLogin。 */
+          if (NEED_LOGIN) {
             box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
-              + loginNoteHtml() + '</div>';
+              + '<div class="mnote">实时查询需登录 · '
+              + '<button class="mnote-btn" type="button" data-login="1">登录</button></div></div>';
             return;
           }
           if (LIVE_DOWN) {                       // 后端连不上：说清楚，别装作"没有"
@@ -600,9 +921,16 @@
               + '<div class="eps-none">索引里没有，后端暂时连不上</div></div>';
             return;
           }
-          render(m, e);
+          render(m, state.e);
         });
-      });
+      }
+      function one(e) {
+        state.settled++;
+        if (take(e)) state.got = true;
+        if (!state.got && state.settled >= 2) finish();
+      }
+      resolveEntry(name).then(one, function () { one(null); });
+      dbLive(name).then(one, function () { one(null); });
     }).observe(m, { childList: true, subtree: false });
   }
 
@@ -613,7 +941,7 @@
   }
   document.addEventListener('DOMContentLoaded', arm);
 
-  /* 测试钩子：让离线脚本能验证匹配 / 分片逻辑（生产路径不使用） */
+  /* 测试钩子：让离线脚本能验证匹配 / 分片 / 分组逻辑（生产路径不使用） */
   window.__epsTest = {
     find: findByName,
     norm: norm,
@@ -623,6 +951,18 @@
     render: render,
     hashOf: hashOf,
     setIdx: function (d) { ENTRY = d; return ENTRY; },
+    /* 分组 / 排序 / 组名抽取：纯函数，供离线单测逐项断言 */
+    cleanGroupName: cleanGroupName,
+    groupNameOf: groupNameOf,
+    epNoOf: epNoOf,
+    collectRows: collectRows,
+    groupRows: groupRows,
+    defaultOpen: defaultOpen,
+    tgsHtml: tgsHtml,
+    bustUrl: bustUrl,
+    /* 刷新身份校验与"当前已渲染"状态：供离线脚本断言「刷新后 state 与 DOM 行数一致」 */
+    sameTitle: sameTitle,
+    curState: function () { return CUR_STATE; },
   };
 
   /* 磁力独立页用：这些函数本身不依赖 #modal，导出后可安全复用 */
@@ -631,6 +971,8 @@
     findByName: findByName, chipOf: chipOf, copyText: copyText, toast: toast,
     fmtSize: fmtSize, norm: norm, shardOf: shardOf, buildEps: buildEps,
     epsListHtml: epsListHtml, batchLabel: batchLabel, descOf: descOf,
-    live: function (name, epsN, orig) { return fetchLive(name, epsN, orig); }
+    live: function (name, epsN, orig) { return fetchLive(name, epsN, orig); },
+    /* 详情页 ⟳：清缓存 + 重查静态索引 + 无条件透传，返回 Promise */
+    reload: reload
   };
 })();
