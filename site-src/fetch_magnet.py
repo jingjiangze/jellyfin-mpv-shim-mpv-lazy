@@ -21,6 +21,7 @@ import json
 import os
 import pathlib
 import re
+import random
 import subprocess
 import sys
 import urllib.parse
@@ -118,6 +119,22 @@ def _res_rank(res):
     return 0
 
 
+def _magnet_of(it):
+    """取可复制磁力：mikan 结果的 magnet 字段为空，url 末尾是 40 位 infohash。
+
+    与 eps_filter.magnet_of 同一规则（那边早就补了，这里漏了 → 中文新番恒 0 命中）。
+    """
+    mg = str(it.get("magnet") or "")
+    if mg.startswith("magnet:"):
+        return mg
+    u = str(it.get("url") or "")
+    tail = u.rstrip("/").split("/")[-1].split("?")[0]
+    if re.fullmatch(r"[0-9a-fA-F]{40}", tail or ""):
+        return "magnet:?xt=urn:btih:" + tail
+    h = str(it.get("infohash") or "").strip()
+    return "magnet:?xt=urn:btih:" + h if re.fullmatch(r"[0-9a-fA-F]{40}", h) else ""
+
+
 def pick(name, payload):
     """从聚合结果里挑一条主磁力 + 至多 3 条备选。挑不到返回 None。"""
     key = norm(name)
@@ -125,9 +142,9 @@ def pick(name, payload):
         return None
     seen, cands = set(), []
     for it in payload.get("results") or []:
-        mg = it.get("magnet") or ""
-        if not mg.startswith("magnet:"):
-            continue  # 蜜柑这类只给 .torrent 的，没法当主磁力
+        mg = _magnet_of(it)
+        if not mg:
+            continue  # 既无 magnet 也没有可解析的 infohash，才真跳过
         bt = re.search(r"btih:([^&]+)", mg)
         h = bt.group(1).upper() if bt else mg
         if h in seen:
@@ -201,6 +218,8 @@ def main():
     cache = load_cache()
     jobs = [(k, n) for k, n in targets() if k not in cache]
     print(f"目标 {len(targets())} 条，已有缓存 {len(cache)} 条，本轮待抓 {len(jobs)} 条（上限 {LIMIT}）")
+    if len(jobs) > LIMIT:
+        random.shuffle(jobs)  # 不洗牌则每轮只抓同一批前 N 个，队尾永远轮不到
     jobs = jobs[:LIMIT]
     if not jobs:
         (SITE / "magnet.json").write_text(

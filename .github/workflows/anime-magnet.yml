@@ -4,6 +4,10 @@ name: anime-magnet
 # 定时统一由 .github/workflows/pipeline.yml 触发（保留 dispatch 供手工重跑）
 on:
   workflow_dispatch:
+  # 磁力新鲜度直接决定「新番能不能点开就下」，不能只押在 4 小时的 pipeline 上
+  # （实测 pipeline 的 cron 实际间隔 5.2–11.5 小时）。
+  schedule:
+    - cron: "25 */2 * * *"
 
 permissions:
   contents: write

@@ -20,7 +20,7 @@ for cand in ("site-src/data/magnet-eps.json", "media/magnet-eps.json"):
         except ValueError as e:
             print(f"base skip {cand}: {e}", flush=True)
 before = len(base)
-# 合并规则：空结果（eps 为空，来自 --mark-miss 的「查过但没结果」）不能覆盖
+# 合并规则：空结果（eps 与 batch 都为空，来自 --mark-miss 的「查过但没结果」）不能覆盖
 # 已有的非空结果 —— 否则每一轮抓空的分片都会把上一轮建好的分集磁力抹掉
 # （实测：1,420 部 → 1,154 部，丢了 266 部）。
 empty_over = 0
@@ -32,7 +32,10 @@ for f in sorted(glob.glob("eps/*/magnet-eps.json")):
         continue
     for k, v in part.items():
         old = base.get(k)
-        if old and (old.get("eps") or {}) and not ((v or {}).get("eps") or {}):
+        # eps 与 batch 都算「有结果」：只判 eps 会让「整季/合集」(batch) 被后到的
+        # 空记录冲掉 —— 实测 16 个分片各报成功、合并却只 +8 部，丢的正是 batch。
+        if old and (old.get("eps") or old.get("batch")) and not (
+                (v or {}).get("eps") or (v or {}).get("batch")):
             empty_over += 1
             continue
         base[k] = v

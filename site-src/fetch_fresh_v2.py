@@ -9,6 +9,7 @@
 import datetime
 import hashlib
 import json
+import os
 import pathlib
 import re
 import time
@@ -20,6 +21,9 @@ SITE = HERE / "site"
 PX = "http://127.0.0.1:7897"
 DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({"http": PX, "https": PX}))
+# CI 里没有本机 Clash：site-sync.yml 早就传了 NO_LOCAL_PROXY=1，但本脚本从未读过它
+# → tmdb_discover 全程打在 127.0.0.1:7897 上，异常又被吞掉，每轮稳定「TMDB discover: 0 部」。
+OPENER = DIRECT if os.environ.get("NO_LOCAL_PROXY") else PROXY
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 TMDB_KEY = "99bf884d2a3e8403ae8accded44ec73c"
@@ -72,11 +76,11 @@ def tmdb_discover(per=40, pages=2):
         url = f"{TMDB_BASE}/discover/movie?{qs}"
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
-            with PROXY.open(req, timeout=25) as x:
+            with OPENER.open(req, timeout=25) as x:
                 d = json.loads(x.read().decode("utf-8", "replace"))
             out += d.get("results") or []
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"! tmdb discover p{page} 失败：{type(e).__name__}: {e}", flush=True)
         time.sleep(0.8)
     return out
 
@@ -85,7 +89,7 @@ def tmdb_videos(movie_id):
     url = f"{TMDB_BASE}/movie/{movie_id}/videos?api_key={TMDB_KEY}&language=en-US"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": UA})
-        with PROXY.open(req, timeout=20) as x:
+        with OPENER.open(req, timeout=20) as x:
             d = json.loads(x.read().decode("utf-8", "replace"))
         for v in (d.get("results") or []):
             if v.get("site") == "YouTube" and v.get("type") == "Trailer":

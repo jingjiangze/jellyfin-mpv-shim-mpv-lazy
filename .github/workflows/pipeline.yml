@@ -26,7 +26,8 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 200
+    timeout-minutes: 240
+    # 各步上限之和 20+30+30+60+75=215 > 原 200 → 最坏情况 job 在收尾判定前被砍
     steps:
       - name: Run anime-catalog
         id: catalog
