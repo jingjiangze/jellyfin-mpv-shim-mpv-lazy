@@ -329,15 +329,24 @@ main.innerHTML = '<div class="home-head">' + head + '</div>'
 mountRanks();
 }
 var BROWSE = { view: [], shown: 0, page: 120 };
-function renderBrowse(reset) {
+function renderBrowse(mode) {
 var grid = $('#grid');
 if (!grid) return;
-if (reset) { grid.innerHTML = ''; BROWSE.shown = 0; }
-var end = Math.min(BROWSE.shown + BROWSE.page, BROWSE.view.length);
+var want;
+if (mode === 'more') {
+want = Math.min(BROWSE.shown + BROWSE.page, BROWSE.view.length);
+} else {
+want = mode === 'repaint'
+? Math.min(Math.max(BROWSE.shown, BROWSE.page), BROWSE.view.length)
+: Math.min(BROWSE.page, BROWSE.view.length);
+grid.innerHTML = '';
+BROWSE.shown = 0;
+}
 var html = '';
-for (var i = BROWSE.shown; i < end; i++) html += animeCard(BROWSE.view[i], { showYear: 1 });
+for (var i = BROWSE.shown; i < want; i++) html += animeCard(BROWSE.view[i], { showYear: 1 });
+if (!BROWSE.view.length) html = '<div class="empty">这个组合没有作品 —— 换个年份/类型，或点「全部」再试</div>';
 grid.insertAdjacentHTML('beforeend', html);
-BROWSE.shown = end;
+BROWSE.shown = want;
 var left = BROWSE.view.length - BROWSE.shown;
 $('#morewrap').hidden = left <= 0;
 if (left > 0) $('#morebtn').textContent = '加载更多 · 还剩 ' + left + ' 部';
@@ -371,7 +380,23 @@ return (b[7] || 0) - (a[7] || 0);
 });
 else if (sort === 'name') BROWSE.view.sort(function (a, b) { return String(a[2] || a[1]).localeCompare(String(b[2] || b[1]), 'zh'); });
 else BROWSE.view.sort(function (a, b) { return (b[4] || 0) - (a[4] || 0) || (b[7] || 0) - (a[7] || 0); });
-renderBrowse(reset === true ? false : true);
+renderBrowse(reset === true ? 'repaint' : 'reset');
+[['#f-year', y], ['#f-type', t], ['#f-tag', tg]].forEach(function (p) {
+var el = $(p[0]);
+if (!el) return;
+var lb = el.closest('.f-label');
+if (lb) lb.classList.toggle('on', !!p[1]);
+});
+var so = $('#f-sort');
+if (so) {
+var sl = so.closest('.f-label');
+if (sl) sl.classList.toggle('on', sort !== 'year');
+}
+var yl = $('#f-year');
+if (yl) {
+var ylb = yl.closest('.f-label');
+if (ylb) ylb.classList.toggle('off', !!(q && y));
+}
 }
 var TAGS = null;
 function pickTagFromUrl() {
@@ -431,7 +456,7 @@ $('#main').innerHTML = '<div class="filters">'
 + '<div class="grid" id="grid"></div>'
 + '<div class="morewrap" id="morewrap" hidden><button class="morebtn" id="morebtn" type="button"></button></div>';
 $('#f-year').value = ys[0] ? String(ys[0]) : '';
-$('#morebtn').onclick = function () { renderBrowse(false); };
+$('#morebtn').onclick = function () { renderBrowse('more'); };
 ['#f-year', '#f-type', '#f-sort'].forEach(function (s) { $(s).addEventListener('change', applyBrowse); });
 mountTagFilter();
 var deepTag = pickTagFromUrl();
@@ -606,12 +631,9 @@ m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
 +       '<span><b>—</b><i>想看</i></span><span><b>—</b><i>在看</i></span><span><b>—</b><i>看过</i></span>'
 +     '</div>'
 +     '<div class="acts">'
-+       '<span class="btn pri" id="watch" type="button">开始观看</span>'
++       '<span class="btn pri" id="watch" role="button" tabindex="0">开始观看</span>'
 +       '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
-+       '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
 +       (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
-+       '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
-+       '<button class="btn" id="mgopen" type="button">磁力详情</button>'
 +       '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
 +         encodeURIComponent(title) + '">B 站搜索</a>'
 +     '</div>'
@@ -635,17 +657,8 @@ m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
 $('#mask').classList.add('on');
 m.querySelector('.x').onclick = close;
 var wb = m.querySelector('#watch');
-if (wb) wb.onclick = function () {
-var box = host.querySelector('#epsbox');
-if (box && box.querySelector('[data-m]')) {
-box.scrollIntoView({ behavior: 'smooth', block: 'center' });
-box.classList.add('flash');
-setTimeout(function () { box.classList.remove('flash'); }, 1200);
-return;
-}
-var bp = host.querySelector('#bplay');
-if (bp) { bp.click(); return; }
-window.open('https://bgm.tv/subject/' + id, '_blank');
+if (wb) wb.onkeydown = function (ev) {
+if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); wb.click(); }
 };
 var fb = m.querySelector('#favbtn');
 if (fb) {
@@ -658,8 +671,6 @@ fb.textContent = now ? '★ 已追' : '☆ 追番';
 fb.classList.toggle('on', now);
 };
 }
-var mgb = m.querySelector('#mgopen');
-if (mgb) mgb.onclick = function () { openMagView(id, title, r[8] || 0); };
 if (ex[2]) {
 $('#play').onclick = function () {
 if (host.querySelector('.trailer')) return;
@@ -921,13 +932,18 @@ return biliGet('reply', { aid: v.aid, ps: 20 }).then(function (d) { renderRp(m.q
 }
 };
 });
-var bp = m.querySelector('#bplay');
+var bp = m.querySelector('#watch');
 if (bp) {
 bp.onclick = function () {
 bp.textContent = '匹配中…';
 biliResolve(id, title, year).then(function (v) {
-if (!v || !v.pages || !v.pages.length) { bp.textContent = '▶ B 站弹幕播放'; bp.setAttribute('data-miss', '1'); return; }
-bp.textContent = '▶ B 站弹幕播放';
+if (!v || !v.pages || !v.pages.length) {
+bp.textContent = '未找到 B 站源';
+bp.setAttribute('data-miss', '1');
+setTimeout(function () { bp.textContent = '开始观看'; }, 2200);
+return;
+}
+bp.textContent = '开始观看';
 var page = 1;
 var on = m.querySelector('#pdm [data-pg].on');
 if (on) page = Number(on.getAttribute('data-pg')) || 1;
@@ -960,6 +976,7 @@ d.className = 'trailer';
 d.innerHTML = '<iframe src="' + mkSrc(page) + '" '
 + 'allow="autoplay; fullscreen" allowfullscreen referrerpolicy="no-referrer"></iframe>';
 m.appendChild(d);
+d.scrollIntoView({ behavior: 'smooth', block: 'center' });
 var selEl = m.querySelector('#bsel');
 if (selEl) {
 selEl.value = String(page);
