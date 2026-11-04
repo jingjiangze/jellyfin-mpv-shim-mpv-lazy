@@ -13,7 +13,7 @@
  *   5. 结构契约（其它模块依赖，别改）：#modal 内 h3 文本 = 片名；.acts 是
  *      分集磁力的插入锚点；.relhead 是插入块自己的小标题；#epsbox 与 .relbox
  *      是同一个元素；#plot / #tags / #prt / #pdm / #prp / #watch / #favbtn /
- *      #play / #bplay / #mgopen / #mvotes / #rdist 这些 id 都还在用。
+ *      #play / #mvotes / #rdist 这些 id 都还在用。
  *   6. 兼容层：详情弹窗旧结构 .mhd / .mb / .mrate / .plot / .tags / .infobox /
  *      .staffrow，以及磁力胶囊 .eps-chip / .epsgrid / #epsbox 仍在产出，
  *      规则保留在「详情弹窗（旧结构兼容）」与「分集磁力胶囊」两节。
@@ -2178,7 +2178,7 @@ main {
     padding: 0 var(--s3);
   }
 
-  /* 详情弹窗动作区：满幅 sheet 下 6 个按钮排成 2 列 3 行，右端不再参差 */
+  /* 详情弹窗动作区：满幅 sheet 下按钮排成 2 列，右端不再参差 */
   .acts {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2555,4 +2555,9 @@ main {
 /* 星期组写死 4 列网格导致 8 个胶囊必分两行；宽屏恢复单行，窄屏仍用网格/横滑。 */
 @media (min-width: 1101px) {
   .levels .chips.chips--wd { display: flex; flex-wrap: nowrap; }
+}
+
+/* 详情按钮组：删掉 Bangumi/B站弹幕播放/磁力详情后，移动端 2 列网格在奇数项时右下留半格，最后一个按钮通栏。 */
+@media (max-width: 760px) {
+  .acts .btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }

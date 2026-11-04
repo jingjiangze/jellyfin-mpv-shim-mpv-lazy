@@ -45,12 +45,9 @@
       +       '<span><b>—</b><i>想看</i></span><span><b>—</b><i>在看</i></span><span><b>—</b><i>看过</i></span>'
       +     '</div>'
       +     '<div class="acts">'
-      +       '<span class="btn pri" id="watch" type="button">开始观看</span>'
+      +       '<span class="btn pri" id="watch" role="button" tabindex="0">开始观看</span>'
       +       '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
-      +       '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
       +       (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
-      +       '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
-      +       '<button class="btn" id="mgopen" type="button">磁力详情</button>'
       +       '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
       +         encodeURIComponent(title) + '">B 站搜索</a>'
       +     '</div>'
@@ -74,20 +71,10 @@
     $('#mask').classList.add('on');
     m.querySelector('.x').onclick = close;
 
-    /* 开始观看：优先跳分集磁力（真能下载），其次 B 站弹幕播放，最后开 Bangumi 页 */
+    /* 开始观看 = B 站弹幕播放：点击绑定在 bindBili（80-bili.js），这里只补键盘可达性 */
     var wb = m.querySelector('#watch');
-    if (wb) wb.onclick = function () {
-      var box = host.querySelector('#epsbox');
-      /* 只要 #epsbox 里已经有可点的磁力条目（旧胶囊 .eps-chip / 新行 .mgrow 都带 data-m）就直接滚过去 */
-      if (box && box.querySelector('[data-m]')) {
-        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        box.classList.add('flash');
-        setTimeout(function () { box.classList.remove('flash'); }, 1200);
-        return;
-      }
-      var bp = host.querySelector('#bplay');
-      if (bp) { bp.click(); return; }
-      window.open('https://bgm.tv/subject/' + id, '_blank');
+    if (wb) wb.onkeydown = function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); wb.click(); }
     };
 
     /* 追番：复用卡片星标同一套存储（key 用条目 id） */
@@ -102,10 +89,6 @@
         fb.classList.toggle('on', now);
       };
     }
-
-    /* 磁力详情：同一个弹窗内整屏切到该番的分集 / 合集磁力视图（见 openMagView） */
-    var mgb = m.querySelector('#mgopen');
-    if (mgb) mgb.onclick = function () { openMagView(id, title, r[8] || 0); };
 
     if (ex[2]) {
       $('#play').onclick = function () {

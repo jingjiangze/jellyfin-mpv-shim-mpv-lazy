@@ -138,13 +138,18 @@
         }
       };
     });
-    var bp = m.querySelector('#bplay');
+    var bp = m.querySelector('#watch');
     if (bp) {
       bp.onclick = function () {
         bp.textContent = '匹配中…';
         biliResolve(id, title, year).then(function (v) {
-          if (!v || !v.pages || !v.pages.length) { bp.textContent = '▶ B 站弹幕播放'; bp.setAttribute('data-miss', '1'); return; }
-          bp.textContent = '▶ B 站弹幕播放';
+          if (!v || !v.pages || !v.pages.length) {
+            bp.textContent = '未找到 B 站源';
+            bp.setAttribute('data-miss', '1');
+            setTimeout(function () { bp.textContent = '开始观看'; }, 2200);
+            return;
+          }
+          bp.textContent = '开始观看';
           var page = 1;
           var on = m.querySelector('#pdm [data-pg].on');
           if (on) page = Number(on.getAttribute('data-pg')) || 1;
@@ -179,6 +184,7 @@
           d.innerHTML = '<iframe src="' + mkSrc(page) + '" '
             + 'allow="autoplay; fullscreen" allowfullscreen referrerpolicy="no-referrer"></iframe>';
           m.appendChild(d);
+          d.scrollIntoView({ behavior: 'smooth', block: 'center' });
           var selEl = m.querySelector('#bsel');
           if (selEl) {
             selEl.value = String(page);
