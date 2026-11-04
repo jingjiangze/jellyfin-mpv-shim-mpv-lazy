@@ -7,15 +7,11 @@
     'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/',
     './data/'
   ];
-  /* opts.bust：给三个源都加同一个 ?v=时间戳（刷新按钮用来绕开浏览器与 CDN 的旧副本）。
-     时间戳一次算好、三源共用，避免一次逻辑取数出现三个不同版本号。 */
-  function jd(name, opts) {
-    var v = opts && opts.bust ? Date.now() : 0;
+  function jd(name) {
     var i = 0;
     function go() {
       if (i >= D_BASES.length) return Promise.reject(new Error('data ' + name + ' 三源都失败'));
       var u = D_BASES[i++] + name;
-      if (v) u += (u.indexOf('?') < 0 ? '?' : '&') + 'v=' + v;
       /* 每个源限时 12s：源挂起时 fetch 永不 settle，弹窗会卡在「加载中…」 */
       var ctl = typeof AbortController === 'function' ? new AbortController() : null;
       var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 12000);
@@ -31,10 +27,7 @@
   }
 
   var ANI = { poster: '', posterSd: '', rows: [], extra: {}, year: 0 };
-  var shardCache = {};                 // 分片号（id % 64）-> 该分片的 promise
-  /* 丢弃某个分片的缓存：刷新按钮先 dropShard 再带 bust 重取，否则会直接命中旧 promise。
-     全部源码打包进同一个 IIFE，所以这里是「导出」给 70-modal.js 用的共享函数。 */
-  function dropShard(sfx) { delete shardCache[sfx]; }
+  var shardCache = {};
 
   var TAGCNT = {}, TAGCNT_LOADING = false, TAGCNT_WAIT = [];
   /* 标签全站计数：单独一份小表。首次拉取成功/失败都要复位 LOADING（旧实现成功分支

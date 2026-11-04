@@ -206,8 +206,14 @@ jobs:
           set -euo pipefail
           rm -rf build-out && mkdir -p build-out/data
           # 磁力页已删（2026-11-03）：magnet.html 不再产出，别再 cp 它，否则整步失败、部署被跳过
-          # 新增页面（如 fav.html）必须同时加进本行与 Sync posters 步骤的 cp，否则 Snapshot 整步失败、部署被跳过
-          cp site-src/site/index.html site-src/site/anime.html site-src/site/movie.html site-src/site/rank.html site-src/site/fav.html build-out/
+          # 必需页缺失要报错；可选页（如 fav.html）存在才拷 —— 构建脚本暂未产出时不会把整步打挂
+          for pg in index anime movie rank; do
+            [ -f "site-src/site/$pg.html" ] || { echo "::error::缺少必需页面 $pg.html"; exit 1; }
+            cp "site-src/site/$pg.html" build-out/
+          done
+          for pg in fav; do
+            [ -f "site-src/site/$pg.html" ] && cp "site-src/site/$pg.html" build-out/
+          done
           # HTML 现在是骨架，样式与脚本拆成独立文件（由 build_site 写出）
           cp -f site-src/site/style.css site-src/site/app.js build-out/
 
