@@ -2238,7 +2238,7 @@ main {
   }
 
   .mainnav a {
-    padding: 9px 8px;
+    padding: 9px 7px;
     font-size: var(--fs-xs);
   }
 
@@ -2252,6 +2252,11 @@ main {
   .thm {
     width: 32px;
     height: 32px;
+  }
+
+  /* 高度沿用 760 块的 32px，仅收紧左右内边距，给导航让出 4px */
+  #cnt .login {
+    padding: 0 10px;
   }
 
   .mhero, .mhd {
