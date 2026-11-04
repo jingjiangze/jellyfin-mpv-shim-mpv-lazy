@@ -90,13 +90,70 @@ var a = favEntries(), k = String(id), i = -1;
 a.forEach(function (e, n) { if (i < 0 && e.id === k) i = n; });  // 旧格式已解包，两种都能删
 if (i >= 0) a.splice(i, 1); else a.push({ id: k, t: Date.now() });
 try { localStorage.setItem(FAV_KEY, JSON.stringify(a)); } catch (e) { /* 忽略 */ }
-return i < 0;
+var now = i < 0;
+var tk = followToken();
+if (tk) {
+try {
+fetch(FOLLOW_API, {
+method: 'POST',
+headers: { 'content-type': 'application/json', authorization: 'Bearer ' + tk },
+body: JSON.stringify({ id: k, on: now })
+}).catch(function () { /* 静默：本地已写入，不弹错、不回滚 */ });
+} catch (e) { /* fetch 不可用 / 同步抛错也忽略：本地已写入 */ }
+}
+return now;
+}
+var FOLLOW_API = 'https://120.48.56.189/auth/follow';
+function followToken() {
+try { return localStorage.getItem('gh_token') || ''; } catch (e) { return ''; }
+}
+function mergeRemote(items) {
+if (!items || !items.length) return false;
+var before = favEntries(), after = before.slice();
+items.forEach(function (it) {
+if (!it || it.id == null) return;
+var k = String(it.id), i = -1;
+after.forEach(function (e, n) { if (i < 0 && e.id === k) i = n; });
+if (it.on === true || Number(it.on) === 1) {
+if (i < 0) {
+var t = Number(it.ts);
+after.push({ id: k, t: isFinite(t) && t > 0 ? t : Date.now() });
+}
+} else if (it.on === false || Number(it.on) === 0) {
+if (i >= 0) after.splice(i, 1);
+}
+});
+var same = after.length === before.length;
+if (same) {
+for (var n = 0; n < after.length; n++) {
+if (!(after[n].id === before[n].id && after[n].t === before[n].t)) { same = false; break; }
+}
+}
+if (same) return false;
+try { localStorage.setItem(FAV_KEY, JSON.stringify(after)); } catch (e) { /* 忽略 */ }
+return true;
+}
+function pullFollow() {
+var tk = followToken();
+if (!tk) return;
+try {
+fetch(FOLLOW_API, { headers: { authorization: 'Bearer ' + tk } })
+.then(function (r) { return r.ok ? r.json() : null; })
+.then(function (d) {
+if (!d || !d.ok || !d.items) return;
+if (mergeRemote(d.items)) {
+try { document.dispatchEvent(new CustomEvent('favchange')); } catch (e) { /* 忽略 */ }
+}
+})
+.catch(function () { /* 静默：追番是增值功能，拉不到不影响任何页面渲染 */ });
+} catch (e) { /* fetch 不可用 / 同步抛错也忽略 */ }
 }
 var PSZ = { mode: 'hd' };
 try {
 var _psz = localStorage.getItem('psz');
 if (_psz === 'hd' || _psz === 'sd') PSZ.mode = _psz;
 } catch (e) { /* 隐私模式 / file:// 下 localStorage 可能不可用，忽略 */ }
+pullFollow();
 function fbAttr(list) {
 var q = list.filter(Boolean);
 return q.length ? ' data-fb="' + esc(q.join('|')) + '" onerror="__fb(this)"' : '';
@@ -283,8 +340,8 @@ return animeCard(r, { showYear: 0 });
 body = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
 }
 main.innerHTML = '<div class="home-cols">' + renderLevels()
-+ '<div class="home-main"><div class="home-head">' + head + '</div>'
-+ body + '</div></div>';
++ '<div class="home-main"><div class="home-head">' + head + '</div>' + body
++ '</div></div>';
 main.querySelectorAll('[data-q]').forEach(function (b) {
 b.onclick = function () { HOME.q = Number(b.dataset.q); HOME.wd = 0; renderHome(); };
 });
@@ -384,6 +441,9 @@ else BROWSE.view.sort(function (a, b) { return (b[4] || 0) - (a[4] || 0) || (b[7
 renderBrowse(reset === true ? false : true);
 }
 var TAGS = null;
+function pickTagFromUrl() {
+try { return new URLSearchParams(location.search).get('tag') || ''; } catch (e) { return ''; }
+}
 function ensureTags() {
 if (TAGS) return Promise.resolve(TAGS);
 return jd('tags.json').then(function (d) {
@@ -395,6 +455,7 @@ function mountTagFilter() {
 var sel = $('#f-tag');
 if (!sel) return;
 sel.onchange = function () {
+var y = $('#f-year'); if (y) y.value = '';
 if (!TAGS) {
 ensureTags().then(function () { applyBrowse(); });
 return;
@@ -409,6 +470,12 @@ sel.innerHTML = '<option value="">全部</option>'
 + names.map(function (n) {
 return '<option value="' + esc(n) + '">' + esc(n) + '（' + t[n].length + '）</option>';
 }).join('');
+var want = pickTagFromUrl();
+if (want && TAGS && TAGS[want]) {
+sel.value = want;
+var y = $('#f-year'); if (y) y.value = '';
+applyBrowse();
+}
 });
 }
 function initBrowse() {
@@ -434,6 +501,8 @@ $('#f-year').value = ys[0] ? String(ys[0]) : '';
 $('#morebtn').onclick = function () { renderBrowse(false); };
 ['#f-year', '#f-type', '#f-sort'].forEach(function (s) { $(s).addEventListener('change', applyBrowse); });
 mountTagFilter();
+var deepTag = pickTagFromUrl();
+if (deepTag && TAGS && TAGS[deepTag]) { $('#f-tag').value = deepTag; $('#f-year').value = ''; }
 applyBrowse();
 }
 var MOVIE = { all: [], view: [], shown: 0, page: 120, db: [], tm: [] };
@@ -571,7 +640,8 @@ function renderTags(rec, el) {
 if (!el) return;
 el.innerHTML = (rec.tags || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; }).slice(0, 12).map(function (t) {
 var n = TAGCNT[t];
-return '<span class="tagpill">' + esc(t) + (n ? '<em>' + n + '</em>' : '') + '</span>';
+var href = './anime.html?tag=' + encodeURIComponent(t);
+return '<a class="tagpill" href="' + esc(href) + '">' + esc(t) + (n ? '<em>' + n + '</em>' : '') + '</a>';
 }).join('');
 }
 function fmtUpd(nextAt, wd) {
@@ -1021,7 +1091,42 @@ if (fr) fr.src = mkSrc(Number(selEl.value) || 1);
 };
 }
 }
-window.__CUR_SEASON = false;
+var THEME_KEY = 'theme';
+function currentTheme() {
+try {
+var t = localStorage.getItem(THEME_KEY);
+if (t === 'light' || t === 'dark') return t;
+} catch (e) { /* 隐私模式 */ }
+return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+}
+function applyTheme(t) {
+document.documentElement.setAttribute('data-theme', t);
+var b = document.getElementById('thm');
+if (b) {
+b.textContent = t === 'dark' ? '☾' : '☀';
+b.setAttribute('aria-label', t === 'dark' ? '切到浅色' : '切到深色');
+b.title = b.getAttribute('aria-label');
+}
+}
+function toggleTheme() {
+var next = currentTheme() === 'dark' ? 'light' : 'dark';
+try { localStorage.setItem(THEME_KEY, next); } catch (e) { }
+applyTheme(next);
+}
+applyTheme(currentTheme());
+var AUTH_BASE = 'https://120.48.56.189';
+var TOKEN_KEY = 'gh_token';
+var AUTH_PENDING = '';
+var AUTH_LOGIN = '';
+function authToken() {
+try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+}
+(function grabToken() {
+var m = /(?:^|[#&])t=([a-f0-9]{32,})/i.exec(location.hash || '');
+if (!m) return;
+try { localStorage.setItem(TOKEN_KEY, m[1]); } catch (e) { /* 隐私模式忽略 */ }
+try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { }
+})();
 function repaint() {
 if (PAGE === 'anime') applyBrowse(true);
 else if (PAGE === 'movie') refreshMovie(true);
@@ -1046,6 +1151,315 @@ if ($('#mask')) close();
 repaint();
 };
 }
+function loginBtnHtml() {
+return '<button class="login" id="loginbtn" type="button">登录</button>';
+}
+function paintLoginEntry(el) {
+el.title = '';
+el.onclick = function (e) {
+if (e && e.target && e.target.id === 'loginbtn') openAuthPanel();
+};
+el.innerHTML = loginBtnHtml();
+}
+var authEsc = null;
+function openAuthPanel(mode) {
+if (document.getElementById('authmask')) return;
+if (mode === 'account' && !authToken()) mode = '';
+var mask = document.createElement('div');
+mask.className = 'authmask';
+mask.id = 'authmask';
+mask.innerHTML = '<div class="authcard" role="dialog" aria-modal="true">'
++ '<button class="authx" type="button" aria-label="关闭">×</button>'
++ '<div class="authbody" data-t="email">'
++ '<label class="authfield"><span>邮箱</span><input id="authemail" type="email" autocomplete="username"'
++ ' placeholder="you@example.com"></label>'
++ '<label class="authfield"><span>密码</span><input id="authpw" type="password" autocomplete="current-password"'
++ ' placeholder="至少 8 位"></label>'
++ '<div class="autherr" id="autherr"></div>'
++ '<div class="authacts">'
++ '<button class="btn pri" id="authlogin" type="button">登录</button>'
++ '<button class="btn" id="authreg" type="button">注册</button>'
++ '</div>'
++ '</div>'
++ '<div class="authbody" data-t="verify" hidden>'
++ '<p class="authhint" id="authverifyhint">验证码已发到你的邮箱，10 分钟内有效。</p>'
++ '<label class="authfield"><span>验证码</span><input id="authcode" inputmode="numeric" maxlength="6"'
++ ' placeholder="6 位数字"></label>'
++ '<div class="autherr" id="authcodeerr"></div>'
++ '<div class="authacts">'
++ '<button class="btn pri" id="authconfirm" type="button">确认</button>'
++ '<button class="btn" id="authresend" type="button">重新发送</button>'
++ '</div>'
++ '</div>'
++ '<div class="authbody" data-t="account" hidden>'
++ '<p class="authhint" id="accthint">已登录</p>'
++ '<label class="authfield"><span>原密码</span><input id="acctold" type="password"'
++ ' autocomplete="current-password"></label>'
++ '<label class="authfield"><span>新密码</span><input id="acctnew" type="password"'
++ ' autocomplete="new-password" placeholder="至少 8 位"></label>'
++ '<div class="autherr" id="accterr"></div>'
++ '<div class="authacts">'
++ '<button class="btn pri" id="acctsave" type="button">修改密码</button>'
++ '<button class="btn" id="acctout" type="button">退出登录</button>'
++ '</div>'
++ '</div>'
++ '</div>';
+document.body.appendChild(mask);
+mask.querySelector('.authx').onclick = closeAuthPanel;
+mask.addEventListener('click', function (e) { if (e.target.id === 'authmask') closeAuthPanel(); });
+mask.querySelector('#authlogin').onclick = function () { submitAuth('login'); };
+mask.querySelector('#authreg').onclick = function () { submitAuth('register'); };
+mask.querySelector('#authconfirm').onclick = confirmCode;
+mask.querySelector('#authresend').onclick = resendCode;
+mask.querySelector('#acctsave').onclick = changePassword;
+mask.querySelector('#acctout').onclick = logoutAccount;
+mask.querySelectorAll('.authfield input').forEach(function (inp) {
+if (inp.id === 'authcode' || inp.id === 'acctold' || inp.id === 'acctnew') return;
+inp.addEventListener('keydown', function (e) {
+if (e.key === 'Enter') { e.preventDefault(); submitAuth('login'); }
+});
+});
+var acode = document.getElementById('authcode');
+if (acode) acode.addEventListener('keydown', function (e) {
+if (e.key === 'Enter') { e.preventDefault(); confirmCode(); }
+});
+var acctFields = ['acctold', 'acctnew'].map(function (id) { return document.getElementById(id); });
+acctFields.forEach(function (inp) {
+if (!inp) return;
+inp.addEventListener('keydown', function (e) {
+if (e.key === 'Enter') { e.preventDefault(); changePassword(); }
+});
+});
+authEsc = function (e) { if (e.key === 'Escape') closeAuthPanel(); };
+document.addEventListener('keydown', authEsc);
+showAuthView(mode === 'account' ? 'account' : 'email');
+var first = document.getElementById(mode === 'account' ? 'acctold' : 'authemail');
+if (first) first.focus();
+}
+function showAuthView(name) {
+var mask = document.getElementById('authmask');
+if (!mask) return;
+mask.querySelectorAll('.authbody').forEach(function (x) {
+x.hidden = x.getAttribute('data-t') !== name;
+});
+if (name === 'account') {
+var hint = document.getElementById('accthint');
+if (hint) hint.textContent = '已登录' + (AUTH_LOGIN ? '：' + AUTH_LOGIN : '');
+}
+}
+window.__openLogin = function () {
+openAuthPanel(authToken() ? 'account' : 'email');
+};
+function closeAuthPanel() {
+var m = document.getElementById('authmask');
+if (m && m.parentNode) m.parentNode.removeChild(m);
+if (authEsc) { document.removeEventListener('keydown', authEsc); authEsc = null; }
+}
+function submitAuth(kind) {
+var em = document.getElementById('authemail');
+var pw = document.getElementById('authpw');
+var err = document.getElementById('autherr');
+var bl = document.getElementById('authlogin');
+var br = document.getElementById('authreg');
+if (!em || !pw) return;
+if ((bl && bl.disabled) || (br && br.disabled)) return;
+if (err) err.textContent = '';
+if (bl) bl.disabled = true;
+if (br) br.disabled = true;
+fetch(AUTH_BASE + (kind === 'register' ? '/auth/register' : '/auth/login'), {
+method: 'POST',
+headers: { 'content-type': 'application/json' },
+body: JSON.stringify({ email: em.value.trim(), password: pw.value })
+}).then(function (r) {
+return r.json().catch(function () { return null; }).then(function (j) {
+return { status: r.status, ok: r.ok, j: j };
+});
+}).then(function (res) {
+var j = res.j || {};
+if (res.ok && j.token) {
+try { localStorage.setItem(TOKEN_KEY, j.token); } catch (e) { /* 隐私模式忽略 */ }
+closeAuthPanel();
+paintAuth();
+try { pullFollow(); } catch (e) { }
+return;
+}
+if (j.need_verify) {
+AUTH_PENDING = em.value.trim();
+showAuthVerify(j.hint || j.error || '验证码已发送', j.dev_code);
+return;
+}
+if (res.status === 429) throw new Error(j.error || '尝试太频繁，稍后再试');
+throw new Error(j.error || '请求失败');
+}).catch(function (e) {
+if (err) err.textContent = (e && e.message) || '请求失败';
+}).then(function () {
+if (bl) bl.disabled = false;
+if (br) br.disabled = false;
+});
+}
+function showAuthVerify(hint, devCode) {
+var mask = document.getElementById('authmask');
+if (!mask) return;
+showAuthView('verify');
+var tip = document.getElementById('authverifyhint');
+if (tip) tip.textContent = hint || '验证码已发送';
+var code = document.getElementById('authcode');
+if (code) code.value = devCode ? String(devCode) : '';
+var ce = document.getElementById('authcodeerr');
+if (ce) ce.textContent = '';
+if (code) code.focus();
+}
+function confirmCode() {
+var code = document.getElementById('authcode');
+var err = document.getElementById('authcodeerr');
+var bc = document.getElementById('authconfirm');
+var br = document.getElementById('authresend');
+if (err) err.textContent = '';
+if (!AUTH_PENDING) { if (err) err.textContent = '先填邮箱注册或登录'; return; }
+var v = code ? String(code.value || '').replace(/\s+/g, '') : '';
+if (!/^\d{6}$/.test(v)) { if (err) err.textContent = '验证码是 6 位数字'; return; }
+if ((bc && bc.disabled) || (br && br.disabled)) return;
+if (bc) bc.disabled = true;
+if (br) br.disabled = true;
+fetch(AUTH_BASE + '/auth/verify', {
+method: 'POST',
+headers: { 'content-type': 'application/json' },
+body: JSON.stringify({ email: AUTH_PENDING, code: v })
+}).then(function (r) {
+return r.json().catch(function () { return null; }).then(function (j) {
+return { status: r.status, ok: r.ok, j: j };
+});
+}).then(function (res) {
+var j = res.j || {};
+if (res.ok && j.token) {
+try { localStorage.setItem(TOKEN_KEY, j.token); } catch (e) { /* 隐私模式忽略 */ }
+AUTH_PENDING = '';
+closeAuthPanel();
+paintAuth();
+try { pullFollow(); } catch (e) { }
+return;
+}
+throw new Error(j.error || '验证码不对或已过期');
+}).catch(function (e) {
+if (err) err.textContent = (e && e.message) || '验证码不对或已过期';
+}).then(function () {
+if (bc) bc.disabled = false;
+if (br) br.disabled = false;
+});
+}
+function resendCode() {
+var err = document.getElementById('authcodeerr');
+var tip = document.getElementById('authverifyhint');
+var bc = document.getElementById('authconfirm');
+var br = document.getElementById('authresend');
+if (err) err.textContent = '';
+if (!AUTH_PENDING) { if (err) err.textContent = '先填邮箱注册或登录'; return; }
+if ((bc && bc.disabled) || (br && br.disabled)) return;
+if (bc) bc.disabled = true;
+if (br) br.disabled = true;
+fetch(AUTH_BASE + '/auth/resend', {
+method: 'POST',
+headers: { 'content-type': 'application/json' },
+body: JSON.stringify({ email: AUTH_PENDING })
+}).then(function (r) {
+return r.json().catch(function () { return null; }).then(function (j) {
+return { status: r.status, ok: r.ok, j: j };
+});
+}).then(function (res) {
+var j = res.j || {};
+if (res.ok && j.ok) {
+if (tip) tip.textContent = j.hint || '验证码已重新发送';
+var code = document.getElementById('authcode');
+if (code && j.dev_code) code.value = String(j.dev_code);
+return;
+}
+if (res.status === 429) throw new Error(j.error || j.hint || '发送太频繁，稍后再试');
+throw new Error(j.error || '发送失败');
+}).catch(function (e) {
+if (err) err.textContent = (e && e.message) || '发送失败';
+}).then(function () {
+if (bc) bc.disabled = false;
+if (br) br.disabled = false;
+});
+}
+function changePassword() {
+var oldp = document.getElementById('acctold');
+var newp = document.getElementById('acctnew');
+var err = document.getElementById('accterr');
+var bs = document.getElementById('acctsave');
+var bo = document.getElementById('acctout');
+if (!oldp || !newp) return;
+if ((bs && bs.disabled) || (bo && bo.disabled)) return;
+var tk = authToken();
+if (!tk) { if (err) err.textContent = '登录已失效，请重新登录'; return; }
+if (err) err.textContent = '';
+if (bs) bs.disabled = true;
+if (bo) bo.disabled = true;
+fetch(AUTH_BASE + '/auth/password', {
+method: 'POST',
+headers: { 'content-type': 'application/json', authorization: 'Bearer ' + tk },
+body: JSON.stringify({ old: oldp.value, new: newp.value })
+}).then(function (r) {
+return r.json().catch(function () { return null; }).then(function (j) {
+return { status: r.status, ok: r.ok, j: j };
+});
+}).then(function (res) {
+var j = res.j || {};
+if (res.ok && j.ok) {
+oldp.value = '';
+newp.value = '';
+if (err) err.textContent = '密码已更新';
+return;
+}
+throw new Error(j.error || '修改失败');
+}).catch(function (e) {
+if (err) err.textContent = (e && e.message) || '修改失败';
+}).then(function () {
+if (bs) bs.disabled = false;
+if (bo) bo.disabled = false;
+});
+}
+function logoutAccount() {
+var bs = document.getElementById('acctsave');
+var bo = document.getElementById('acctout');
+if ((bs && bs.disabled) || (bo && bo.disabled)) return;
+var tk = authToken();
+if (bs) bs.disabled = true;
+if (bo) bo.disabled = true;
+fetch(AUTH_BASE + '/auth/logout', { method: 'POST', headers: { authorization: 'Bearer ' + tk } })
+.catch(function () { /* 退出请求失败也照常清本地态 */ })
+.then(function () {
+try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* 忽略 */ }
+AUTH_LOGIN = '';
+closeAuthPanel();
+paintAuth();
+});
+}
+function paintAuth() {
+var el = document.getElementById('cnt');
+if (!el) return;
+var tk = authToken();
+if (!tk) { paintLoginEntry(el); return; }
+el.innerHTML = '<span class="who">登录中…</span>';
+fetch(AUTH_BASE + '/auth/me', { headers: { authorization: 'Bearer ' + tk } }).then(function (r) {
+if (r.status === 401) { var e = new Error('login_required'); e.auth = 1; throw e; }
+if (!r.ok) throw new Error('HTTP ' + r.status);
+return r.json();
+}).then(function (d) {
+var u = (d && d.ok && d.user) || null;
+if (!u) { var e = new Error('login_required'); e.auth = 1; throw e; }
+AUTH_LOGIN = String(u.login || '');
+el.title = '账号设置';
+var av = u.avatar
+? '<img class="av" src="' + esc(u.avatar) + '" alt="">'
+: '<span class="avt">' + esc(String(u.login || '?').slice(0, 1).toUpperCase()) + '</span>';
+el.innerHTML = av + '<b>' + esc(u.login) + '</b>';
+el.onclick = function () { openAuthPanel('account'); };
+}).catch(function (e) {
+if (e && e.auth) { try { localStorage.removeItem(TOKEN_KEY); } catch (err) { /* 忽略 */ } }
+paintLoginEntry(el);
+});
+}
 function bootHeader() {
 var P = PAGE;
 var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
@@ -1060,8 +1474,13 @@ host.innerHTML = '<div class="wrap"><a class="brand" href="./"><i></i>番组<b>�
 + '<nav class="mainnav">' + nav + '</nav><div class="head-spacer"></div>'
 + '<div class="searchbox"><input id="q" type="search" placeholder="' + ph + '" autocomplete="off"></div>'
 + '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
++ '<button class="thm" id="thm" type="button" aria-label="切换主题">☀</button>'
 + '<span class="cnt" id="cnt"></span>'
 + '<span class="build" id="build">' + (document.body.dataset.build || '') + '</span></div>';
+paintAuth();
+applyTheme(currentTheme());
+var thm = $('#thm');
+if (thm) thm.onclick = toggleTheme;
 }
 function bootAnime() {
 return jd('anime.json').then(function (d) {

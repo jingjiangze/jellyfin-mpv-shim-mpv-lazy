@@ -108,7 +108,12 @@ resolve(d);
 });
 }
 var LIVE = {}, LIVE_DOWN = false;
+var NEED_LOGIN = false;
 var LIVE_URL = 'https://120.48.56.189/eps';
+var TOKEN_KEY = 'gh_token';
+function authToken() {
+try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+}
 var RE_RANGE = /第\s*(\d{1,4})\s*[-–~〜]\s*(\d{1,4})\s*[話话集]/;
 var RE_SINGLE = /第\s*(\d{1,4})\s*[話话集](?!\d)/;
 var RE_BRACKET = /[\]\)\s\-–—]\s*\[?(\d{1,4})\]?(?=\s*(?:\[|\(|END|完|【|v\d|$))/;
@@ -197,8 +202,18 @@ if (orig) u += '&o=' + encodeURIComponent(orig);
 if (force) u += '&force=1';
 var ctl = typeof AbortController === 'function' ? new AbortController() : null;
 var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
-return fetch(u, ctl ? { signal: ctl.signal } : undefined).then(function (r) {
+var tk = authToken();
+var opt = {};
+if (ctl) opt.signal = ctl.signal;
+if (tk) opt.headers = { authorization: 'Bearer ' + tk };
+return fetch(u, opt).then(function (r) {
 clearTimeout(timer);
+if (r.status === 401) {
+NEED_LOGIN = true;
+var e401 = new Error('login_required');
+e401.status = 401;
+throw e401;
+}
 if (!r.ok) throw new Error('HTTP ' + r.status);
 return r.json();
 }).then(function (d) {
@@ -213,17 +228,27 @@ if (!Object.keys(eps).length && !batch.length) return null;
 var e = { n: name, eps: eps, batch: batch, live: 1 };
 LIVE[name] = e;
 try {
+var tk2 = authToken();
+var hdr2 = { 'content-type': 'text/plain;charset=UTF-8' };
+if (tk2) hdr2.authorization = 'Bearer ' + tk2;
 var ctl2 = typeof AbortController === 'function' ? new AbortController() : null;
 var t2 = setTimeout(function () { if (ctl2) ctl2.abort(); }, 8000);
 fetch(LIVE_URL + '-save', {
 method: 'POST',
-headers: { 'content-type': 'text/plain;charset=UTF-8' },
+headers: hdr2,
 body: JSON.stringify({ n: name, eps: eps, batch: (e && e.batch) || [] }),
 signal: ctl2 ? ctl2.signal : undefined
-}).then(function () { clearTimeout(t2); }, function () { clearTimeout(t2); });
+}).then(function (r) {
+clearTimeout(t2);
+if (!r || !r.ok) return;
+}, function () { clearTimeout(t2); });
 } catch (err) { /* 忽略：只是入库，不影响展示 */ }
 return e;
-}).catch(function () { LIVE_DOWN = true; return null; });
+}).catch(function (err) {
+if (err && err.status === 401) { NEED_LOGIN = true; return null; }
+LIVE_DOWN = true;
+return null;
+});
 }
 function dbLive(name) {
 var u = LIVE_URL + '?kw=' + encodeURIComponent(name) + '&db=1&_=' + Date.now();
@@ -489,6 +514,7 @@ delete CACHE[shardOf(n)];
 MANIFEST = null;
 BASE_I = 0;
 LIVE_DOWN = false;
+NEED_LOGIN = false;                // 每次手动刷新都当「重新试一次登录」
 REV = String(Date.now());          // 本次刷新的清单/分片 URL 带 ?v= 绕 HTTP 缓存
 var box = document.querySelector('#epsbox');
 var body = box ? null : document.querySelector('#mgbody');
@@ -590,6 +616,12 @@ return true;
 }
 function onChip(ev) {
 var t = ev.target;
+if (t && t.closest && t.closest('[data-login]')) {
+ev.preventDefault();
+ev.stopPropagation();
+if (window.__openLogin) window.__openLogin();
+return;
+}
 if (toggleTeam(t && t.closest ? t.closest('.tg-h') : null)) {
 ev.preventDefault();
 ev.stopPropagation();          // 别冒泡去触发卡片的开关逻辑
@@ -609,7 +641,7 @@ m.addEventListener('click', onChip);
 m.addEventListener('keydown', function (ev) {
 if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
 var t = ev.target;
-if (t && t.closest && (t.closest('.mgrow') || t.closest('.tg-h'))) return;
+if (t && t.closest && (t.closest('.mgrow') || t.closest('.tg-h') || t.closest('[data-login]'))) return;
 onChip(ev);
 });
 new MutationObserver(function () {
@@ -655,6 +687,12 @@ box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></d
 return fetchLive(name, episodeCount(m), origName).then(function (live) {
 if (stale()) return;
 if (live) return render(m, live);
+if (NEED_LOGIN) {
+box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
++ '<div class="mnote">实时查询需登录 · '
++ '<button class="mnote-btn" type="button" data-login="1">登录</button></div></div>';
+return;
+}
 if (LIVE_DOWN) {                       // 后端连不上：说清楚，别装作"没有"
 box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
 + '<div class="eps-none">索引里没有，后端暂时连不上</div></div>';
