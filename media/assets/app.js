@@ -24,13 +24,11 @@ var D_BASES = [
 'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/',
 './data/'
 ];
-function jd(name, opts) {
-var v = opts && opts.bust ? Date.now() : 0;
+function jd(name) {
 var i = 0;
 function go() {
 if (i >= D_BASES.length) return Promise.reject(new Error('data ' + name + ' 三源都失败'));
 var u = D_BASES[i++] + name;
-if (v) u += (u.indexOf('?') < 0 ? '?' : '&') + 'v=' + v;
 var ctl = typeof AbortController === 'function' ? new AbortController() : null;
 var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 12000);
 return fetch(u, ctl ? { signal: ctl.signal } : undefined).then(function (r) {
@@ -44,8 +42,7 @@ return r.json();
 return go();
 }
 var ANI = { poster: '', posterSd: '', rows: [], extra: {}, year: 0 };
-var shardCache = {};                 // 分片号（id % 64）-> 该分片的 promise
-function dropShard(sfx) { delete shardCache[sfx]; }
+var shardCache = {};
 var TAGCNT = {}, TAGCNT_LOADING = false, TAGCNT_WAIT = [];
 function ensureTagCounts(done) {
 if (done) TAGCNT_WAIT.push(done);
@@ -60,35 +57,16 @@ var w = TAGCNT_WAIT; TAGCNT_WAIT = [];
 w.forEach(function (f) { try { f(); } catch (e) { /* 单个回调失败不影响其它 */ } });
 }
 var FAV_KEY = 'follow';
-function favEntries() {
-var raw;
-try { raw = JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); } catch (e) { return []; }
-if (Object.prototype.toString.call(raw) !== '[object Array]') return [];
-var out = [];
-raw.forEach(function (x) {
-var id, t;
-if (x && typeof x === 'object') {
-if (x.id == null) return;
-id = String(x.id);
-t = Number(x.t);
-if (!isFinite(t) || t < 0) t = 0;
-} else {
-if (x == null) return;
-id = String(x);
-t = 0;
-}
-if (id) out.push({ id: id, t: t });
-});
-return out;
-}
 function favList() {
-return favEntries().map(function (e) { return e.id; });
+try {
+var a = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
+return Object.prototype.toString.call(a) === '[object Array]' ? a : [];
+} catch (e) { return []; }
 }
 function isFollowed(id) { return favList().indexOf(String(id)) >= 0; }
 function toggleFollow(id) {
-var a = favEntries(), k = String(id), i = -1;
-a.forEach(function (e, n) { if (i < 0 && e.id === k) i = n; });  // 旧格式已解包，两种都能删
-if (i >= 0) a.splice(i, 1); else a.push({ id: k, t: Date.now() });
+var a = favList(), k = String(id), i = a.indexOf(k);
+if (i >= 0) a.splice(i, 1); else a.push(k);
 try { localStorage.setItem(FAV_KEY, JSON.stringify(a)); } catch (e) { /* 忽略 */ }
 return i < 0;
 }
@@ -124,11 +102,10 @@ var ex = ANI.extra[id] || [];
 var alCover = ex[1] || '';
 var src = posterSrc(id);
 var fb = PSZ.mode === 'sd' ? [alCover, ANI.poster + id + '.jpg'] : [alCover];
-var corner = (opt && opt.fav) ? '★ 已追' : (r[8] ? r[8] + ' 集' : '');
 var h = '<article class="card" data-id="' + id + '"><div class="pw">'
 + '<img src="' + esc(src) + '"' + fbAttr(fb) + ' loading="lazy" decoding="async" alt="">'
 + (r[7] ? '<span class="rate">★ ' + Number(r[7]).toFixed(1) + '</span>' : '')
-+ (corner ? '<span class="ep">' + corner + '</span>' : '')
++ (r[8] ? '<span class="ep">' + r[8] + ' 集</span>' : '')
 + '</div><div class="t">' + titleHTML(name) + '</div><div class="sub2">'
 + [(opt && opt.showYear ? (r[4] || '') : ''), TYPE[r[3]] || r[3] || ''].filter(Boolean).join(' · ')
 + '</div></article>';
@@ -229,26 +206,6 @@ io.unobserve(e.target);
 }, { rootMargin: '300px' });
 blocks.forEach(function (b) { io.observe(b); });
 }
-function favRows() {
-var byId = {};
-ANI.rows.forEach(function (r) { byId[String(r[0])] = r; });
-return favEntries()
-.filter(function (e) { return byId[e.id]; })
-.sort(function (a, b) {
-if (a.t !== b.t) return b.t - a.t;
-var na = Number(a.id), nb = Number(b.id);      // id 是数字串：按数值升序更符合直觉
-if (isFinite(na) && isFinite(nb) && na !== nb) return na - nb;
-return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0);
-})
-.map(function (e) { return byId[e.id]; });
-}
-function renderFavRow() {
-var rows = favRows();
-if (!rows.length) return '';
-return '<div class="favrow"><h2>我的追番</h2><div class="grid" id="favgrid">'
-+ rows.map(function (r) { return animeCard(r, { showYear: 1, fav: 1 }); }).join('')
-+ '</div></div>';
-}
 function renderHome() {
 if (!HOME.y) homeDefaults();
 var rows = homeRows();
@@ -280,8 +237,7 @@ return animeCard(r, { showYear: 0 });
 body = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
 }
 main.innerHTML = '<div class="home-cols">' + renderLevels()
-+ '<div class="home-main"><div class="home-head">' + head + '</div>'
-+ renderFavRow() + body
++ '<div class="home-main"><div class="home-head">' + head + '</div>' + body
 + '</div></div>';
 main.querySelectorAll('[data-q]').forEach(function (b) {
 b.onclick = function () { HOME.q = Number(b.dataset.q); HOME.wd = 0; renderHome(); };
@@ -382,6 +338,9 @@ else BROWSE.view.sort(function (a, b) { return (b[4] || 0) - (a[4] || 0) || (b[7
 renderBrowse(reset === true ? false : true);
 }
 var TAGS = null;
+function pickTagFromUrl() {
+try { return new URLSearchParams(location.search).get('tag') || ''; } catch (e) { return ''; }
+}
 function ensureTags() {
 if (TAGS) return Promise.resolve(TAGS);
 return jd('tags.json').then(function (d) {
@@ -393,6 +352,7 @@ function mountTagFilter() {
 var sel = $('#f-tag');
 if (!sel) return;
 sel.onchange = function () {
+var y = $('#f-year'); if (y) y.value = '';
 if (!TAGS) {
 ensureTags().then(function () { applyBrowse(); });
 return;
@@ -407,6 +367,12 @@ sel.innerHTML = '<option value="">全部</option>'
 + names.map(function (n) {
 return '<option value="' + esc(n) + '">' + esc(n) + '（' + t[n].length + '）</option>';
 }).join('');
+var want = pickTagFromUrl();
+if (want && TAGS && TAGS[want]) {
+sel.value = want;
+var y = $('#f-year'); if (y) y.value = '';
+applyBrowse();
+}
 });
 }
 function initBrowse() {
@@ -432,6 +398,8 @@ $('#f-year').value = ys[0] ? String(ys[0]) : '';
 $('#morebtn').onclick = function () { renderBrowse(false); };
 ['#f-year', '#f-type', '#f-sort'].forEach(function (s) { $(s).addEventListener('change', applyBrowse); });
 mountTagFilter();
+var deepTag = pickTagFromUrl();
+if (deepTag && TAGS && TAGS[deepTag]) { $('#f-tag').value = deepTag; $('#f-year').value = ''; }
 applyBrowse();
 }
 var MOVIE = { all: [], view: [], shown: 0, page: 120, db: [], tm: [] };
@@ -569,32 +537,15 @@ function renderTags(rec, el) {
 if (!el) return;
 el.innerHTML = (rec.tags || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; }).slice(0, 12).map(function (t) {
 var n = TAGCNT[t];
-return '<span class="tagpill">' + esc(t) + (n ? '<em>' + n + '</em>' : '') + '</span>';
+var href = './anime.html?tag=' + encodeURIComponent(t);
+return '<a class="tagpill" href="' + esc(href) + '">' + esc(t) + (n ? '<em>' + n + '</em>' : '') + '</a>';
 }).join('');
-}
-function fmtUpd(nextAt, wd) {
-function pad2(n) { return ('0' + n).slice(-2); }    // 两位补零：MM-DD / HH:mm
-var d = nextAt ? new Date(Number(nextAt) * 1000) : null;
-var ok = !!d && !isNaN(d.getTime());
-var wdTxt = ok ? WD[(d.getDay() + 6) % 7] : (wd >= 1 && wd <= 7 ? WD[wd - 1] : '');
-if (!wdTxt) return '';
-if (!ok) return '每' + wdTxt + '更新';
-var hm = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
-return '每' + wdTxt + ' ' + hm + ' 更新 · 下一话 '
-+ pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + hm;
-}
-function isCurSeason(y, m) {
-var now = new Date();
-if (Number(y) !== now.getFullYear()) return false;
-return Math.ceil(Number(m) / 3) === Math.ceil((now.getMonth() + 1) / 3);
 }
 function openModal(id) {
 var r = ANI.rows.find(function (x) { return x[0] === id; });
 if (!r) return;
 var ex = ANI.extra[id] || [];
 var title = r[2] || r[1];
-window.__CUR_SEASON = isCurSeason(r[4], r[5]);
-var upd = fmtUpd(ex[3], r[6]);
 var m = $('#modal');
 if (!m) return;                              // 页面没有 #modal 壳时别抛引用错
 var host = m, gen = ++MODAL_GEN;             // 这一代弹窗的容器引用与代号
@@ -609,18 +560,24 @@ m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
 +       (r[3] ? '<span class="mbadge">' + esc(TYPE[r[3]] || r[3]) + '</span>' : '')
 +       (r[8] ? '<span class="mbadge">' + r[8] + ' 话</span>' : '')
 +     '</div>'
-+     (upd ? '<div class="mupd" id="mupd">' + esc(upd) + '</div>' : '')
 +     '<div class="mrate-line">'
 +       (r[7] ? '<b class="score">' + Number(r[7]).toFixed(1) + '</b>'
 + '<span class="stars" style="--p:' + Math.max(0, Math.min(100, Math.round(r[7] * 10))) + '"></span>'
 : '<b class="score dim">暂无评分</b>')
 +       '<span class="votes" id="mvotes"></span>'
 +     '</div>'
++     '<div class="mcollect">'
++       '<span><b>—</b><i>想看</i></span><span><b>—</b><i>在看</i></span><span><b>—</b><i>看过</i></span>'
++     '</div>'
 +     '<div class="acts">'
 +       '<span class="btn pri" id="watch" type="button">开始观看</span>'
 +       '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
++       '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
 +       (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
-+       '<button class="btn" id="mrefresh">⟳ 刷新</button>'
++       '<span class="btn" id="bplay" type="button">▶ B 站弹幕播放</span>'
++       '<button class="btn" id="mgopen" type="button">磁力详情</button>'
++       '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
++         encodeURIComponent(title) + '">B 站搜索</a>'
 +     '</div>'
 +   '</div>'
 + '</div>'
@@ -665,6 +622,8 @@ fb.textContent = now ? '★ 已追' : '☆ 追番';
 fb.classList.toggle('on', now);
 };
 }
+var mgb = m.querySelector('#mgopen');
+if (mgb) mgb.onclick = function () { openMagView(id, title, r[8] || 0); };
 if (ex[2]) {
 $('#play').onclick = function () {
 if (host.querySelector('.trailer')) return;
@@ -682,7 +641,16 @@ renderTags(rec, host.querySelector('#tags'));
 });
 bindBili(id, title, r[4] || '');
 var sfx = id % 64;
-function hydrate(list) {
+var pr = shardCache[sfx];
+if (!pr) {
+pr = jd('s' + sfx + '.json').then(function (d) { return d; }, function () {
+delete shardCache[sfx];          // 失败不缓存，下次还能重试
+return null;
+});
+shardCache[sfx] = pr;
+}
+pr.then(function (list) {
+if (gen !== MODAL_GEN) return;      // 这一代已被新打开的番取代：数据与 DOM 都不再属于它
 var plot = host.querySelector('#plot');
 if (!plot) return;      // close() 已清空 / 已切到磁力视图：这一代内容没了，别再往空节点写
 if (list === null) { plot.textContent = '简介加载失败，请重试'; return; }  // 分片拉不到，与「记录不存在」区分
@@ -731,26 +699,14 @@ var staff = host.querySelector('#sect-staff');
 if (staff) {
 staff.innerHTML = '<div class="sec-h"><h2>制作人员</h2></div><div class="staffgrid">'
 + rec.st.map(function (p2) {
-var sv = avatarSrc(p2[2]);
-return '<div class="staff">'
-+ (sv ? '<span class="sph"><img class="sav" src="' + esc(sv) + '" alt="" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.parentNode.remove()"></span>' : '')
-+ '<b>' + esc(p2[0]) + '</b>'
+return '<div class="staff"><b>' + esc(p2[0]) + '</b>'
 + (p2[1] ? '<em>' + esc(p2[1]) + '</em>' : '') + '</div>';
 }).join('') + '</div>';
 staff.hidden = false;
 }
 }
 if (Array.isArray(rec.co) && rec.co.some(Boolean)) {
-var mcol = host.querySelector('.mcollect');
-if (!mcol) {
-mcol = document.createElement('div');
-mcol.className = 'mcollect';
-mcol.innerHTML = '<span><b>—</b><i>想看</i></span><span><b>—</b><i>在看</i></span>'
-+ '<span><b>—</b><i>看过</i></span>';
-var actsEl = host.querySelector('.acts');
-if (actsEl && actsEl.parentNode) actsEl.parentNode.insertBefore(mcol, actsEl);
-}
-var cos = mcol.querySelectorAll('b');
+var cos = host.querySelectorAll('.mcollect b');
 for (var ci = 0; ci < cos.length && ci < 3; ci++) {
 cos[ci].textContent = rec.co[ci] == null ? '—' : String(rec.co[ci]);
 }
@@ -762,45 +718,7 @@ var pct = Math.max(0.1, (rec.rank / total) * 100);
 meta.push('排名 #' + rec.rank + (pct < 20 ? '（前 ' + pct.toFixed(1) + '%）' : ''));
 }
 var mv = host.querySelector('#mvotes'); if (mv) mv.textContent = meta.join(' · ');
-}
-function getShard() {
-var p = shardCache[sfx];
-if (p) return p;
-p = jd('s' + sfx + '.json').then(function (d) { return d; }, function () {
-delete shardCache[sfx];
-return null;
 });
-shardCache[sfx] = p;
-return p;
-}
-getShard().then(function (list) {
-if (gen !== MODAL_GEN) return;      // 这一代已被新打开的番取代：数据与 DOM 都不再属于它
-hydrate(list);
-});
-var rf = m.querySelector('#mrefresh');
-if (rf) rf.onclick = function () {
-if (rf.disabled) return;
-rf.disabled = true;
-var old = rf.textContent;
-rf.textContent = '⟳ 刷新中…';
-dropShard(sfx);
-var api = window.__epsApi;
-if (api && typeof api.reload === 'function') {
-try { api.reload(title, r[8] || 0, r[1] !== title ? r[1] : ''); } catch (e) { /* 磁力刷新失败不影响简介重取 */ }
-}
-jd('s' + sfx + '.json', { bust: true }).then(function (d) {
-shardCache[sfx] = Promise.resolve(d);     // 回填缓存：关掉再开不必重拉
-if (gen !== MODAL_GEN) return;
-var rd = host.querySelector('#rdist');
-if (rd && rd.parentNode) rd.parentNode.removeChild(rd);
-hydrate(d);
-}, function () {
-if (gen === MODAL_GEN) hydrate(null);     // 走「简介加载失败，请重试」那条
-}).then(function () {
-rf.textContent = old;
-rf.disabled = false;
-});
-};
 }
 function close() {
 var m = $('#modal');
@@ -1018,7 +936,18 @@ if (fr) fr.src = mkSrc(Number(selEl.value) || 1);
 };
 }
 }
-window.__CUR_SEASON = false;
+var AUTH_BASE = 'https://120.48.56.189';
+var TOKEN_KEY = 'gh_token';
+var AUTH_PENDING = '';
+function authToken() {
+try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+}
+(function grabToken() {
+var m = /(?:^|[#&])t=([a-f0-9]{32,})/i.exec(location.hash || '');
+if (!m) return;
+try { localStorage.setItem(TOKEN_KEY, m[1]); } catch (e) { /* 隐私模式忽略 */ }
+try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { }
+})();
 function repaint() {
 if (PAGE === 'anime') applyBrowse(true);
 else if (PAGE === 'movie') refreshMovie(true);
@@ -1042,6 +971,248 @@ if ($('#mask')) close();
 repaint();
 };
 }
+function loginBtnHtml() {
+return '<button class="login" id="loginbtn" type="button">登录</button>';
+}
+function paintLoginEntry(el) {
+el.title = '';
+el.onclick = function (e) {
+if (e && e.target && e.target.id === 'loginbtn') openAuthPanel();
+};
+el.innerHTML = loginBtnHtml();
+}
+var authEsc = null;
+function openAuthPanel() {
+if (document.getElementById('authmask')) return;
+var mask = document.createElement('div');
+mask.className = 'authmask';
+mask.id = 'authmask';
+mask.innerHTML = '<div class="authcard" role="dialog" aria-modal="true">'
++ '<button class="authx" type="button" aria-label="关闭">×</button>'
++ '<div class="authtabs">'
++ '<button class="authtab on" data-t="email" type="button">邮箱</button>'
++ '<button class="authtab" data-t="github" type="button">GitHub</button>'
++ '</div>'
++ '<div class="authbody" data-t="email">'
++ '<label class="authfield"><span>邮箱</span><input id="authemail" type="email" autocomplete="username"'
++ ' placeholder="you@example.com"></label>'
++ '<label class="authfield"><span>密码</span><input id="authpw" type="password" autocomplete="current-password"'
++ ' placeholder="至少 8 位"></label>'
++ '<div class="autherr" id="autherr"></div>'
++ '<div class="authacts">'
++ '<button class="btn pri" id="authlogin" type="button">登录</button>'
++ '<button class="btn" id="authreg" type="button">注册</button>'
++ '</div>'
++ '</div>'
++ '<div class="authbody" data-t="verify" hidden>'
++ '<p class="authhint" id="authverifyhint">验证码已发到你的邮箱，10 分钟内有效。</p>'
++ '<label class="authfield"><span>验证码</span><input id="authcode" inputmode="numeric" maxlength="6"'
++ ' placeholder="6 位数字"></label>'
++ '<div class="autherr" id="authcodeerr"></div>'
++ '<div class="authacts">'
++ '<button class="btn pri" id="authconfirm" type="button">确认</button>'
++ '<button class="btn" id="authresend" type="button">重新发送</button>'
++ '</div>'
++ '</div>'
++ '<div class="authbody" data-t="github" hidden>'
++ '<p class="authhint">用 GitHub 账号登录（需要能访问 github.com）。</p>'
++ '<a class="btn pri" href="' + AUTH_BASE + '/auth/start?next=' + encodeURIComponent(location.href)
++ '" target="_blank" rel="noopener">去 GitHub 授权</a>'
++ '</div>'
++ '</div>';
+document.body.appendChild(mask);
+mask.querySelectorAll('.authtab').forEach(function (b) {
+b.onclick = function () {
+var t = b.getAttribute('data-t');
+mask.querySelectorAll('.authtab').forEach(function (x) { x.classList.toggle('on', x === b); });
+mask.querySelectorAll('.authbody').forEach(function (x) { x.hidden = x.getAttribute('data-t') !== t; });
+if (t === 'email') { var em = document.getElementById('authemail'); if (em) em.focus(); }
+};
+});
+mask.querySelector('.authx').onclick = closeAuthPanel;
+mask.addEventListener('click', function (e) { if (e.target.id === 'authmask') closeAuthPanel(); });
+mask.querySelector('#authlogin').onclick = function () { submitAuth('login'); };
+mask.querySelector('#authreg').onclick = function () { submitAuth('register'); };
+mask.querySelector('#authconfirm').onclick = confirmCode;
+mask.querySelector('#authresend').onclick = resendCode;
+mask.querySelectorAll('.authfield input').forEach(function (inp) {
+if (inp.id === 'authcode') return;
+inp.addEventListener('keydown', function (e) {
+if (e.key === 'Enter') { e.preventDefault(); submitAuth('login'); }
+});
+});
+var acode = document.getElementById('authcode');
+if (acode) acode.addEventListener('keydown', function (e) {
+if (e.key === 'Enter') { e.preventDefault(); confirmCode(); }
+});
+authEsc = function (e) { if (e.key === 'Escape') closeAuthPanel(); };
+document.addEventListener('keydown', authEsc);
+var first = document.getElementById('authemail');
+if (first) first.focus();
+}
+function closeAuthPanel() {
+var m = document.getElementById('authmask');
+if (m && m.parentNode) m.parentNode.removeChild(m);
+if (authEsc) { document.removeEventListener('keydown', authEsc); authEsc = null; }
+}
+function submitAuth(kind) {
+var em = document.getElementById('authemail');
+var pw = document.getElementById('authpw');
+var err = document.getElementById('autherr');
+var bl = document.getElementById('authlogin');
+var br = document.getElementById('authreg');
+if (!em || !pw) return;
+if ((bl && bl.disabled) || (br && br.disabled)) return;
+if (err) err.textContent = '';
+if (bl) bl.disabled = true;
+if (br) br.disabled = true;
+fetch(AUTH_BASE + (kind === 'register' ? '/auth/register' : '/auth/login'), {
+method: 'POST',
+headers: { 'content-type': 'application/json' },
+body: JSON.stringify({ email: em.value.trim(), password: pw.value })
+}).then(function (r) {
+return r.json().catch(function () { return null; }).then(function (j) {
+return { status: r.status, ok: r.ok, j: j };
+});
+}).then(function (res) {
+var j = res.j || {};
+if (res.ok && j.token) {
+try { localStorage.setItem(TOKEN_KEY, j.token); } catch (e) { /* 隐私模式忽略 */ }
+closeAuthPanel();
+paintAuth();
+return;
+}
+if (j.need_verify) {
+AUTH_PENDING = em.value.trim();
+showAuthVerify(j.hint || j.error || '验证码已发送', j.dev_code);
+return;
+}
+if (res.status === 429) throw new Error(j.error || '尝试太频繁，稍后再试');
+throw new Error(j.error || '请求失败');
+}).catch(function (e) {
+if (err) err.textContent = (e && e.message) || '请求失败';
+}).then(function () {
+if (bl) bl.disabled = false;
+if (br) br.disabled = false;
+});
+}
+function showAuthVerify(hint, devCode) {
+var mask = document.getElementById('authmask');
+if (!mask) return;
+mask.querySelectorAll('.authbody').forEach(function (x) {
+x.hidden = x.getAttribute('data-t') !== 'verify';
+});
+var tip = document.getElementById('authverifyhint');
+if (tip) tip.textContent = hint || '验证码已发送';
+var code = document.getElementById('authcode');
+if (code) code.value = devCode ? String(devCode) : '';
+var ce = document.getElementById('authcodeerr');
+if (ce) ce.textContent = '';
+if (code) code.focus();
+}
+function confirmCode() {
+var code = document.getElementById('authcode');
+var err = document.getElementById('authcodeerr');
+var bc = document.getElementById('authconfirm');
+var br = document.getElementById('authresend');
+if (err) err.textContent = '';
+if (!AUTH_PENDING) { if (err) err.textContent = '先填邮箱注册或登录'; return; }
+var v = code ? String(code.value || '').replace(/\s+/g, '') : '';
+if (!/^\d{6}$/.test(v)) { if (err) err.textContent = '验证码是 6 位数字'; return; }
+if ((bc && bc.disabled) || (br && br.disabled)) return;
+if (bc) bc.disabled = true;
+if (br) br.disabled = true;
+fetch(AUTH_BASE + '/auth/verify', {
+method: 'POST',
+headers: { 'content-type': 'application/json' },
+body: JSON.stringify({ email: AUTH_PENDING, code: v })
+}).then(function (r) {
+return r.json().catch(function () { return null; }).then(function (j) {
+return { status: r.status, ok: r.ok, j: j };
+});
+}).then(function (res) {
+var j = res.j || {};
+if (res.ok && j.token) {
+try { localStorage.setItem(TOKEN_KEY, j.token); } catch (e) { /* 隐私模式忽略 */ }
+AUTH_PENDING = '';
+closeAuthPanel();
+paintAuth();
+return;
+}
+throw new Error(j.error || '验证码不对或已过期');
+}).catch(function (e) {
+if (err) err.textContent = (e && e.message) || '验证码不对或已过期';
+}).then(function () {
+if (bc) bc.disabled = false;
+if (br) br.disabled = false;
+});
+}
+function resendCode() {
+var err = document.getElementById('authcodeerr');
+var tip = document.getElementById('authverifyhint');
+var bc = document.getElementById('authconfirm');
+var br = document.getElementById('authresend');
+if (err) err.textContent = '';
+if (!AUTH_PENDING) { if (err) err.textContent = '先填邮箱注册或登录'; return; }
+if ((bc && bc.disabled) || (br && br.disabled)) return;
+if (bc) bc.disabled = true;
+if (br) br.disabled = true;
+fetch(AUTH_BASE + '/auth/resend', {
+method: 'POST',
+headers: { 'content-type': 'application/json' },
+body: JSON.stringify({ email: AUTH_PENDING })
+}).then(function (r) {
+return r.json().catch(function () { return null; }).then(function (j) {
+return { status: r.status, ok: r.ok, j: j };
+});
+}).then(function (res) {
+var j = res.j || {};
+if (res.ok && j.ok) {
+if (tip) tip.textContent = j.hint || '验证码已重新发送';
+var code = document.getElementById('authcode');
+if (code && j.dev_code) code.value = String(j.dev_code);
+return;
+}
+if (res.status === 429) throw new Error(j.error || j.hint || '发送太频繁，稍后再试');
+throw new Error(j.error || '发送失败');
+}).catch(function (e) {
+if (err) err.textContent = (e && e.message) || '发送失败';
+}).then(function () {
+if (bc) bc.disabled = false;
+if (br) br.disabled = false;
+});
+}
+function paintAuth() {
+var el = document.getElementById('cnt');
+if (!el) return;
+var tk = authToken();
+if (!tk) { paintLoginEntry(el); return; }
+el.innerHTML = '<span class="who">登录中…</span>';
+fetch(AUTH_BASE + '/auth/me', { headers: { authorization: 'Bearer ' + tk } }).then(function (r) {
+if (r.status === 401) { var e = new Error('login_required'); e.auth = 1; throw e; }
+if (!r.ok) throw new Error('HTTP ' + r.status);
+return r.json();
+}).then(function (d) {
+var u = (d && d.ok && d.user) || null;
+if (!u) { var e = new Error('login_required'); e.auth = 1; throw e; }
+el.title = '点击退出登录';
+var av = u.avatar
+? '<img class="av" src="' + esc(u.avatar) + '" alt="">'
+: '<span class="avt">' + esc(String(u.login || '?').slice(0, 1).toUpperCase()) + '</span>';
+el.innerHTML = av + '<b>' + esc(u.login) + '</b>';
+el.onclick = function () {
+fetch(AUTH_BASE + '/auth/logout', { method: 'POST', headers: { authorization: 'Bearer ' + tk } })
+.catch(function () { /* 退出请求失败也照常清本地态 */ })
+.then(function () {
+try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* 忽略 */ }
+location.reload();
+});
+};
+}).catch(function (e) {
+if (e && e.auth) { try { localStorage.removeItem(TOKEN_KEY); } catch (err) { /* 忽略 */ } }
+paintLoginEntry(el);
+});
+}
 function bootHeader() {
 var P = PAGE;
 var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
@@ -1058,6 +1229,7 @@ host.innerHTML = '<div class="wrap"><a class="brand" href="./"><i></i>番组<b>�
 + '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
 + '<span class="cnt" id="cnt"></span>'
 + '<span class="build" id="build">' + (document.body.dataset.build || '') + '</span></div>';
+paintAuth();
 }
 function bootAnime() {
 return jd('anime.json').then(function (d) {
