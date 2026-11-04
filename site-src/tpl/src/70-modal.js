@@ -120,6 +120,9 @@
         var now = toggleFollow(fk);
         fb.textContent = now ? '★ 已追' : '☆ 追番';
         fb.classList.toggle('on', now);
+        /* 状态已落定再通知外部：90-boot.js 监听 favchange，在追番页就地重绘列表（新增/取消都算变化）。
+           老浏览器没有 CustomEvent 时静默跳过，不影响按钮自身的显示。 */
+        try { document.dispatchEvent(new CustomEvent('favchange')); } catch (e) { /* 忽略 */ }
       };
     }
 

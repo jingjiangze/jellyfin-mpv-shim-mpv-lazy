@@ -1799,6 +1799,11 @@ main {
     font-size: var(--fs-md);
   }
 
+  .mainnav {
+    flex-wrap: wrap;
+    row-gap: var(--s1);
+  }
+
   .mainnav a {
     padding: 5px 10px;
     font-size: var(--fs-sm);
@@ -2195,35 +2200,6 @@ main {
   background: transparent;
 }
 
-/* 20.5 首页追番区块：与星期分块同样的 --s6 竖向节奏（.block 见 3 节，块间外边距会折叠）。
- * 标题样式与 .sec-h h2 / .bhead h2（5 节）同款，因契约要求 h2 直挂 .favrow，故单列一份；
- * 改 5 节的标题规格时这里要同步。栅格与卡片角标直接复用 .grid / .card / .rate / .ep。 */
-.favrow {
-  margin: var(--s6) 0;
-}
-
-.favrow > h2 {
-  position: relative;
-  margin: 0 0 var(--s4);
-  padding-left: var(--s3);
-  font-size: var(--fs-h3);
-  font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: .01em;
-}
-
-.favrow > h2::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 3px;
-  height: 18px;
-  margin-top: -9px;
-  border-radius: 2px;
-  background: var(--accent);
-}
-
 /* ---------------------------------------------------------------- 20.6 窄屏补充（与 19 节同断点，独立成段避免插入既有规则块） */
 @media (max-width: 760px) {
   .tgs {
@@ -2250,4 +2226,15 @@ main {
     height: 36px;
     margin-right: 6px;
   }
+}
+
+/* ---------------------------------------------------------------- 21 追番页（fav.html） */
+/* .favpage 是 main.wrap 里的整页容器：.wrap{padding:0 var(--s6)} 压掉 main 的纵向 padding，
+ * 这里补顶部 24px，与首页 .home-head 对齐；标题 / 栅格 / 卡片 / 空态复用 5 节与 7 节，不另立一份。 */
+.favpage {
+  margin-top: var(--s5);
+}
+
+.favpage > .bhead {
+  margin-bottom: var(--s5);
 }

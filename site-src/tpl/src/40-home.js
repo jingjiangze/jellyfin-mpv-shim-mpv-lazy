@@ -96,11 +96,11 @@ function mountRanks() {
   blocks.forEach(function (b) { io.observe(b); });
 }
 
-/* ---------------- 我的追番：跨季度/星期的全局区块 ----------------
-   追番存在 localStorage（见 20-state.js），天然是全站视角：不参与 HOME.y/q/wd 筛选，
-   切季度或星期时这一块内容不变。只保留还能在 ANI.rows 里查到的 id（数据换过 / 条目下架
-   的直接跳过），顺序按追番时间 t 倒序；旧格式条目 t=0 排在最后，同一个 t 再按 id 升序，
-   保证每次渲染顺序一致（Array#sort 本身稳定，这里显式定序不依赖实现）。 */
+/* ---------------- 我的追番：追番页的取数与排序 ----------------
+   追番存在 localStorage（见 20-state.js），天然是全站视角：不参与 HOME.y/q/wd 筛选。
+   只保留还能在 ANI.rows 里查到的 id（数据换过 / 条目下架的直接跳过），顺序按追番时间
+   t 倒序；旧格式条目 t=0 排在最后，同一个 t 再按 id 升序，保证每次渲染顺序一致
+   （Array#sort 本身稳定，这里显式定序不依赖实现）。 */
 function favRows() {
   var byId = {};
   ANI.rows.forEach(function (r) { byId[String(r[0])] = r; });
@@ -115,14 +115,19 @@ function favRows() {
     .map(function (e) { return byId[e.id]; });
 }
 
-/* 空追番列表时整块不输出（不留空壳占位）。卡片走 animeCard，点击由 90-boot.js 的
-   .card 事件委托处理，和首页其它卡片同一条路径。 */
-function renderFavRow() {
+/* ---------------- 追番页（fav.html）：整页只渲染追番列表 ----------------
+   排序完全沿用 favRows()（t 倒序），这里不按季度/星期筛选——HOME.q / HOME.wd 只属于首页。
+   卡片走 animeCard，点击由 90-boot.js 的 .card 事件委托统一处理，无需在此绑定。
+   追番增删后由 70-modal.js 派发 favchange，90-boot.js 监听并重新调用本函数。 */
+function renderFavPage() {
   var rows = favRows();
-  if (!rows.length) return '';
-  return '<div class="favrow"><h2>我的追番</h2><div class="grid" id="favgrid">'
-    + rows.map(function (r) { return animeCard(r, { showYear: 1, fav: 1 }); }).join('')
-    + '</div></div>';
+  var cards = rows.map(function (r) { return animeCard(r, { showYear: 1, fav: 1 }); }).join('');
+  $('#main').innerHTML = '<div class="favpage"><div class="bhead"><h2>我的追番</h2><span>'
+    + rows.length + ' 部</span></div>'
+    + (rows.length
+        ? '<div class="grid" id="favgrid">' + cards + '</div>'
+        : '<div class="empty">还没有追番 —— 打开任意作品详情，点「☆ 追番」</div>')
+    + '</div>';
 }
 
 function renderHome() {
@@ -161,11 +166,10 @@ function renderHome() {
 
   /* 榜单已搬到独立页（rank.html）：首页只放本周分组网格。
      左侧面板由 renderLevels() 给出「排行榜」入口。
-     我的追番插在标题之后、星期分块之前：它是全站视角，不吃 HOME 的季度/星期筛选。 */
+     我的追番也已搬到独立页（fav.html，见 renderFavPage），首页不再插这一块。 */
   main.innerHTML = '<div class="home-cols">' + renderLevels()
     + '<div class="home-main"><div class="home-head">' + head + '</div>'
-    + renderFavRow() + body
-    + '</div></div>';
+    + body + '</div></div>';
 
   /* 交互 */
   main.querySelectorAll('[data-q]').forEach(function (b) {

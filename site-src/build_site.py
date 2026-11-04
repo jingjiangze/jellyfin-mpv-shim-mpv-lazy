@@ -305,13 +305,15 @@ def build_movies():
     return douban, tmdb
 
 
-PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><script>(function(){var B=['https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/','https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/assets/','/'];function css(i){if(i>=B.length)return;var l=document.createElement('link');l.rel='stylesheet';l.href=B[i]+'style.css?v=__CV__';l.onerror=function(){l.parentNode&&l.parentNode.removeChild(l);css(i+1)};document.head.appendChild(l)}var F=['app.js?v=__JV__','magnet-eps.js?v=__MV__'];function ld(f,i){if(f>=F.length)return;var s=document.createElement('script');s.src=B[i]+F[f];s.onload=function(){ld(f+1,0)};s.onerror=function(){s.parentNode&&s.parentNode.removeChild(s);if(i+1<B.length)ld(f,i+1);else ld(f+1,0)};document.body.appendChild(s)}css(0);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){ld(0,0)});else ld(0,0)})()</script></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header><main class=wrap id=main><div class=loading>加载中…</div></main><div class=mask id=mask><div class=modal id=modal></div></div></body></html>"""
+PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><script>(function(){/* 资源基同源优先：ModelScope 与 gh-proxy 两个镜像实测落后于同源（app.js / magnet-eps.js 不含新功能），故同源排第一、镜像只作兜底；各资源 URL 都带 ?v= 版本参数，读同源不会命中旧缓存。 */var B=['/','https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/','https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/assets/'];function css(i){if(i>=B.length)return;var l=document.createElement('link');l.rel='stylesheet';l.href=B[i]+'style.css?v=__CV__';l.onerror=function(){l.parentNode&&l.parentNode.removeChild(l);css(i+1)};document.head.appendChild(l)}var F=['app.js?v=__JV__','magnet-eps.js?v=__MV__'];function ld(f,i){if(f>=F.length)return;var s=document.createElement('script');s.src=B[i]+F[f];s.onload=function(){ld(f+1,0)};s.onerror=function(){s.parentNode&&s.parentNode.removeChild(s);if(i+1<B.length)ld(f,i+1);else ld(f+1,0)};document.body.appendChild(s)}css(0);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){ld(0,0)});else ld(0,0)})()</script></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header><main class=wrap id=main><div class=loading>加载中…</div></main><div class=mask id=mask><div class=modal id=modal></div></div></body></html>"""
 
 PAGES = [
     ("index.html", "home", "番组计划 · 新番表", "搜索番剧…", 'class="is-on"', "", ""),
     ("anime.html", "anime", "番剧全收录 · 番组计划", "在 8,000+ 部里搜…", "", 'class="is-on"', ""),
     ("movie.html", "movie", "电影 · 番组计划", "搜索电影…", "", "", 'class="is-on"'),
     ("rank.html", "rank", "排行榜 · 番组计划", "搜索番剧…", "", "", ""),
+    # 追番页：page id 必须是 fav（前端 90-boot.js 按 data-page 分派），文件名 fav.html。
+    ("fav.html", "fav", "我的追番 · 番组计划", "搜索番剧…", "", "", ""),
 ]
 
 
