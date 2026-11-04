@@ -2561,3 +2561,38 @@ main {
 @media (max-width: 760px) {
   .acts .btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
+
+/* 番剧页筛选：桌面标签文字不折行；移动端 4 行压成 2 行；选中/忽略态；空结果占满整行。 */
+@media (min-width: 761px) {
+  .filters > .f-label { white-space: nowrap; }
+}
+
+@media (max-width: 760px) {
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s2) var(--s3);
+  }
+  .filters > .f-label { min-width: 0; }
+  .filters > .f-label > select { width: 100%; min-width: 0; }
+  /* 标签下拉的选项文字最长，独占一行 */
+  .filters > .f-label:nth-child(4) { grid-column: 1 / -1; }
+  .filters > .f-hint { grid-column: 1 / -1; }
+}
+
+.f-label.on > select {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-soft, var(--card));
+  font-weight: 600;
+}
+
+.f-label.off { opacity: .55; }
+
+.f-label select:focus-visible,
+.filters select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.grid > .empty { grid-column: 1 / -1; }

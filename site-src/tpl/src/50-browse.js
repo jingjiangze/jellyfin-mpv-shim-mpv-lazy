@@ -1,14 +1,25 @@
   /* ---------------- 番剧：全量目录 ---------------- */
   var BROWSE = { view: [], shown: 0, page: 120 };
-  function renderBrowse(reset) {
+  /* mode: 'reset' 清空回第一页 | 'more' 追加一页 | 'repaint' 按已显示条数重画（换清晰度等原地刷新） */
+  function renderBrowse(mode) {
     var grid = $('#grid');
     if (!grid) return;
-    if (reset) { grid.innerHTML = ''; BROWSE.shown = 0; }
-    var end = Math.min(BROWSE.shown + BROWSE.page, BROWSE.view.length);
+    var want;
+    if (mode === 'more') {
+      want = Math.min(BROWSE.shown + BROWSE.page, BROWSE.view.length);
+    } else {
+      want = mode === 'repaint'
+        ? Math.min(Math.max(BROWSE.shown, BROWSE.page), BROWSE.view.length)
+        : Math.min(BROWSE.page, BROWSE.view.length);
+      grid.innerHTML = '';
+      BROWSE.shown = 0;
+    }
     var html = '';
-    for (var i = BROWSE.shown; i < end; i++) html += animeCard(BROWSE.view[i], { showYear: 1 });
+    for (var i = BROWSE.shown; i < want; i++) html += animeCard(BROWSE.view[i], { showYear: 1 });
+    /* 空结果不再白屏：给一句可执行的提示 */
+    if (!BROWSE.view.length) html = '<div class="empty">这个组合没有作品 —— 换个年份/类型，或点「全部」再试</div>';
     grid.insertAdjacentHTML('beforeend', html);
-    BROWSE.shown = end;
+    BROWSE.shown = want;
     var left = BROWSE.view.length - BROWSE.shown;
     $('#morewrap').hidden = left <= 0;
     if (left > 0) $('#morebtn').textContent = '加载更多 · 还剩 ' + left + ' 部';
@@ -43,11 +54,31 @@
     });
     else if (sort === 'name') BROWSE.view.sort(function (a, b) { return String(a[2] || a[1]).localeCompare(String(b[2] || b[1]), 'zh'); });
     else BROWSE.view.sort(function (a, b) { return (b[4] || 0) - (a[4] || 0) || (b[7] || 0) - (a[7] || 0); });
-    /* reset=true 时保留分页游标（repaint 用）；无参调用与 change 事件对象照旧回第一页。
-       必须用 === true 判定：addEventListener('change', applyBrowse) 会把事件对象当 reset 传进来。 */
-    renderBrowse(reset === true ? false : true);
+    /* reset===true 表示「原地重画、保留已显示条数」（换清晰度走这条路）；
+       无参调用与 change 事件对象照旧清空回第一页 —— 必须用 === true 判定，
+       因为 addEventListener('change', applyBrowse) 会把事件对象当 reset 传进来。 */
+    renderBrowse(reset === true ? 'repaint' : 'reset');
+
+    /* 选中态：生效中的筛选高亮，默认排序不高亮 */
+    [['#f-year', y], ['#f-type', t], ['#f-tag', tg]].forEach(function (p) {
+      var el = $(p[0]);
+      if (!el) return;
+      var lb = el.closest('.f-label');
+      if (lb) lb.classList.toggle('on', !!p[1]);
+    });
+    var so = $('#f-sort');
+    if (so) {
+      var sl = so.closest('.f-label');
+      if (sl) sl.classList.toggle('on', sort !== 'year');
+    }
+    /* 有搜索词时年份不生效（见上面的过滤条件）——用视觉灰化说明，别让下拉看起来还在生效 */
+    var yl = $('#f-year');
+    if (yl) {
+      var ylb = yl.closest('.f-label');
+      if (ylb) ylb.classList.toggle('off', !!(q && y));
+    }
   }
-  /* 标签索引按需加载：tags.json 只在上万人点开「标签」筛选时才拉，
+  /* 标签索引：进入浏览页就会拉一次（体积大，见 tags.json），拿到后重填下拉。
      8,851 条的 tag→id 映射有几百 KB，进站不背这个包袱。 */
   var TAGS = null;
   /* 深链：/anime.html?tag=xxx 直接把标签筛选选中（标签下拉是异步填的，所以要在填完之后再应用） */
@@ -113,7 +144,7 @@
       + '<div class="grid" id="grid"></div>'
       + '<div class="morewrap" id="morewrap" hidden><button class="morebtn" id="morebtn" type="button"></button></div>';
     $('#f-year').value = ys[0] ? String(ys[0]) : '';
-    $('#morebtn').onclick = function () { renderBrowse(false); };
+    $('#morebtn').onclick = function () { renderBrowse('more'); };
     ['#f-year', '#f-type', '#f-sort'].forEach(function (s) { $(s).addEventListener('change', applyBrowse); });
     mountTagFilter();
     /* 首屏：标签索引若已在手就先选中再筛；还没加载时上面 mountTagFilter 会在拉完后补一次 */
