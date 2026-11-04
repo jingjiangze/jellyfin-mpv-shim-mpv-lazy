@@ -2016,24 +2016,47 @@ main {
     font-size: var(--fs-lg);
   }
 
-  /* 顶部筛选条在手机上纵向堆叠：季度 / 星期各占整宽 */
+  /* 手机端筛选条压缩：季度/星期各占一行横滑，避免 3 组×2 行把首屏吃掉 */
   .levels {
     flex-direction: column;
-    gap: var(--s3);
+    padding: var(--s2) var(--s3);
+    gap: var(--s2);
   }
 
   .levels .lv {
     flex: 1 1 auto;
     width: 100%;
+    gap: 6px;
   }
 
-  .chips.chips--col {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .levels .chips.chips--col,
+  .levels .chips.chips--wd {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 6px;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
-  .chips.chips--wd {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .levels .chips.chips--col::-webkit-scrollbar,
+  .levels .chips.chips--wd::-webkit-scrollbar {
+    display: none;
+  }
+
+  .levels .chip {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 32px;
+    padding: 0 10px;
+  }
+
+  .levels .chip em {
+    margin-left: 4px;
+    white-space: nowrap;
   }
 
   /* 番剧页筛选：纵向一列，下拉统一满宽 */
