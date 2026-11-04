@@ -56,6 +56,10 @@ function flushTagCounts() {
 var w = TAGCNT_WAIT; TAGCNT_WAIT = [];
 w.forEach(function (f) { try { f(); } catch (e) { /* 单个回调失败不影响其它 */ } });
 }
+var FOLLOW_API = 'https://120.48.56.189/auth/follow';
+function followToken() {
+try { return localStorage.getItem('gh_token') || ''; } catch (e) { return ''; }
+}
 var FAV_KEY = 'follow';
 function favList() {
 try {
@@ -68,13 +72,45 @@ function toggleFollow(id) {
 var a = favList(), k = String(id), i = a.indexOf(k);
 if (i >= 0) a.splice(i, 1); else a.push(k);
 try { localStorage.setItem(FAV_KEY, JSON.stringify(a)); } catch (e) { /* 忽略 */ }
-return i < 0;
+var now = i < 0;
+var tk = followToken();
+if (tk) {
+fetch(FOLLOW_API, {
+method: 'POST',
+headers: { 'content-type': 'application/json', authorization: 'Bearer ' + tk },
+body: JSON.stringify({ id: k, on: now })
+}).catch(function () { /* 静默：本地已写入，不弹错、不回滚 */ });
+}
+return now;
+}
+function mergeRemote(items) {
+if (!items || !items.length) return false;
+var before = favList(), after = before.slice();
+items.forEach(function (it) {
+if (!it || it.id == null) return;
+var k = String(it.id), i = after.indexOf(k);
+if (Number(it.on) === 1) { if (i < 0) after.push(k); }
+else if (i >= 0) after.splice(i, 1);
+});
+var same = after.length === before.length && after.every(function (v, i) { return v === before[i]; });
+if (same) return false;
+try { localStorage.setItem(FAV_KEY, JSON.stringify(after)); } catch (e) { /* 忽略 */ }
+return true;
+}
+function pullFollow() {
+var tk = followToken();
+if (!tk) return;
+fetch(FOLLOW_API, { headers: { authorization: 'Bearer ' + tk } })
+.then(function (r) { return r.ok ? r.json() : null; })
+.then(function (d) { if (d && d.ok && d.items) mergeRemote(d.items); })
+.catch(function () { /* 静默：追番是增值功能，拉不到不影响任何页面渲染 */ });
 }
 var PSZ = { mode: 'hd' };
 try {
 var _psz = localStorage.getItem('psz');
 if (_psz === 'hd' || _psz === 'sd') PSZ.mode = _psz;
 } catch (e) { /* 隐私模式 / file:// 下 localStorage 可能不可用，忽略 */ }
+pullFollow();
 function fbAttr(list) {
 var q = list.filter(Boolean);
 return q.length ? ' data-fb="' + esc(q.join('|')) + '" onerror="__fb(this)"' : '';
@@ -962,6 +998,7 @@ applyTheme(currentTheme());
 var AUTH_BASE = 'https://120.48.56.189';
 var TOKEN_KEY = 'gh_token';
 var AUTH_PENDING = '';
+var AUTH_LOGIN = '';
 function authToken() {
 try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
 }
@@ -1005,8 +1042,9 @@ if (e && e.target && e.target.id === 'loginbtn') openAuthPanel();
 el.innerHTML = loginBtnHtml();
 }
 var authEsc = null;
-function openAuthPanel() {
+function openAuthPanel(mode) {
 if (document.getElementById('authmask')) return;
+if (mode === 'account' && !authToken()) mode = '';
 var mask = document.createElement('div');
 mask.className = 'authmask';
 mask.id = 'authmask';
@@ -1033,6 +1071,18 @@ mask.innerHTML = '<div class="authcard" role="dialog" aria-modal="true">'
 + '<button class="btn" id="authresend" type="button">重新发送</button>'
 + '</div>'
 + '</div>'
++ '<div class="authbody" data-t="account" hidden>'
++ '<p class="authhint" id="accthint">已登录</p>'
++ '<label class="authfield"><span>原密码</span><input id="acctold" type="password"'
++ ' autocomplete="current-password"></label>'
++ '<label class="authfield"><span>新密码</span><input id="acctnew" type="password"'
++ ' autocomplete="new-password" placeholder="至少 8 位"></label>'
++ '<div class="autherr" id="accterr"></div>'
++ '<div class="authacts">'
++ '<button class="btn pri" id="acctsave" type="button">修改密码</button>'
++ '<button class="btn" id="acctout" type="button">退出登录</button>'
++ '</div>'
++ '</div>'
 + '</div>';
 document.body.appendChild(mask);
 mask.querySelector('.authx').onclick = closeAuthPanel;
@@ -1041,8 +1091,10 @@ mask.querySelector('#authlogin').onclick = function () { submitAuth('login'); };
 mask.querySelector('#authreg').onclick = function () { submitAuth('register'); };
 mask.querySelector('#authconfirm').onclick = confirmCode;
 mask.querySelector('#authresend').onclick = resendCode;
+mask.querySelector('#acctsave').onclick = changePassword;
+mask.querySelector('#acctout').onclick = logoutAccount;
 mask.querySelectorAll('.authfield input').forEach(function (inp) {
-if (inp.id === 'authcode') return;
+if (inp.id === 'authcode' || inp.id === 'acctold' || inp.id === 'acctnew') return;
 inp.addEventListener('keydown', function (e) {
 if (e.key === 'Enter') { e.preventDefault(); submitAuth('login'); }
 });
@@ -1051,12 +1103,33 @@ var acode = document.getElementById('authcode');
 if (acode) acode.addEventListener('keydown', function (e) {
 if (e.key === 'Enter') { e.preventDefault(); confirmCode(); }
 });
+var acctFields = ['acctold', 'acctnew'].map(function (id) { return document.getElementById(id); });
+acctFields.forEach(function (inp) {
+if (!inp) return;
+inp.addEventListener('keydown', function (e) {
+if (e.key === 'Enter') { e.preventDefault(); changePassword(); }
+});
+});
 authEsc = function (e) { if (e.key === 'Escape') closeAuthPanel(); };
 document.addEventListener('keydown', authEsc);
-var first = document.getElementById('authemail');
+showAuthView(mode === 'account' ? 'account' : 'email');
+var first = document.getElementById(mode === 'account' ? 'acctold' : 'authemail');
 if (first) first.focus();
 }
-window.__openLogin = openAuthPanel;
+function showAuthView(name) {
+var mask = document.getElementById('authmask');
+if (!mask) return;
+mask.querySelectorAll('.authbody').forEach(function (x) {
+x.hidden = x.getAttribute('data-t') !== name;
+});
+if (name === 'account') {
+var hint = document.getElementById('accthint');
+if (hint) hint.textContent = '已登录' + (AUTH_LOGIN ? '：' + AUTH_LOGIN : '');
+}
+}
+window.__openLogin = function () {
+openAuthPanel(authToken() ? 'account' : 'email');
+};
 function closeAuthPanel() {
 var m = document.getElementById('authmask');
 if (m && m.parentNode) m.parentNode.removeChild(m);
@@ -1087,6 +1160,7 @@ if (res.ok && j.token) {
 try { localStorage.setItem(TOKEN_KEY, j.token); } catch (e) { /* 隐私模式忽略 */ }
 closeAuthPanel();
 paintAuth();
+try { pullFollow(); } catch (e) { }
 return;
 }
 if (j.need_verify) {
@@ -1106,9 +1180,7 @@ if (br) br.disabled = false;
 function showAuthVerify(hint, devCode) {
 var mask = document.getElementById('authmask');
 if (!mask) return;
-mask.querySelectorAll('.authbody').forEach(function (x) {
-x.hidden = x.getAttribute('data-t') !== 'verify';
-});
+showAuthView('verify');
 var tip = document.getElementById('authverifyhint');
 if (tip) tip.textContent = hint || '验证码已发送';
 var code = document.getElementById('authcode');
@@ -1144,6 +1216,7 @@ try { localStorage.setItem(TOKEN_KEY, j.token); } catch (e) { /* 隐私模式忽
 AUTH_PENDING = '';
 closeAuthPanel();
 paintAuth();
+try { pullFollow(); } catch (e) { }
 return;
 }
 throw new Error(j.error || '验证码不对或已过期');
@@ -1189,6 +1262,59 @@ if (bc) bc.disabled = false;
 if (br) br.disabled = false;
 });
 }
+function changePassword() {
+var oldp = document.getElementById('acctold');
+var newp = document.getElementById('acctnew');
+var err = document.getElementById('accterr');
+var bs = document.getElementById('acctsave');
+var bo = document.getElementById('acctout');
+if (!oldp || !newp) return;
+if ((bs && bs.disabled) || (bo && bo.disabled)) return;
+var tk = authToken();
+if (!tk) { if (err) err.textContent = '登录已失效，请重新登录'; return; }
+if (err) err.textContent = '';
+if (bs) bs.disabled = true;
+if (bo) bo.disabled = true;
+fetch(AUTH_BASE + '/auth/password', {
+method: 'POST',
+headers: { 'content-type': 'application/json', authorization: 'Bearer ' + tk },
+body: JSON.stringify({ old: oldp.value, new: newp.value })
+}).then(function (r) {
+return r.json().catch(function () { return null; }).then(function (j) {
+return { status: r.status, ok: r.ok, j: j };
+});
+}).then(function (res) {
+var j = res.j || {};
+if (res.ok && j.ok) {
+oldp.value = '';
+newp.value = '';
+if (err) err.textContent = '密码已更新';
+return;
+}
+throw new Error(j.error || '修改失败');
+}).catch(function (e) {
+if (err) err.textContent = (e && e.message) || '修改失败';
+}).then(function () {
+if (bs) bs.disabled = false;
+if (bo) bo.disabled = false;
+});
+}
+function logoutAccount() {
+var bs = document.getElementById('acctsave');
+var bo = document.getElementById('acctout');
+if ((bs && bs.disabled) || (bo && bo.disabled)) return;
+var tk = authToken();
+if (bs) bs.disabled = true;
+if (bo) bo.disabled = true;
+fetch(AUTH_BASE + '/auth/logout', { method: 'POST', headers: { authorization: 'Bearer ' + tk } })
+.catch(function () { /* 退出请求失败也照常清本地态 */ })
+.then(function () {
+try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* 忽略 */ }
+AUTH_LOGIN = '';
+closeAuthPanel();
+paintAuth();
+});
+}
 function paintAuth() {
 var el = document.getElementById('cnt');
 if (!el) return;
@@ -1202,19 +1328,13 @@ return r.json();
 }).then(function (d) {
 var u = (d && d.ok && d.user) || null;
 if (!u) { var e = new Error('login_required'); e.auth = 1; throw e; }
-el.title = '点击退出登录';
+AUTH_LOGIN = String(u.login || '');
+el.title = '账号设置';
 var av = u.avatar
 ? '<img class="av" src="' + esc(u.avatar) + '" alt="">'
 : '<span class="avt">' + esc(String(u.login || '?').slice(0, 1).toUpperCase()) + '</span>';
 el.innerHTML = av + '<b>' + esc(u.login) + '</b>';
-el.onclick = function () {
-fetch(AUTH_BASE + '/auth/logout', { method: 'POST', headers: { authorization: 'Bearer ' + tk } })
-.catch(function () { /* 退出请求失败也照常清本地态 */ })
-.then(function () {
-try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* 忽略 */ }
-location.reload();
-});
-};
+el.onclick = function () { openAuthPanel('account'); };
 }).catch(function (e) {
 if (e && e.auth) { try { localStorage.removeItem(TOKEN_KEY); } catch (err) { /* 忽略 */ } }
 paintLoginEntry(el);
