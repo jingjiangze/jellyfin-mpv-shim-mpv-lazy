@@ -1943,7 +1943,7 @@ main {
 
   .mainnav a {
     flex: 0 0 auto;
-    padding: 6px 10px;
+    padding: 8px 10px;
     font-size: var(--fs-sm);
   }
 
@@ -1958,7 +1958,7 @@ main {
   }
 
   .searchbox input {
-    height: 32px;
+    height: 36px;
     max-width: none;
   }
 
@@ -1968,9 +1968,10 @@ main {
 
   .thm {
     flex: 0 0 auto;
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     margin-left: auto;
+    font-size: 15px;
   }
 
   .build {
@@ -1984,8 +1985,10 @@ main {
   }
 
   #cnt .login {
-    height: 30px;
-    padding: 0 10px;
+    height: 32px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
   }
 
   main {
@@ -2064,12 +2067,25 @@ main {
     flex: 0 0 auto;
   }
 
+  /* 原生 select 的箭头由浏览器绘制，padding-right 管不到它；去掉原生外观、用背景 SVG 自绘箭头 */
   .f-label select {
     width: 100%;
     height: 36px;
     flex: 1 1 auto;
     min-width: 0;
-    padding-right: 28px;
+    padding-right: 34px;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%239499A0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px 8px;
+  }
+
+  /* 深色主题：箭头换成 --dim 的深色值，浅灰在暗底上发闷 */
+  [data-theme="dark"] .f-label select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23a8a8b4' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   }
 
   /* 弹窗整屏；hero 两栏：封面 120×180 靠左、信息在右 */
@@ -2093,6 +2109,8 @@ main {
     right: var(--s2);
     width: 36px;
     height: 36px;
+    font-size: 22px;
+    line-height: 1;
   }
 
   .mhero, .mhd {
@@ -2143,6 +2161,18 @@ main {
   .btn {
     height: 36px;
     padding: 0 var(--s3);
+  }
+
+  /* 详情弹窗动作区：满幅 sheet 下 6 个按钮排成 2 列 3 行，右端不再参差 */
+  .acts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s2);
+  }
+
+  .acts .btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .mtab {
@@ -2208,7 +2238,7 @@ main {
   }
 
   .mainnav a {
-    padding: 5px 8px;
+    padding: 9px 8px;
     font-size: var(--fs-xs);
   }
 
@@ -2218,10 +2248,10 @@ main {
     font-size: var(--fs-xs);
   }
 
-  /* 跟 .psz 一起缩到 26px：放在 .psz 真正被缩小的这个块里才对齐 */
+  /* 与 760 块保持一致：32×32 触控尺寸（.psz 在 ≤760 已 display:none，不再有对齐目标） */
   .thm {
-    width: 26px;
-    height: 26px;
+    width: 32px;
+    height: 32px;
   }
 
   .mhero, .mhd {
