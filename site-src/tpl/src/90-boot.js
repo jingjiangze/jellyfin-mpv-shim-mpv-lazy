@@ -55,6 +55,7 @@
     if (PAGE === 'anime') applyBrowse(true);
     else if (PAGE === 'movie') refreshMovie(true);
     else if (PAGE === 'rank') renderRank();
+    else if (PAGE === 'fav') renderFavPage();
     else renderHome();
   }
 
@@ -445,7 +446,7 @@
     /* 首页 / 番剧 / 排行榜都搜番剧，电影页搜电影 */
     var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
     var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
-      ['rank', 'rank', '排行榜']]
+      ['rank', 'rank', '排行榜'], ['fav', 'fav', '追番']]
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');
@@ -491,6 +492,11 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
 
   bootHeader();
+  /* 追番变更就地重绘追番页；搜索态下 #main 已换成搜索结果、不含 .favpage，此时不重绘，
+     否则会把用户正在看的搜索结果冲掉。顶层只挂一次。 */
+  document.addEventListener('favchange', function () {
+    if (PAGE === 'fav' && document.querySelector('.favpage')) renderFavPage();
+  });
   bootAnime().then(function () {
     if (PAGE === 'anime') {
       $('#q').placeholder = '在 ' + ANI.rows.length + ' 部里搜…';
@@ -505,6 +511,9 @@
     } else if (PAGE === 'rank') {
       renderRank();
       bindSearch(renderRank);
+    } else if (PAGE === 'fav') {
+      renderFavPage();
+      bindSearch(renderFavPage);
     } else {
       renderHome();
       bindSearch(renderHome);
