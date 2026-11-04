@@ -14,20 +14,24 @@ site/data/s<N>.json 供前端按需拉。本脚本两边都写：只改 data/ �
 并发：串行 3451 条 × 1–1.5s ≈ 50–85 分钟，超过 CI 的 45 分钟上限（实测跑到
 40 分钟仍 in_progress、被 timeout 杀掉）。改为按分片分段 + 片内 WORKERS 线程并行，
 每条请求前加 0–GAP 随机抖动避免同时打同一毫秒。实测 ≈10 分钟跑完 3451 条。
-片内并发默认 4（2026-11-04 由 8 下调）：gtx 对高并发很快整片限流，上一轮
-（site-sync run 41678297541）约 1,624 条成功后连片失败、白跑 20 分钟。
+片内并发默认 12（2026-11-04 对齐 dsh-market/crawler/translate.mjs 的 CI 并发 12–16；
+此前默认 4 是按「高并发被整片限流」的推断下调的，而实测 429 更可能来自缺 UA 的
+默认 Python-urllib 头，故先按 dsh 的并发回抬，仍可用 TR_WORKERS 覆盖）。
 
 幂等：写回时新增 overview_ja 存日文原文（便于回滚 / 人工复核），
 该字段已存在即视为「翻译过」，跳过。每写完 CHUNK 条（默认 8 条）立即落盘，
 超时被杀最多丢当前一批，已翻译的部分保留。同步真源 anime/<n>.json 在整片结束时
 只做一次，不每批重写。
 
-容错：单条请求失败（429 / 5xx / 网络）最多尝试 4 次，退避 2s / 4s / 8s / 16s
-（每档 ±30% 随机抖动），仍失败就跳过该条并记入 failed。失败原因按 HTTP 状态码 /
-异常类名累加直方图，结束时打印——原实现 `except Exception: pass`，日志里看不到
-到底是 429 还是超时，限流与网络故障分不开。
+容错：单条请求失败（429 / 5xx / 网络）最多尝试 3 次（RETRIES=2 次重试），退避
+0.4s / 0.8s 线性（对齐 dsh-market/crawler/translate.mjs 的 400*(attempt+1) 毫秒，
+不加重试抖动，快速失败把预算留给下一轮），仍失败就跳过该条并记入 failed。
+每次请求失败都按 HTTP 状态码 / 异常类名累加直方图，结束时打印——原实现
+`except Exception: pass`，日志里看不到到底是 429 还是超时，限流与网络故障分不开。
+请求头带浏览器 UA + accept（dsh 同端点实测做法）：urllib 默认
+`Python-urllib/3.x` 很可能是 gtx 直接 429 的主因。
 
-熔断：连续失败（按条目计，一条 4 次尝试全挂算 1 条）达到 CIRCUIT=25 就全体暂停
+熔断：连续失败（按条目计，一条 3 次尝试全挂算 1 条）达到 CIRCUIT=25 就全体暂停
 CIRCUIT_SLEEP=120 秒再继续；累计失败（成功只衰减 1，不清零）达到
 CIRCUIT_HARD=30 就停止整轮：没翻的条目原样保留在分片里（不写盘），下轮接着翻。
 原 CIRCUIT_HARD=120 在限流态（每条约 34s）要 ~17 分钟才触发，超过 workflow
@@ -64,11 +68,12 @@ SHARD_TOTAL = 64
 
 GTX = "https://translate.googleapis.com/translate_a/single"
 GAP = 0.5                     # 单条请求前的随机抖动上限（秒），避免同刻并发
-WORKERS = int(os.environ.get("TR_WORKERS", "4") or 4)   # 片内并发数
+WORKERS = int(os.environ.get("TR_WORKERS", "12") or 12)  # 片内并发数（对齐 dsh 的 12–16）
 
 # ---- 重试 / 熔断参数 ----
-RETRIES = 4                   # 单条最多尝试次数（原 3 次）
-BACKOFF = (2, 4, 8, 16)       # 第 N 次重试前的基准退避（秒），实乘 0.7–1.3
+RETRIES = 2                   # 重试次数（不含首次），即最多 3 次尝试；对齐 dsh 的 3 次
+TRY_MAX = RETRIES + 1
+RETRY_BACKOFF = 0.4           # 第 i 次重试前等 0.4*(i+1) 秒 ⇒ 0.4 / 0.8，合计 1.2s
 CIRCUIT = 25                  # 连续失败达到即全体休息
 # 累计失败达到即停止整轮。原 120：限流态每条约 34s，要 ~17 分钟才触发，
 # 而 workflow 步长只有 10 分钟 ⇒ 每轮必被 SIGTERM 杀掉。下调到 30。
@@ -81,7 +86,9 @@ TR_MAX = int(os.environ.get("TR_MAX", "300") or 300)        # 本轮最多翻多
 CHUNK = max(2, int(os.environ.get("TR_CHUNK", "8") or 8))   # 每次提交多少个任务就落一次盘
 
 FAIL_REASONS = Counter()      # 本次运行的失败原因直方图：{"429": 1600, "TimeoutError": 71}
-_fail_lock = threading.Lock() # Counter 的 += 不是原子读改写，多线程必须加锁
+_fail_lock = threading.Lock() # Counter / 计数器的 += 不是原子读改写，多线程必须加锁
+ATTEMPTS = 0                  # 已发出的请求次数（含重试），收尾算成功率的分母
+SUCCESSES = 0                 # 拿到非空译文的请求次数，成功率的分子
 _gate = threading.Event()     # clear = 全体暂停（限流休息中）；worker 请求前等它
 _gate.set()
 _consec = 0                   # 连续失败（条目计；成功或休息一次后清零）
@@ -117,45 +124,73 @@ def detect_lang(text):
 
 
 def gtx_translate(text, sl="ja", tl="zh-CN"):
-    """调 gtx 接口，返回译文。失败抛异常，由调用方重试。"""
+    """调 gtx 接口，返回译文。失败抛异常，由调用方重试。
+
+    请求头照抄 dsh-market/crawler/translate.mjs：浏览器 UA + accept（dsh 只加 UA，
+    端点同为 translate.googleapis.com/translate_a/single?client=gtx&...&dt=t&q=）。
+    urllib 默认 `Python-urllib/3.x` 会被 gtx 直接 429。
+    """
     params = urllib.parse.urlencode(
         {"client": "gtx", "sl": sl, "tl": tl, "dt": "t", "q": text})
     req = urllib.request.Request(GTX + "?" + params, headers={
-        "user-agent": "Mozilla/5.0 (compatible; anime-site/1.0)"})
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/138.0.0.0 Safari/537.36",
+        "accept": "*/*"})
     with urllib.request.urlopen(req, timeout=30) as r:
         data = json.loads(r.read().decode("utf-8"))
     # 返回格式：[[["译","原",...],["译2","原2",...]], ...]
     return "".join(seg[0] for seg in (data[0] or []) if len(seg) > 0)
 
 
+def _record_attempt(reason):
+    """记一次请求尝试：reason 为空 = 成功，否则按状态码 / 异常类名累加直方图。"""
+    global ATTEMPTS, SUCCESSES
+    with _fail_lock:
+        ATTEMPTS += 1
+        if reason:
+            FAIL_REASONS[reason] += 1
+        else:
+            SUCCESSES += 1
+
+
 def translate_one(text):
-    """单条翻译：最多 RETRIES 次，退避 2/4/8/16 秒（±30% 抖动）。
+    """单条翻译：最多 3 次尝试（RETRIES=2），退避 0.4s / 0.8s。
+
+    对齐 dsh-market/crawler/translate.mjs 的快速失败：3 次尝试、400*(i+1)ms
+    线性退避、不加重试抖动。每次请求失败（429 / 5xx / 超时 / 空译文）都单独
+    计入 ATTEMPTS 与 FAIL_REASONS，所以 429 的计数是「请求次数」而不是「条目数」。
 
     返回 (译文, 失败原因)：成功是 ("译文", "")；全失败是 ("", "429" / "TimeoutError" /
-    "empty")。不吞异常——把状态码或异常类名带出去，由调用方累加直方图。
+    "empty")。不吞异常——把状态码或异常类名带出去。
     """
     reason = ""
-    for attempt in range(RETRIES):
+    for attempt in range(TRY_MAX):
         try:
             out = (gtx_translate(text) or "").strip()
-            if out:
-                return out, ""
-            reason = "empty"              # 接口返回空译文，同样按失败重试
         except urllib.error.HTTPError as e:
             reason = str(e.code)          # 429 限流 / 5xx，状态码单独记账
+            _record_attempt(reason)
         except Exception as e:            # URLError / TimeoutError / JSONDecodeError …
             reason = type(e).__name__
-        if attempt < RETRIES - 1:
-            base = BACKOFF[min(attempt, len(BACKOFF) - 1)]
-            time.sleep(base * random.uniform(0.7, 1.3))
+            _record_attempt(reason)
+        else:
+            if out:
+                _record_attempt("")
+                return out, ""
+            reason = "empty"              # 接口返回空译文，同样按失败重试
+            _record_attempt(reason)
+        if attempt < TRY_MAX - 1:
+            time.sleep(RETRY_BACKOFF * (attempt + 1))
     return "", reason
 
 
 def note_result(reason):
     """记一条翻译结果（reason 为空 = 成功），返回 True 表示硬熔断触发。
 
-    只在主线程（收集结果那一侧）调用，所以 _consec 这几个计数不加锁；
-    FAIL_REASONS 仍套 _fail_lock，免得将来从 worker 里调时静默丢计数。
+    失败原因直方图已在 translate_one 里按「每次请求」累加（429 计数 = 请求次数），
+    这里只维护连续 / 累计失败两个计数器，避免重复计数。
+    只在主线程（收集结果那一侧）调用，所以 _consec 这几个计数不加锁。
     """
     global _consec, _consec_total, hard_stop
     if not reason:
@@ -164,8 +199,6 @@ def note_result(reason):
         # 累计失败永远攒不到 CIRCUIT_HARD，硬熔断等于失效（原实现即如此）。
         _consec_total = max(0, _consec_total - 1)
         return False
-    with _fail_lock:
-        FAIL_REASONS[reason] += 1
     _consec += 1
     _consec_total += 1
     if _consec_total >= CIRCUIT_HARD:
@@ -368,6 +401,10 @@ def main():
     print(f"翻译完成 {translated} 条 / 跳过（已翻译）{skipped} 条 / 失败 {len(failed)} 条")
     if FAIL_REASONS:
         print(f"失败原因：{dict(FAIL_REASONS.most_common())}")
+    rate = f"{SUCCESSES}/{ATTEMPTS}"
+    if ATTEMPTS:
+        rate += f"（{SUCCESSES / ATTEMPTS * 100:.1f}%）"
+    print(f"成功率 {rate}")
     if failed:
         print("失败 id（前 20）：" + ", ".join(str(x) for x in failed[:20]))
     if hard_stop:
