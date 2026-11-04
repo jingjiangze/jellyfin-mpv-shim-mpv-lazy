@@ -168,7 +168,9 @@ jobs:
       # 已有 overview_ja 的跳过（幂等）。翻完写回 site/anime/*.json + site/data/s*.json，
       # 失败不阻断构建。
       - name: Translate Japanese overviews
-        timeout-minutes: 60
+        # 2026-11-04 由 60 降到 10：这一步反复吃满 60 分钟超时，把整条发布队列堵死
+        # （实测两次 run 各卡 1.5 小时，站点修复无法上线）。翻译是幂等的，翻不完下次继续。
+        timeout-minutes: 10
         continue-on-error: true
         working-directory: site-src
         env:
