@@ -1,6 +1,9 @@
 (function () {
 'use strict';
 var ENTRY = null, LOADING = false, LAST_NAME = null, BASE_I = -1, MANIFEST = null;
+var REV = '';                        // reload() 期间的时间戳：只用于绕 HTTP 缓存
+var EPOCH = 0;
+var CUR_BOX = null, CUR_STATE = null;
 var BASES = [
 'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/eps/',
 'https://gcore.jsdelivr.net/gh/jingjiangze/jellyfin-mpv-shim-mpv-lazy@main/media/eps/',
@@ -9,11 +12,6 @@ var BASES = [
 ];
 var SHARDS = 16;
 var CACHE = {};                      // shardNo -> { 归一化片名: 条目 }
-var AUTH_BASE = 'https://120.48.56.189';
-var TOKEN_KEY = 'gh_token';
-function authToken() {
-try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
-}
 function hashOf(str) {
 var h = 0, i = 0, s = String(str || '');
 while (i < s.length) {
@@ -70,6 +68,11 @@ clearTimeout(timer);
 throw e;
 });
 }
+function bustUrl() {
+if (REV) return '?v=' + REV;
+if (MANIFEST && MANIFEST.v) return '?v=' + encodeURIComponent(String(MANIFEST.v));
+return '';
+}
 function loadManifest() {
 if (MANIFEST) return Promise.resolve(MANIFEST);
 var i = 0;
@@ -77,7 +80,7 @@ return new Promise(function (resolve, reject) {
 (function next() {
 if (i >= BASES.length) return reject(new Error('no manifest'));
 var at = i++;
-getJSON(BASES[at] + 'index.json').then(function (m) {
+getJSON(BASES[at] + 'index.json' + bustUrl()).then(function (m) {
 if (!m || !m.shards || !m.count) throw new Error('bad manifest');
 MANIFEST = m;
 BASE_I = at;
@@ -96,7 +99,7 @@ return new Promise(function (resolve, reject) {
 (function next() {
 if (k >= order.length) return reject(new Error('shard ' + n + ' unavailable'));
 var at = order[k++];
-getJSON(BASES[at] + 's' + (n < 10 ? '0' + n : n) + '.json').then(function (d) {
+getJSON(BASES[at] + 's' + (n < 10 ? '0' + n : n) + '.json' + bustUrl()).then(function (d) {
 if (!d) throw new Error('empty shard');
 CACHE[n] = d;
 resolve(d);
@@ -104,8 +107,13 @@ resolve(d);
 })();
 });
 }
-var LIVE = {}, LIVE_DOWN = false, NEED_LOGIN = false;
+var LIVE = {}, LIVE_DOWN = false;
+var NEED_LOGIN = false;
 var LIVE_URL = 'https://120.48.56.189/eps';
+var TOKEN_KEY = 'gh_token';
+function authToken() {
+try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+}
 var RE_RANGE = /第\s*(\d{1,4})\s*[-–~〜]\s*(\d{1,4})\s*[話话集]/;
 var RE_SINGLE = /第\s*(\d{1,4})\s*[話话集](?!\d)/;
 var RE_BRACKET = /[\]\)\s\-–—]\s*\[?(\d{1,4})\]?(?=\s*(?:\[|\(|END|完|【|v\d|$))/;
@@ -187,23 +195,28 @@ return isNaN(n) ? 0 : n;
 }
 return 0;
 }
-function fetchLive(name, epsN, orig) {
-if (LIVE[name]) return Promise.resolve(LIVE[name]);
-NEED_LOGIN = false;
+function fetchLive(name, epsN, orig, force) {
+if (!force && LIVE[name]) return Promise.resolve(LIVE[name]);
 var u = LIVE_URL + '?kw=' + encodeURIComponent(name);
 if (orig) u += '&o=' + encodeURIComponent(orig);
+if (force) u += '&force=1';
 var ctl = typeof AbortController === 'function' ? new AbortController() : null;
 var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
 var tk = authToken();
-var opt = ctl ? { signal: ctl.signal } : {};
+var opt = {};
+if (ctl) opt.signal = ctl.signal;
 if (tk) opt.headers = { authorization: 'Bearer ' + tk };
 return fetch(u, opt).then(function (r) {
 clearTimeout(timer);
-if (r.status === 401) { NEED_LOGIN = true; throw new Error('login_required'); }
+if (r.status === 401) {
+NEED_LOGIN = true;
+var e401 = new Error('login_required');
+e401.status = 401;
+throw e401;
+}
 if (!r.ok) throw new Error('HTTP ' + r.status);
 return r.json();
 }).then(function (d) {
-if (d && d.error === 'login_required') { NEED_LOGIN = true; return null; }
 var eps = (d && d.eps && Object.keys(d.eps).length) ? d.eps : null;
 var batch = (d && d.batch) || [];
 if (!eps) {
@@ -215,20 +228,37 @@ if (!Object.keys(eps).length && !batch.length) return null;
 var e = { n: name, eps: eps, batch: batch, live: 1 };
 LIVE[name] = e;
 try {
+var tk2 = authToken();
+var hdr2 = { 'content-type': 'text/plain;charset=UTF-8' };
+if (tk2) hdr2.authorization = 'Bearer ' + tk2;
 var ctl2 = typeof AbortController === 'function' ? new AbortController() : null;
 var t2 = setTimeout(function () { if (ctl2) ctl2.abort(); }, 8000);
 fetch(LIVE_URL + '-save', {
 method: 'POST',
-headers: { 'content-type': 'text/plain;charset=UTF-8' },
+headers: hdr2,
 body: JSON.stringify({ n: name, eps: eps, batch: (e && e.batch) || [] }),
 signal: ctl2 ? ctl2.signal : undefined
-}).then(function () { clearTimeout(t2); }, function () { clearTimeout(t2); });
+}).then(function (r) {
+clearTimeout(t2);
+if (!r || !r.ok) return;
+}, function () { clearTimeout(t2); });
 } catch (err) { /* 忽略：只是入库，不影响展示 */ }
 return e;
-}).catch(function () {
-if (!NEED_LOGIN) LIVE_DOWN = true;
+}).catch(function (err) {
+if (err && err.status === 401) { NEED_LOGIN = true; return null; }
+LIVE_DOWN = true;
 return null;
 });
+}
+function dbLive(name) {
+var u = LIVE_URL + '?kw=' + encodeURIComponent(name) + '&db=1&_=' + Date.now();
+return getJSON(u, 9000).then(function (d) {
+if (!d || d.miss || d.ok === false) return null;
+var eps = (d.eps && Object.keys(d.eps).length) ? d.eps : {};
+var batch = d.batch || [];
+if (!Object.keys(eps).length && !batch.length) return null;
+return { n: name, eps: eps, batch: batch, db: 1 };
+}).catch(function () { return null; });
 }
 function resolveEntry(name) {
 if (!name) return Promise.resolve(null);
@@ -326,7 +356,44 @@ return '<div class="mgsect"><div class="sec-h"><h2>' + escText(title) + '</h2>'
 + '<span class="sec-sub">' + escText(sub) + '</span></div>'
 + '<div class="mgrows">' + rows + '</div></div>';
 }
-function epsListHtml(a, b) {
+var G_OTHER = '其他';
+var RE_GPREFIX = /^[\[【]([^\]】]{1,40})[\]】]/;
+function cleanGroupName(raw) {
+var s = String(raw == null ? '' : raw).trim();
+s = s.replace(/^[\[\]【】\s]+/, '').replace(/[\[\]【】\s]+$/, '');
+s = s.replace(/\s*([\-–—_/~|&+·・])\s*/g, '$1');
+s = s.replace(/\s+/g, ' ');
+return s.trim();
+}
+function groupNameOf(item) {
+var g = cleanGroupName(item && item.g);
+if (g) return g;
+var m = RE_GPREFIX.exec(String((item && item.t) || '').trim());
+return cleanGroupName(m && m[1]) || G_OTHER;
+}
+function epNoOf(item, hint) {
+var n = Number(hint);
+if (n > 0) return n;
+var t = String((item && item.t) || '');
+if (!t || RE_PACK.test(t)) return null;
+var nums = parseEpsTitle(t);
+return nums.length === 1 ? nums[0] : null;
+}
+function groupCmp(a, b) {
+if (a === b) return 0;
+if (a === G_OTHER) return 1;
+if (b === G_OTHER) return -1;
+return String(a).localeCompare(String(b), 'zh');
+}
+function rowCmp(a, b) {
+var an = a.ep == null, bn = b.ep == null;
+if (an !== bn) return an ? 1 : -1;
+if (!an && a.ep !== b.ep) return a.ep - b.ep;
+var x = a.it || {}, y = b.it || {};
+return ((Number(y.sd) || 0) - (Number(x.sd) || 0))
+|| ((Number(y.s) || 0) - (Number(x.s) || 0));
+}
+function collectRows(a, b) {
 var eps = {}, batch = [];
 if (a && typeof a === 'object' && ('eps' in a || 'batch' in a)) {
 eps = a.eps || {};
@@ -335,23 +402,62 @@ batch = a.batch || [];
 eps = a || {};
 batch = b || [];
 }
-var nums = Object.keys(eps).map(Number)
-.filter(function (n) { return n > 0; })
-.sort(function (x, y) { return x - y; });
-var rows = '', h = '';
-nums.forEach(function (n) {
-(eps[n] || []).slice(0, 3).forEach(function (c) { rows += rowOf(c, pad2(n)); });
+var out = [];
+Object.keys(eps).forEach(function (k) {
+var n = Number(k);
+if (!(n > 0)) return;                     // 非数字键（NaN）跳过，与旧实现一致
+(eps[k] || []).slice(0, 3).forEach(function (c) {
+out.push({ it: c, ep: n, lab: pad2(n) });
 });
-if (rows) h += sectHtml('分集磁力', nums.length + ' 集 · 点击复制', rows);
-var brows = '';
-(batch || []).forEach(function (c) { brows += rowOf(c, '合集'); });
-if (brows) h += sectHtml('整季 / 合集', (batch || []).length + ' 个 · 点击复制', brows);
-return h;
+});
+(batch || []).forEach(function (c) { out.push({ it: c, ep: epNoOf(c), lab: '合集' }); });
+return out;
 }
-function loginNoteHtml() {
-return '<div class="mnote">实时查询需登录 · '
-+ '<button class="mnote-btn" type="button" data-login="1">登录</button>'
+function groupRows(rows) {
+var map = Object.create(null), names = [];
+for (var i = 0; i < rows.length; i++) {
+var r = rows[i];
+if (!r) continue;
+var g = groupNameOf(r.it);
+if (!map[g]) { map[g] = []; names.push(g); }
+map[g].push(r);
+}
+names.sort(groupCmp);
+return names.map(function (g) {
+return { name: g, rows: map[g].slice().sort(rowCmp) };
+});
+}
+function defaultOpen(groups) {
+var open = Object.create(null), i;
+if (groups.length <= 6) {
+for (i = 0; i < groups.length; i++) open[groups[i].name] = 1;
+return open;
+}
+var top = groups.map(function (g, j) { return j; })
+.sort(function (p, q) { return groups[q].rows.length - groups[p].rows.length; })
+.slice(0, 3);
+for (i = 0; i < top.length; i++) open[groups[top[i]].name] = 1;
+return open;
+}
+function tgsHtml(groups) {
+if (!groups.length) return '';
+var open = defaultOpen(groups), h = '<div class="tgs">';
+for (var i = 0; i < groups.length; i++) {
+var g = groups[i], rows = '';
+for (var j = 0; j < g.rows.length; j++) rows += rowOf(g.rows[j].it, g.rows[j].lab);
+h += '<div class="mgteam" data-open="' + (open[g.name] ? '1' : '0') + '">'
++ '<button class="tg-h" type="button" data-tg="' + escAttr(g.name) + '">'
++ '<span class="tg-n">' + escText(g.name) + '</span>'
++ '<span class="tg-c">' + g.rows.length + '</span>'
++ '<span class="tg-x">›</span>'
++ '</button>'
++ '<div class="mgrows">' + rows + '</div>'
 + '</div>';
+}
+return h + '</div>';
+}
+function epsListHtml(a, b) {
+return tgsHtml(groupRows(collectRows(a, b)));
 }
 function render(m, e) {
 var box = m.querySelector('#epsbox');
@@ -359,6 +465,90 @@ if (!box) return;
 var h = epsListHtml(e);
 box.innerHTML = h || '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
 + '<div class="eps-none">暂无按集索引</div></div>';
+}
+function hasRows(e) {
+return !!(e && ((e.eps && Object.keys(e.eps).length) || (e.batch && e.batch.length)));
+}
+function epCount(e) {
+return e ? collectRows(e).length : 0;
+}
+function titleKey(s) {
+return String(s == null ? '' : s).replace(/\s+/g, '').toLowerCase();
+}
+function sameTitle(a, b) {
+var x = titleKey(a);
+return !!x && x === titleKey(b);
+}
+function paint(e, titleHint) {
+var m = document.getElementById('modal');
+if (!m) return false;
+var h3 = m.querySelector('h3');
+var cur = h3 ? String(h3.textContent == null ? '' : h3.textContent).trim() : '';
+if (!sameTitle(cur, titleHint || (e && e.n))) return false;
+if (m.querySelector('#epsbox')) { render(m, e); return true; }
+var body = m.querySelector('#mgbody');
+if (body) {
+var h = epsListHtml(e);
+body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';
+return true;
+}
+return false;
+}
+function syncState(e) {
+if (!CUR_STATE || !CUR_BOX || !CUR_BOX.parentNode) return false;
+var m = document.getElementById('modal');
+if (!m || m.querySelector('#epsbox') !== CUR_BOX) return false;
+CUR_STATE.e = e;
+CUR_STATE.cnt = epCount(e);
+CUR_STATE.got = true;
+return true;
+}
+function reload(name, epsN, orig) {
+var n = String(name == null ? '' : name).trim();
+var o = String(orig == null ? '' : orig).trim();   // 两参旧调用 → ''，保持向后兼容
+if (!n) return Promise.resolve(null);
+EPOCH++;                            // 作废打开详情页时还在飞的 A/B（见 take 的 epoch 守卫）
+var my = EPOCH;
+delete LIVE[n];
+delete CACHE[shardOf(n)];
+MANIFEST = null;
+BASE_I = 0;
+LIVE_DOWN = false;
+NEED_LOGIN = false;                // 每次手动刷新都当「重新试一次登录」
+REV = String(Date.now());          // 本次刷新的清单/分片 URL 带 ?v= 绕 HTTP 缓存
+var box = document.querySelector('#epsbox');
+var body = box ? null : document.querySelector('#mgbody');
+var phBox = null, phFail = '';
+if (box && !String(box.innerHTML || '').trim()) {
+phBox = box;
+phFail = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
++ '<div class="eps-none">磁力刷新失败，请重试</div></div>';
+box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
++ '<div class="eps-none">正在刷新…</div></div>';
+} else if (body && !String(body.innerHTML || '').trim()) {
+phBox = body;
+phFail = '<div class="eps-none">磁力刷新失败，请重试</div>';
+body.innerHTML = '<div class="eps-none">正在刷新…</div>';
+}
+function done(e) {
+if (my !== EPOCH) return e || null;  // 期间又刷新了一次：这份结果作废，别回滚更新的那次
+REV = '';                          // 时间戳只作用于这一次刷新
+if (!e) {
+toast('磁力刷新失败，请重试');
+if (phBox && phBox.parentNode) phBox.innerHTML = phFail;
+return null;
+}
+if (!paint(e, n)) return e;         // 框里已经是别的番：宁可不画，也不串台
+syncState(e);                       // 行数与 state 推进到新结果，旧响应再也盖不回来
+return e;
+}
+var aP = resolveEntry(n);          // A：数据集分片（内部已 catch → null）
+return fetchLive(n, Number(epsN) || 0, o, 1).then(function (live) {
+if (hasRows(live)) return live;  // 强制查询拿到内容：以最新结果为准
+return aP.then(function (a) {    // 否则回落分片，实在没有才交 null
+return hasRows(a) ? a : (live || a || null);
+});
+}).then(done, function () { return done(null); });
 }
 function legacyCopy(txt) {
 var ta = null;
@@ -418,14 +608,26 @@ var m = document.getElementById('modal');
 if (!m) return;
 if (m.__epsObs) return;
 m.__epsObs = true;
+function toggleTeam(h) {
+var g = h && h.closest ? h.closest('.mgteam') : null;
+if (!g) return false;
+g.setAttribute('data-open', g.getAttribute('data-open') === '1' ? '0' : '1');
+return true;
+}
 function onChip(ev) {
-var lb = ev.target && ev.target.closest && ev.target.closest('[data-login]');
-if (lb) {
+var t = ev.target;
+if (t && t.closest && t.closest('[data-login]')) {
 ev.preventDefault();
+ev.stopPropagation();
 if (window.__openLogin) window.__openLogin();
 return;
 }
-var c = ev.target && ev.target.closest && ev.target.closest('.mgrow, .eps-chip');
+if (toggleTeam(t && t.closest ? t.closest('.tg-h') : null)) {
+ev.preventDefault();
+ev.stopPropagation();          // 别冒泡去触发卡片的开关逻辑
+return;
+}
+var c = t && t.closest && t.closest('.mgrow, .eps-chip');
 if (!c) return;
 ev.preventDefault();
 ev.stopPropagation();            // 别冒泡去触发卡片的开关逻辑
@@ -439,7 +641,7 @@ m.addEventListener('click', onChip);
 m.addEventListener('keydown', function (ev) {
 if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
 var t = ev.target;
-if (t && t.closest && (t.closest('.mgrow') || t.closest('[data-login]'))) return;
+if (t && t.closest && (t.closest('.mgrow') || t.closest('.tg-h') || t.closest('[data-login]'))) return;
 onChip(ev);
 });
 new MutationObserver(function () {
@@ -459,17 +661,36 @@ box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></d
 + '<div class="eps-none">索引加载中…</div></div>';
 if (body) body.appendChild(box);
 else host.parentNode.insertBefore(box, host.nextSibling);
-resolveEntry(name).then(function (e) {
-if (e && ((e.eps && Object.keys(e.eps).length) || (e.batch && e.batch.length))) return render(m, e);
-box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
-+ '<div class="eps-none">索引里没有，正在向后端查询…</div></div>';
+var state = { e: null, cnt: 0, live: false, settled: 0, got: false };
+var my = EPOCH;                 // 发起这次 A/B 的刷新代号：期间点过 ⟳ 就把结果作废
+CUR_BOX = box;                  // 供 reload() 把行数 / state 同步到最新结果
+CUR_STATE = state;
 var origEl = m.querySelector('.orig');
 var origName = origEl ? origEl.textContent.trim() : '';
-return fetchLive(name, episodeCount(m), origName).then(function (live) {
-if (live) return render(m, live);
-if (NEED_LOGIN) {                      // 401：挂登录入口，别显示成「没有资源」
+function stale() { return !box.parentNode || m.querySelector('#epsbox') !== box; }
+function take(e) {
+if (my !== EPOCH) return false;          // 这几条是刷新前发出的旧响应
+if (stale() || !hasRows(e)) return false;
+var c = epCount(e);
+if (c <= state.cnt) return false;
+state.e = e;
+state.cnt = c;
+render(m, e);
+return true;
+}
+function finish() {
+if (my !== EPOCH || stale() || state.cnt || state.live) return;
+state.live = true;
+if (window.__CUR_SEASON === false) { render(m, state.e); return; }
 box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
-+ loginNoteHtml() + '</div>';
++ '<div class="eps-none">索引里没有，正在向后端查询…</div></div>';
+return fetchLive(name, episodeCount(m), origName).then(function (live) {
+if (stale()) return;
+if (live) return render(m, live);
+if (NEED_LOGIN) {
+box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></div>'
++ '<div class="mnote">实时查询需登录 · '
++ '<button class="mnote-btn" type="button" data-login="1">登录</button></div></div>';
 return;
 }
 if (LIVE_DOWN) {                       // 后端连不上：说清楚，别装作"没有"
@@ -477,9 +698,16 @@ box.innerHTML = '<div class="mgsect"><div class="sec-h"><h2>分集磁力</h2></d
 + '<div class="eps-none">索引里没有，后端暂时连不上</div></div>';
 return;
 }
-render(m, e);
+render(m, state.e);
 });
-});
+}
+function one(e) {
+state.settled++;
+if (take(e)) state.got = true;
+if (!state.got && state.settled >= 2) finish();
+}
+resolveEntry(name).then(one, function () { one(null); });
+dbLive(name).then(one, function () { one(null); });
 }).observe(m, { childList: true, subtree: false });
 }
 if (document.readyState === 'loading') {
@@ -497,12 +725,23 @@ epsListHtml: epsListHtml,
 render: render,
 hashOf: hashOf,
 setIdx: function (d) { ENTRY = d; return ENTRY; },
+cleanGroupName: cleanGroupName,
+groupNameOf: groupNameOf,
+epNoOf: epNoOf,
+collectRows: collectRows,
+groupRows: groupRows,
+defaultOpen: defaultOpen,
+tgsHtml: tgsHtml,
+bustUrl: bustUrl,
+sameTitle: sameTitle,
+curState: function () { return CUR_STATE; },
 };
 window.__epsApi = {
 loadManifest: loadManifest, loadShard: loadShard, resolveEntry: resolveEntry,
 findByName: findByName, chipOf: chipOf, copyText: copyText, toast: toast,
 fmtSize: fmtSize, norm: norm, shardOf: shardOf, buildEps: buildEps,
 epsListHtml: epsListHtml, batchLabel: batchLabel, descOf: descOf,
-live: function (name, epsN, orig) { return fetchLive(name, epsN, orig); }
+live: function (name, epsN, orig) { return fetchLive(name, epsN, orig); },
+reload: reload
 };
 })();
