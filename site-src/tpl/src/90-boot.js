@@ -40,6 +40,61 @@
     try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
   }
 
+  /* 认证请求统一出口：URL / method / headers / body 与各调用点原实现一致，只多一个超时信号。
+     网络慢或后端挂起时 fetch 永不 settle，按钮会一直停在「xx中…」，所以统一 12s 掐断。
+     payload 传 null 表示不带 body（/auth/logout）；extraHeaders 给 /auth/password、
+     /auth/logout、/auth/me 带 Bearer；opts.method 默认 POST，GET 查询（/auth/me）时显式指定。
+     返回 {status, ok, j}：j 是解析后的 JSON，解析失败为 null（调用点自己判）。 */
+  function authFetch(path, payload, ms, extraHeaders, opts) {
+    opts = opts || {};
+    var headers = {};
+    var hasBody = payload !== null && payload !== undefined;
+    if (hasBody) headers['content-type'] = 'application/json';
+    if (extraHeaders) {
+      for (var k in extraHeaders) {
+        if (Object.prototype.hasOwnProperty.call(extraHeaders, k)) headers[k] = extraHeaders[k];
+      }
+    }
+    var opt = { method: opts.method || 'POST', headers: headers };
+    if (hasBody) opt.body = JSON.stringify(payload);
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, ms || 12000);
+    if (ctl) opt.signal = ctl.signal;
+    return fetch(AUTH_BASE + path, opt).then(function (r) {
+      clearTimeout(timer);
+      return r.json().catch(function () { return null; }).then(function (j) {
+        return { status: r.status, ok: r.ok, j: j };
+      });
+    }, function (e) {
+      clearTimeout(timer);
+      /* 超时（abort）与断网分开提示：前者让用户等一会儿重试，后者多半是掉线 */
+      if (ctl && ctl.signal && ctl.signal.aborted) throw new Error('网络慢，请重试');
+      throw new Error('网络异常，请检查连接');
+    });
+  }
+
+  /* 请求期间按钮置灰 + 换进行中文案；返回的函数在 finally 里把原文案与可用态还回去。
+     文案都控制在 3–4 字，按钮宽度不会把同排按钮挤走。 */
+  function setBusy(btn, text) {
+    if (!btn) return function () { };
+    var old = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = text;
+    return function () {
+      btn.disabled = false;
+      btn.textContent = old;
+    };
+  }
+
+  /* 三处提示行共用的写法：ok=true 时加 .authok 走成功绿，否则去掉它回到 .autherr 的错误红。
+     类名不互换（.autherr 还带 min-height/margin），下一句出错直接切回错误色。 */
+  function showMsg(el, msg, ok) {
+    if (!el) return;
+    el.textContent = msg || '';
+    if (ok) el.classList.add('authok');
+    else el.classList.remove('authok');
+  }
+
   /* 回调落地：把 #t=<hex> 收进 localStorage，再清掉 hash——token 不留在地址栏/分享链接里。
      hash 不是 t=<32+位 hex> 就原样不动。 */
   (function grabToken() {
@@ -116,20 +171,23 @@
       + ' placeholder="you@example.com"></label>'
       + '<label class="authfield"><span>密码</span><input id="authpw" type="password" autocomplete="current-password"'
       + ' placeholder="至少 8 位"></label>'
-      + '<div class="autherr" id="autherr"></div>'
+      + '<div class="autherr" id="autherr" role="status" aria-live="polite"></div>'
       + '<div class="authacts">'
       + '<button class="btn pri" id="authlogin" type="button">登录</button>'
       + '<button class="btn" id="authreg" type="button">注册</button>'
       + '</div>'
+      + '<p class="authhint" id="authemailtip">邮箱只用于登录与找回，不发推广；验证码 10 分钟内有效。</p>'
       + '</div>'
       + '<div class="authbody" data-t="verify" hidden>'
       + '<p class="authhint" id="authverifyhint">验证码已发到你的邮箱，10 分钟内有效。</p>'
       + '<label class="authfield"><span>验证码</span><input id="authcode" inputmode="numeric" maxlength="6"'
-      + ' placeholder="6 位数字"></label>'
-      + '<div class="autherr" id="authcodeerr"></div>'
+      + ' autocomplete="one-time-code" placeholder="6 位数字"></label>'
+      + '<p class="authhint" id="authverifytip">没收到？先看垃圾箱；60 秒后可重发</p>'
+      + '<div class="autherr" id="authcodeerr" role="status" aria-live="polite"></div>'
       + '<div class="authacts">'
       + '<button class="btn pri" id="authconfirm" type="button">确认</button>'
       + '<button class="btn" id="authresend" type="button">重新发送</button>'
+      + '<button class="btn" id="authback" type="button">← 改邮箱</button>'
       + '</div>'
       + '</div>'
       + '<div class="authbody" data-t="account" hidden>'
@@ -138,7 +196,7 @@
       + ' autocomplete="current-password"></label>'
       + '<label class="authfield"><span>新密码</span><input id="acctnew" type="password"'
       + ' autocomplete="new-password" placeholder="至少 8 位"></label>'
-      + '<div class="autherr" id="accterr"></div>'
+      + '<div class="autherr" id="accterr" role="status" aria-live="polite"></div>'
       + '<div class="authacts">'
       + '<button class="btn pri" id="acctsave" type="button">修改密码</button>'
       + '<button class="btn" id="acctout" type="button">退出登录</button>'
@@ -153,6 +211,13 @@
     mask.querySelector('#authreg').onclick = function () { submitAuth('register'); };
     mask.querySelector('#authconfirm').onclick = confirmCode;
     mask.querySelector('#authresend').onclick = resendCode;
+    /* 「← 改邮箱」只切回 email 视图，不清输入框——邮箱是同一份（已填的值还在 DOM 里），
+       用户改一个字重新提交即可，不用从头再打一遍。 */
+    mask.querySelector('#authback').onclick = function () {
+      showAuthView('email');
+      var em = document.getElementById('authemail');
+      if (em) { em.focus(); try { em.select(); } catch (e) { /* 忽略 */ } }
+    };
     mask.querySelector('#acctsave').onclick = changePassword;
     mask.querySelector('#acctout').onclick = logoutAccount;
     mask.querySelectorAll('.authfield input').forEach(function (inp) {
@@ -206,10 +271,13 @@
     var m = document.getElementById('authmask');
     if (m && m.parentNode) m.parentNode.removeChild(m);
     if (authEsc) { document.removeEventListener('keydown', authEsc); authEsc = null; }
+    /* 重发倒计时绑定的是即将销毁的按钮，面板一关就把定时器停掉 */
+    if (authResendTimer) { clearInterval(authResendTimer); authResendTimer = 0; }
   }
 
   /* 登录/注册共用一个 POST；失败文案优先用后端给的 error（409 已注册 / 401 密码不对 / 429 太频繁）。
-     请求期间两个按钮 disabled，防止连点重复提交。 */
+     发请求前先做本地格式校验（省一次往返，也避免拿后端的 400 文案当表单提示）；
+     请求期间按钮置灰并换「登录中…/发送中…」，防连点重复提交。 */
   function submitAuth(kind) {
     var em = document.getElementById('authemail');
     var pw = document.getElementById('authpw');
@@ -218,17 +286,27 @@
     var br = document.getElementById('authreg');
     if (!em || !pw) return;
     if ((bl && bl.disabled) || (br && br.disabled)) return;
-    if (err) err.textContent = '';
-    if (bl) bl.disabled = true;
-    if (br) br.disabled = true;
-    fetch(AUTH_BASE + (kind === 'register' ? '/auth/register' : '/auth/login'), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: em.value.trim(), password: pw.value })
-    }).then(function (r) {
-      return r.json().catch(function () { return null; }).then(function (j) {
-        return { status: r.status, ok: r.ok, j: j };
-      });
+    var email = String(em.value || '').trim();
+    var pwv = String(pw.value || '');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showMsg(err, '邮箱格式看起来不对');
+      em.focus();
+      return;
+    }
+    if (pwv.length < 8) {
+      showMsg(err, '密码至少 8 位');
+      pw.focus();
+      return;
+    }
+    showMsg(err, '');
+    /* 点哪个按钮就哪个按钮显示进行中，另一个只置灰不换文案（同排宽度稳定） */
+    var main = kind === 'register' ? br : bl;
+    var other = kind === 'register' ? bl : br;
+    var restore = setBusy(main, kind === 'register' ? '发送中…' : '登录中…');
+    if (other) other.disabled = true;
+    authFetch(kind === 'register' ? '/auth/register' : '/auth/login', {
+      email: email,
+      password: pwv
     }).then(function (res) {
       var j = res.j || {};
       if (res.ok && j.token) {
@@ -241,17 +319,17 @@
       }
       /* 开了邮箱验证：注册 200 与登录 403 都带 need_verify 且没有 token，切到验证码视图。 */
       if (j.need_verify) {
-        AUTH_PENDING = em.value.trim();
+        AUTH_PENDING = email;
         showAuthVerify(j.hint || j.error || '验证码已发送', j.dev_code);
         return;
       }
       if (res.status === 429) throw new Error(j.error || '尝试太频繁，稍后再试');
       throw new Error(j.error || '请求失败');
     }).catch(function (e) {
-      if (err) err.textContent = (e && e.message) || '请求失败';
+      showMsg(err, (e && e.message) || '请求失败');
     }).then(function () {
-      if (bl) bl.disabled = false;
-      if (br) br.disabled = false;
+      restore();
+      if (other) other.disabled = false;
     });
   }
 
@@ -267,8 +345,35 @@
     /* 换邮箱重来时清掉上一次的残值；dev_code 只有后端调试期才会给 */
     if (code) code.value = devCode ? String(devCode) : '';
     var ce = document.getElementById('authcodeerr');
-    if (ce) ce.textContent = '';
+    showMsg(ce, '');
+    /* 重进验证码视图时把重发按钮复位（上一次的倒计时可能还在跑） */
+    if (authResendTimer) { clearInterval(authResendTimer); authResendTimer = 0; }
+    var br = document.getElementById('authresend');
+    if (br) { br.disabled = false; br.textContent = '重新发送'; }
     if (code) code.focus();
+  }
+
+  /* 重发冷却：后端限制 60s 一次，前端先挡住连点，省掉一轮 429 往返。
+     计时器挂在模块变量上，面板关闭时由 closeAuthPanel 清掉（按钮已脱离文档，留着只是白跑）。 */
+  var RESEND_SECS = 60;
+  var authResendTimer = 0;
+  function startResendCooldown(btn) {
+    if (!btn || !document.getElementById('authmask')) return;
+    if (authResendTimer) clearInterval(authResendTimer);
+    var left = RESEND_SECS;
+    btn.disabled = true;
+    btn.textContent = '重新发送(' + left + 's)';
+    authResendTimer = setInterval(function () {
+      left -= 1;
+      if (left <= 0) {
+        clearInterval(authResendTimer);
+        authResendTimer = 0;
+        btn.disabled = false;
+        btn.textContent = '重新发送';
+        return;
+      }
+      btn.textContent = '重新发送(' + left + 's)';
+    }, 1000);
   }
 
   /* 确认验证码：POST /auth/verify {email, code}。成功路径与 submitAuth 一致：
@@ -278,22 +383,16 @@
     var err = document.getElementById('authcodeerr');
     var bc = document.getElementById('authconfirm');
     var br = document.getElementById('authresend');
-    if (err) err.textContent = '';
-    if (!AUTH_PENDING) { if (err) err.textContent = '先填邮箱注册或登录'; return; }
+    showMsg(err, '');
+    if (!AUTH_PENDING) { showMsg(err, '先填邮箱注册或登录'); return; }
     var v = code ? String(code.value || '').replace(/\s+/g, '') : '';
-    if (!/^\d{6}$/.test(v)) { if (err) err.textContent = '验证码是 6 位数字'; return; }
-    if ((bc && bc.disabled) || (br && br.disabled)) return;
-    if (bc) bc.disabled = true;
+    if (!/^\d{6}$/.test(v)) { showMsg(err, '验证码是 6 位数字'); if (code) code.focus(); return; }
+    /* 只按「确认」自身的禁用态判重入：重发按钮的 60s 冷却期间也可能置灰，
+       拿它当闸门会让用户在倒计时里连确认都点不了。 */
+    if (bc && bc.disabled) return;
+    var restore = setBusy(bc, '确认中…');
     if (br) br.disabled = true;
-    fetch(AUTH_BASE + '/auth/verify', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: AUTH_PENDING, code: v })
-    }).then(function (r) {
-      return r.json().catch(function () { return null; }).then(function (j) {
-        return { status: r.status, ok: r.ok, j: j };
-      });
-    }).then(function (res) {
+    authFetch('/auth/verify', { email: AUTH_PENDING, code: v }).then(function (res) {
       var j = res.j || {};
       if (res.ok && j.token) {
         try { localStorage.setItem(TOKEN_KEY, j.token); } catch (e) { /* 隐私模式忽略 */ }
@@ -306,34 +405,29 @@
       }
       throw new Error(j.error || '验证码不对或已过期');
     }).catch(function (e) {
-      if (err) err.textContent = (e && e.message) || '验证码不对或已过期';
+      showMsg(err, (e && e.message) || '验证码不对或已过期');
     }).then(function () {
-      if (bc) bc.disabled = false;
-      if (br) br.disabled = false;
+      restore();
+      /* 倒计时没结束时不能把重发按钮放开（那等于给了绕过后端 60s 限流的口子） */
+      if (br && !authResendTimer) br.disabled = false;
     });
   }
 
   /* 重发验证码：POST /auth/resend {email}。成功把后端 hint 写回提示行（顺带刷新 dev_code），
-     失败（含 429 太频繁）写 #authcodeerr，不动提示行原有文案。 */
+     失败（含 429 太频繁）写 #authcodeerr，不动提示行原有文案。
+     请求结束（成功或失败）都进 60s 冷却：失败多半是限流/断网，立刻再点只会再吃一次。 */
   function resendCode() {
     var err = document.getElementById('authcodeerr');
     var tip = document.getElementById('authverifyhint');
     var bc = document.getElementById('authconfirm');
     var br = document.getElementById('authresend');
-    if (err) err.textContent = '';
-    if (!AUTH_PENDING) { if (err) err.textContent = '先填邮箱注册或登录'; return; }
+    showMsg(err, '');
+    if (!AUTH_PENDING) { showMsg(err, '先填邮箱注册或登录'); return; }
+    /* 冷却中按钮本身就是 disabled，这里再判一次防程序化触发 */
     if ((bc && bc.disabled) || (br && br.disabled)) return;
     if (bc) bc.disabled = true;
-    if (br) br.disabled = true;
-    fetch(AUTH_BASE + '/auth/resend', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: AUTH_PENDING })
-    }).then(function (r) {
-      return r.json().catch(function () { return null; }).then(function (j) {
-        return { status: r.status, ok: r.ok, j: j };
-      });
-    }).then(function (res) {
+    var restore = setBusy(br, '重发中…');
+    authFetch('/auth/resend', { email: AUTH_PENDING }).then(function (res) {
       var j = res.j || {};
       if (res.ok && j.ok) {
         if (tip) tip.textContent = j.hint || '验证码已重新发送';
@@ -344,15 +438,17 @@
       if (res.status === 429) throw new Error(j.error || j.hint || '发送太频繁，稍后再试');
       throw new Error(j.error || '发送失败');
     }).catch(function (e) {
-      if (err) err.textContent = (e && e.message) || '发送失败';
+      showMsg(err, (e && e.message) || '发送失败');
     }).then(function () {
       if (bc) bc.disabled = false;
-      if (br) br.disabled = false;
+      restore();
+      startResendCooldown(br);
     });
   }
 
-  /* 改密码：POST /auth/password {old,new}（Bearer）。成功文案写进 #accterr（不清空），
-     顺手清掉两个输入框；失败优先用后端 error（403 原密码不对 / 400 新密码太短）。 */
+  /* 改密码：POST /auth/password {old,new}（Bearer）。成功文案走 .authok 绿字（下一次出错
+     自动切回 .autherr 红字），顺手清掉两个输入框；失败优先用后端 error
+     （403 原密码不对 / 400 新密码太短）。新密码先本地拦一道 8 位下限。 */
   function changePassword() {
     var oldp = document.getElementById('acctold');
     var newp = document.getElementById('acctnew');
@@ -362,31 +458,31 @@
     if (!oldp || !newp) return;
     if ((bs && bs.disabled) || (bo && bo.disabled)) return;
     var tk = authToken();
-    if (!tk) { if (err) err.textContent = '登录已失效，请重新登录'; return; }
-    if (err) err.textContent = '';
-    if (bs) bs.disabled = true;
+    if (!tk) { showMsg(err, '登录已失效，请重新登录'); return; }
+    if (String(newp.value || '').length < 8) {
+      showMsg(err, '新密码至少 8 位');
+      newp.focus();
+      return;
+    }
+    showMsg(err, '');
+    var restore = setBusy(bs, '保存中…');
     if (bo) bo.disabled = true;
-    fetch(AUTH_BASE + '/auth/password', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + tk },
-      body: JSON.stringify({ old: oldp.value, new: newp.value })
-    }).then(function (r) {
-      return r.json().catch(function () { return null; }).then(function (j) {
-        return { status: r.status, ok: r.ok, j: j };
-      });
-    }).then(function (res) {
+    authFetch('/auth/password', {
+      old: String(oldp.value || ''),
+      new: String(newp.value || '')
+    }, 12000, { authorization: 'Bearer ' + tk }).then(function (res) {
       var j = res.j || {};
       if (res.ok && j.ok) {
         oldp.value = '';
         newp.value = '';
-        if (err) err.textContent = '密码已更新';
+        showMsg(err, '密码已更新', true);
         return;
       }
       throw new Error(j.error || '修改失败');
     }).catch(function (e) {
-      if (err) err.textContent = (e && e.message) || '修改失败';
+      showMsg(err, (e && e.message) || '修改失败');
     }).then(function () {
-      if (bs) bs.disabled = false;
+      restore();
       if (bo) bo.disabled = false;
     });
   }
@@ -400,8 +496,8 @@
     var tk = authToken();
     if (bs) bs.disabled = true;
     if (bo) bo.disabled = true;
-    fetch(AUTH_BASE + '/auth/logout', { method: 'POST', headers: { authorization: 'Bearer ' + tk } })
-      .catch(function () { /* 退出请求失败也照常清本地态 */ })
+    authFetch('/auth/logout', null, 12000, { authorization: 'Bearer ' + tk })
+      .catch(function () { /* 退出请求失败/超时也照常清本地态 */ })
       .then(function () {
         try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* 忽略 */ }
         AUTH_LOGIN = '';
@@ -419,10 +515,12 @@
     var tk = authToken();
     if (!tk) { paintLoginEntry(el); return; }
     el.innerHTML = '<span class="who">登录中…</span>';
-    fetch(AUTH_BASE + '/auth/me', { headers: { authorization: 'Bearer ' + tk } }).then(function (r) {
+    authFetch('/auth/me', null, 12000, { authorization: 'Bearer ' + tk }, { method: 'GET' }).then(function (r) {
       if (r.status === 401) { var e = new Error('login_required'); e.auth = 1; throw e; }
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
+      /* 200 但 body 解析不出来按「非鉴权失败」处理：保留 token，顶栏先回未登录态 */
+      if (!r.j) throw new Error('bad body');
+      return r.j;
     }).then(function (d) {
       var u = (d && d.ok && d.user) || null;
       if (!u) { var e = new Error('login_required'); e.auth = 1; throw e; }
