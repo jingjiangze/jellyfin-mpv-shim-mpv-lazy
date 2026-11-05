@@ -46,6 +46,7 @@
       +     '</div>'
       +     '<div class="acts">'
       +       '<span class="btn pri" id="watch" role="button" tabindex="0">开始观看</span>'
+      +       '<span class="btn" id="qplay" role="button" tabindex="0">▶ 在线播放</span>'
       +       '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
       +       (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
       +       '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
@@ -78,6 +79,17 @@
     if (wb) wb.onkeydown = function (ev) {
       if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); wb.click(); }
     };
+
+    /* 在线播放 = 夸克网盘直链（75-quarkplay.js）：只跟盒子服务要一条 CDN mp4 地址，
+       字节不经服务器。同 IIFE 内的函数声明会提升，这里直接调用。 */
+    var qp = m.querySelector('#qplay');
+    if (qp) {
+      qp.onclick = function () { openQuarkPlay(m, id, title); };
+      /* 与 #watch 同一处理：span 的 role=button 不会自带键盘激活 */
+      qp.onkeydown = function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); qp.click(); }
+      };
+    }
 
     /* 追番：复用卡片星标同一套存储（key 用条目 id） */
     var fb = m.querySelector('#favbtn');

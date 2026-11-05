@@ -2829,3 +2829,13 @@ main {
   border-radius: var(--r-sm); font-size: var(--fs-xs); font-weight: 600; line-height: 1;
   color: #ececf1; background: rgba(6,6,10,.78); backdrop-filter: blur(6px); }
 
+/* 在线播放：<video> 充满弹窗宽度，暗底圆角 */
+.trailer video { display: block; width: 100%; max-height: 62vh; background: #000; border-radius: var(--r); }
+
+/* 在线播放的「准备中 / 转码中 / 未找到」状态条：沿用 .trailer 的左右边距与圆角，
+   但不吃 16:9 的视频框高度和黑底，否则一行字会顶在大黑块里。 */
+.trailer.qpmsg { aspect-ratio: auto; min-height: 0; padding: var(--s4) var(--s5); display: flex;
+  align-items: center; justify-content: center; text-align: center; line-height: var(--lh-base);
+  font-size: var(--fs-sm); color: var(--fg2); background: var(--card2); }
+.trailer.qpmsg a { color: var(--accent); }
+
