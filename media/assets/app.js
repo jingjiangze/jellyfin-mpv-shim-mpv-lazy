@@ -176,7 +176,10 @@ if (_psz === 'hd' || _psz === 'sd') PSZ.mode = _psz;
 } catch (e) { /* 隐私模式 / file:// 下 localStorage 可能不可用，忽略 */ }
 pullFollow();
 pullProgress();
-window.__prog = { report: function (id, ep) { setProgress(id, ep); } };
+window.__prog = {
+report: function (id, ep, extra) { return setProgress(id, ep, extra); },
+get: function (id) { return progressOf(id); }
+};
 function fbAttr(list) {
 var q = list.filter(Boolean);
 return q.length ? ' data-fb="' + esc(q.join('|')) + '" onerror="__fb(this)"' : '';
@@ -870,8 +873,7 @@ m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
 +       '<span><b>—</b><i>想看</i></span><span><b>—</b><i>在看</i></span><span><b>—</b><i>看过</i></span>'
 +     '</div>'
 +     '<div class="acts">'
-+       '<span class="btn pri" id="watch" role="button" tabindex="0">开始观看</span>'
-+       '<span class="btn" id="qplay" role="button" tabindex="0">▶ 在线播放</span>'
++       '<span class="btn pri" id="watch" role="button" tabindex="0">▶ 播放</span>'
 +       '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
 +       (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
 +       '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
@@ -898,14 +900,10 @@ $('#mask').classList.add('on');
 if (m && m.setAttribute) m.setAttribute('data-bgm', String(id));
 m.querySelector('.x').onclick = close;
 var wb = m.querySelector('#watch');
-if (wb) wb.onkeydown = function (ev) {
+if (wb) {
+wb.onclick = function () { openQuarkPlay(m, id, title); };
+wb.onkeydown = function (ev) {
 if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); wb.click(); }
-};
-var qp = m.querySelector('#qplay');
-if (qp) {
-qp.onclick = function () { openQuarkPlay(m, id, title); };
-qp.onkeydown = function (ev) {
-if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); qp.click(); }
 };
 }
 var fb = m.querySelector('#favbtn');
@@ -1058,10 +1056,18 @@ body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';
 }).catch(fail);
 }
 var QP_BASE = 'https://120.48.56.189';
-var QP_TIMER = 0;      // 挂起的转码轮询（模块级：新播放 / 关弹窗都要能掐掉）
-var QP_GEN = 0;        // 每次开播自增：异步回调据此判断自己是否已被后来的一次播放取代
-function qpJson(path, tk) {
-return fetch(QP_BASE + path, { headers: { authorization: 'Bearer ' + tk } }).then(function (res) {
+var QP_FID_KEY = 'qp_fid';             // {"<bgm id>:<ep>": {fid,name,size,ts}}
+var QP_FID_TTL = 60 * 60 * 1000;       // fid 缓存 1h：文件不会每分钟改名，地址才会过期
+var QP_TIMER = 0;                      // 挂起的转码 / 转存轮询（模块级：新播放 / 关播放器都要能掐掉）
+var QP_GEN = 0;                        // 每次开播自增：异步回调据此判断自己是否已被后来的一次播放取代
+function qpReq(method, path, tk, body, keepalive) {
+var opt = { method: method, headers: { authorization: 'Bearer ' + tk } };
+if (body != null) {
+opt.headers['content-type'] = 'application/json';
+opt.body = JSON.stringify(body);
+}
+if (keepalive) opt.keepalive = true;      // pagehide 时普通请求会被浏览器掐掉
+return fetch(QP_BASE + path, opt).then(function (res) {
 return res.text().then(function (t) {
 var j = null;
 try { j = JSON.parse(t); } catch (e) { j = null; }
@@ -1074,14 +1080,1065 @@ else j.state = 'error';
 }
 return j;
 });
-}, function () { return { state: 'error' }; });
+}).then(null, function () { return { state: 'error' }; });
+}
+function qpJson(path, tk) { return qpReq('GET', path, tk, null, false); }
+function qpPost(path, tk, body, keepalive) { return qpReq('POST', path, tk, body, keepalive); }
+function qpCacheAll() {
+try {
+var v = JSON.parse(localStorage.getItem(QP_FID_KEY) || '{}');
+return v && typeof v === 'object' && Object.prototype.toString.call(v) !== '[object Array]' ? v : {};
+} catch (e) { return {}; }
+}
+function qpCacheGet(id, ep) {
+var c = qpCacheAll()[String(id) + ':' + String(ep)];
+if (!c || !c.fid) return null;
+if (!(Date.now() - Number(c.ts) < QP_FID_TTL)) return null;
+return c;
+}
+function qpCachePut(id, ep, rec) {
+var all = qpCacheAll(), k = String(id) + ':' + String(ep), now = Date.now(), out = {};
+all[k] = { fid: String(rec.fid), name: String(rec.name || ''), size: Number(rec.size) || 0, ts: now };
+Object.keys(all).forEach(function (key) {             // 顺手清掉过期项，别让缓存无限长
+var r = all[key];
+if (r && now - Number(r.ts) < QP_FID_TTL) out[key] = r;
+});
+try { localStorage.setItem(QP_FID_KEY, JSON.stringify(out)); } catch (e) { /* 忽略 */ }
+}
+var QP_EP_RES = [
+/[Ss]\d{1,2}\s*[Ee](\d{1,3})/,                 // S01E03
+/第\s*(\d{1,3})\s*[话話集期]/,                   // 第3话 / 第3集
+/\[(\d{1,3})(?:v\d)?\]/,                       // [03] / [03v2]
+/(?:^|[^0-9A-Za-z])[Ee][Pp]?(\d{1,3})(?![0-9])/, // E03 / EP03
+/_(\d{1,3})(?![0-9])/,                         // _03
+/[-–—]\s*(\d{1,3})(?![0-9])/                   // - 03
+];
+function qpEpNo(name) {
+var s = String(name || '');
+for (var i = 0; i < QP_EP_RES.length; i++) {
+var m = QP_EP_RES[i].exec(s);
+if (!m) continue;
+var n = Number(m[1]);
+if (n > 0 && n < 1000) return n;              // 1080 / 264 这类不会进（前面限了位数与后缀）
+}
+return 0;
+}
+function qpStripSeason(s) {
+return String(s || '')
+.replace(/第[一二三四五六七八九十0-9]{1,2}[季期部]/g, '')
+.replace(/season\s*[0-9]{1,2}/g, '')
+.replace(/[0-9]{1,2}(?:nd|rd|st|th)season/g, '')
+.replace(/s[0-9]{1,2}(?![0-9])/g, '');
+}
+function qpContains(hay, needle) {
+if (!hay || !needle) return false;
+if (hay.indexOf(needle) >= 0) return true;
+return hay.length >= 4 && needle.length >= 4 && needle.indexOf(hay) >= 0
+&& hay.length >= needle.length * 0.6;
+}
+function qpTitleOk(name, title) {
+var nt = nrm(name), tt = nrm(title);
+if (!nt || !tt) return false;
+if (qpContains(nt, tt)) return true;
+return qpContains(qpStripSeason(nt), qpStripSeason(tt));
+}
+function qpPickEp(items, title, ep) {
+var list = items || [], best = null, single = null;
+for (var i = 0; i < list.length; i++) {
+var it = list[i];
+if (!it || it.fid == null || it.fid === '') continue;
+var name = String(it.name || '');
+if (!qpTitleOk(name, title)) continue;
+var ne = qpEpNo(name);
+if (ne === ep) {
+if (!best || Number(it.size) > Number(best.size)) best = it;
+} else if (!ne) {
+single = single || it;
+}
+}
+if (best) return best;
+if (list.length === 1 && single) return single;
+return null;
+}
+function qpEpList(entry) {
+if (!entry || !entry.eps || typeof entry.eps !== 'object') return [];
+var out = [];
+Object.keys(entry.eps).forEach(function (k) {
+var n = Number(k);
+if (!(n > 0) || n !== Math.floor(n)) return;
+var cands = entry.eps[k] || [], mag = '', bestSize = -1;
+(cands || []).forEach(function (c) {
+var m = String((c && (c.m || c.magnet)) || '');
+if (m.indexOf('magnet:') !== 0) return;
+var sz = Number(c && c.s) || 0;
+if (sz > bestSize) { bestSize = sz; mag = m; }
+});
+out.push({ ep: n, label: (n < 10 ? '0' : '') + n, magnet: mag });
+});
+out.sort(function (a, b) { return a.ep - b.ep; });
+return out;
+}
+function qpHasEp(list, ep) {
+for (var i = 0; i < list.length; i++) if (Number(list[i].ep) === Number(ep)) return true;
+return false;
+}
+function qpEpAt(list, ep) {
+for (var i = 0; i < list.length; i++) if (Number(list[i].ep) === Number(ep)) return list[i];
+return null;
+}
+function qpCopy(text) {
+var api = window.__epsApi;
+if (api && typeof api.copyText === 'function') { api.copyText(text); return; }
+try {
+if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text);
+} catch (e) { /* 非安全上下文：无从复制，保持静默 */ }
 }
 function openQuarkPlay(m, id, title) {
-if (!m) return;
+if (!m || !window.QPlayer) return;
 var tk = followToken();                       // 20-state.js：读 localStorage.gh_token
-if (!tk) { if (window.__openLogin) window.__openLogin('email'); return; }
 var gen = ++QP_GEN;                           // 换代：上一代在飞的请求与轮询全部作废
 if (QP_TIMER) { clearTimeout(QP_TIMER); QP_TIMER = 0; }
+var saved = null;
+try { saved = window.__prog && typeof window.__prog.get === 'function' ? window.__prog.get(id) : null; }
+catch (e) { saved = null; }
+var S = {
+m: m,
+id: String(id),
+title: String(title || ''),
+tk: tk,
+gen: gen,
+tok: 0,
+ep: saved && Number(saved.ep) > 0 ? Number(saved.ep) : 1,
+startAt: saved && Number(saved.pos) > 0 ? Number(saved.pos) : 0,
+fid: '',
+name: '',
+size: 0,
+entry: null,
+eps: [],
+epsHint: ''
+};
+S.tok = QPlayer.open({
+m: m,
+id: S.id,
+title: S.title,
+ep: S.ep,
+sources: [],                                // 官方源要等 find + url，先给空数组
+startAt: S.startAt,
+onProgress: function (p) { qpReport(S, p); },
+onPickEp: function (ep) { if (qpAlive(S)) qpSetEp(S, ep); },
+onNext: function () { qpNext(S); },
+onEnded: function () { qpNext(S); },
+onRetry: function () { if (qpAlive(S)) qpResolve(S); }
+});
+if (!tk) {
+QPlayer.state('login', { msg: '登录后才能使用夸克网盘播放' });
+return;
+}
+qpLoadEps(S).then(function () {
+if (!qpAlive(S)) return;
+qpResolve(S);
+});
+}
+function qpAlive(S) {
+return !!(S && S.gen === QP_GEN && S.tok && window.QPlayer && window.QPlayer.isCurrent(S.tok));
+}
+function qpLoadEps(S) {
+var api = window.__epsApi;
+if (!api || typeof api.resolveEntry !== 'function') {
+S.epsHint = '选集信息不可用';
+QPlayer.setEpisodes([], S.ep, S.epsHint);
+return Promise.resolve(null);
+}
+return api.resolveEntry(S.title, S.id).then(function (entry) {
+if (!qpAlive(S)) return null;
+S.entry = entry || null;
+S.eps = qpEpList(entry);
+if (S.eps.length && !qpHasEp(S.eps, S.ep)) S.ep = S.eps[0].ep;
+S.epsHint = S.eps.length ? '' : '暂无按集索引（可在「线路」里自备播放地址）';
+QPlayer.setEpisodes(S.eps, S.ep, S.epsHint);
+return entry;
+}, function () {
+if (!qpAlive(S)) return null;
+S.eps = [];
+S.epsHint = '选集信息加载失败，仍可在线路里自备源';
+QPlayer.setEpisodes([], S.ep, S.epsHint);
+return null;
+});
+}
+function qpSetEp(S, ep) {
+if (!qpAlive(S)) return;
+QPlayer.pause();                              // 先把旧集的进度按旧 ep / 旧 fid 落盘，再改这两个字段
+S.ep = Number(ep) > 0 ? Number(ep) : S.ep;
+S.startAt = 0;                                // 换集不续播：上一集的秒数是另一条视频的
+S.fid = '';
+QPlayer.setFid('');
+QPlayer.setEpisodes(S.eps, S.ep, S.epsHint);
+if (QP_TIMER) { clearTimeout(QP_TIMER); QP_TIMER = 0; }
+qpResolve(S);
+}
+function qpNext(S) {
+if (!qpAlive(S)) return;
+var i = -1;
+for (var k = 0; k < S.eps.length; k++) if (Number(S.eps[k].ep) === Number(S.ep)) i = k;
+if (i < 0 || i + 1 >= S.eps.length) return;   // 没有下一集：不弹任何东西
+qpSetEp(S, S.eps[i + 1].ep);
+}
+function qpResolve(S) {
+if (!qpAlive(S)) return;
+S.fid = '';
+S.name = '';
+S.size = 0;
+QPlayer.setFid('');
+var hit = qpCacheGet(S.id, S.ep);
+if (hit) {
+S.fid = String(hit.fid);
+S.name = String(hit.name || '');
+S.size = Number(hit.size) || 0;
+QPlayer.setFid(S.fid);
+QPlayer.state('loading', { msg: '正在获取播放地址…' });
+qpAskUrl(S, 0);
+return;
+}
+QPlayer.state('loading', { msg: '正在网盘里查找第 ' + S.ep + ' 集…' });
+qpJson('/tvplay/find?q=' + encodeURIComponent(S.title) + '&limit=20', S.tk).then(function (j) {
+if (!qpAlive(S)) return;
+if (j.state === 'found') {
+var pick = qpPickEp(j.items || [], S.title, S.ep);
+if (!pick) { qpNotFound(S, '网盘里没有匹配第 ' + S.ep + ' 集的文件'); return; }
+S.fid = String(pick.fid);
+S.name = String(pick.name || '');
+S.size = Number(pick.size) || 0;
+QPlayer.setFid(S.fid);
+qpCachePut(S.id, S.ep, { fid: S.fid, name: S.name, size: S.size });
+QPlayer.state('loading', { msg: '找到「' + (S.name || '文件') + '」，正在获取地址…' });
+qpAskUrl(S, 0);
+return;
+}
+if (j.state === 'none') { qpNotFound(S, '夸克网盘里还没有这一集'); return; }
+if (j.state === 'need_rebind') { QPlayer.state('rebind'); return; }
+if (j.state === 'unauthorized') { QPlayer.state('login'); return; }
+QPlayer.state('error', { msg: '播放服务暂时不可用' });
+});
+}
+function qpAskUrl(S, tries) {
+if (!qpAlive(S)) return;
+if (!S.fid) { QPlayer.state('error', { msg: '缺少文件 id，请重试' }); return; }
+if (tries > 10) { QPlayer.state('error', { msg: '转码超时，稍后再试' }); return; }
+qpJson('/tvplay/url?fid=' + encodeURIComponent(S.fid) + '&wait=45', S.tk).then(function (j) {
+if (!qpAlive(S)) return;
+if (j.state === 'ready' && j.url) {
+QPlayer.play(String(j.url), '夸克网盘', { fid: S.fid, startAt: S.startAt });
+S.startAt = 0;                            // 续播只作用于这一次；重试时不该再跳回老位置
+return;
+}
+if (j.state === 'transcoding') {
+QPlayer.state('transcoding', { msg: '转码中… 约 1 分钟（' + (tries + 1) + '/10）' });
+var wait = Number(j.retry_after);
+if (!(wait > 0)) wait = 5;
+QP_TIMER = setTimeout(function () {
+QP_TIMER = 0;
+if (!qpAlive(S)) return;               // 弹窗已关 / 已换集：不再排下一轮
+qpAskUrl(S, tries + 1);
+}, Math.min(wait, 60) * 1000);
+return;
+}
+if (j.state === 'need_rebind') { QPlayer.state('rebind'); return; }
+if (j.state === 'unauthorized') { QPlayer.state('login'); return; }
+QPlayer.state('error', { msg: '播放服务暂时不可用' });
+});
+}
+function qpNotFound(S, msg) {
+var actions = [];
+var epInfo = qpEpAt(S.eps, S.ep);
+if (epInfo && epInfo.magnet) {
+actions.push({ label: '复制磁力', fn: function () { qpCopy(epInfo.magnet); } });
+actions.push({ label: '离线转存到网盘', fn: function () { qpAddMagnet(S, epInfo.magnet); } });
+}
+actions.push({ label: '重试', fn: function () { qpResolve(S); } });
+QPlayer.state('none', {
+msg: msg + '。可以粘贴自备播放地址，或复制磁力到夸克离线下载后再试。',
+actions: actions
+});
+}
+function qpAddMagnet(S, magnet) {
+if (!qpAlive(S)) return;
+QPlayer.state('transcoding', { msg: '正在提交离线转存…' });
+qpPost('/tvplay/add', S.tk, { magnet: magnet, title: S.title, ep: String(S.ep) }).then(function (j) {
+if (!qpAlive(S)) return;
+if (j.state === 'queued' && j.task_id) { qpPollTask(S, String(j.task_id), 0); return; }
+if (j.state === 'no_quota') { QPlayer.state('quota', { msg: '网盘离线空间已满，清理后再试' }); return; }
+if (j.state === 'duplicate') {
+QPlayer.state('transcoding', { msg: '网盘里已有这个任务，正在查找文件…' });
+QP_TIMER = setTimeout(function () {
+QP_TIMER = 0;
+if (qpAlive(S)) qpResolve(S);
+}, 4000);
+return;
+}
+if (j.state === 'need_rebind') { QPlayer.state('rebind'); return; }
+if (j.state === 'unauthorized') { QPlayer.state('login'); return; }
+QPlayer.state('error', { msg: '离线转存失败' + (j.msg ? '：' + j.msg : '') });
+});
+}
+function qpPollTask(S, taskId, n) {
+if (!qpAlive(S)) return;
+if (n > 40) { QPlayer.state('error', { msg: '离线转存超时，稍后去网盘里看看' }); return; }
+qpJson('/tvplay/task?id=' + encodeURIComponent(taskId), S.tk).then(function (j) {
+if (!qpAlive(S)) return;
+if (j.state === 'ready' && j.fid) {
+S.fid = String(j.fid);
+S.name = String(j.name || '');
+S.size = Number(j.size) || 0;
+QPlayer.setFid(S.fid);
+qpCachePut(S.id, S.ep, { fid: S.fid, name: S.name, size: S.size });
+qpAskUrl(S, 0);
+return;
+}
+if (j.state === 'pending' || j.state === 'queued') {
+QPlayer.state('transcoding', { msg: '离线转存中… ' + (Number(j.progress) || 0) + '%' });
+QP_TIMER = setTimeout(function () {
+QP_TIMER = 0;
+qpPollTask(S, taskId, n + 1);
+}, 3000);
+return;
+}
+if (j.state === 'need_rebind') { QPlayer.state('rebind'); return; }
+if (j.state === 'unauthorized') { QPlayer.state('login'); return; }
+QPlayer.state('error', { msg: '离线转存失败，稍后去网盘里看看' });
+});
+}
+function qpReport(S, p) {
+if (!p) return;
+var ep = Number(p.ep) > 0 ? Number(p.ep) : S.ep;
+var fid = String(p.fid || '');
+var pos = Math.max(0, Number(p.pos) || 0);
+var dur = Math.max(0, Number(p.dur) || 0);
+if (window.__prog && typeof window.__prog.report === 'function') {
+try { window.__prog.report(S.id, ep, { fid: fid, pos: pos, dur: dur }); } catch (e) { /* 忽略 */ }
+}
+if (!fid) return;                             // 没有 fid 时后端无法定位记录
+qpPost('/tvplay/share/progress', S.tk, { fid: fid, pos: pos, dur: dur }, !!p.final)
+.then(function (j) {
+if (j && j.state === 'unauthorized' && qpAlive(S)) QPlayer.state('login');
+}, function () { /* 静默 */ });
+}
+window.__qp = openQuarkPlay;
+var QP_LINES_KEY = 'qp_lines';
+var QP_LINE_MAX = 20;                       // 单番最多存 20 条自备线路，防 localStorage 膨胀
+var QP_RATES = [2, 1.5, 1.25, 1, 0.75];     // 倍速循环（初始 1.0×，按钮按数组顺序轮转）
+var QP_REBIND = 'https://120.48.56.189/qr/';
+var QPlayer = (function () {
+var TPL = '<div class="qp-head"><b class="qp-title"></b><span class="qp-sub"></span>'
++ '<button class="qp-btn qp-close" type="button" aria-label="关闭播放器">×</button></div>'
++ '<div class="qp-stage"><video class="qp-video" playsinline preload="metadata"></video>'
++ '<button class="qp-bigplay" type="button" hidden>▶</button>'
++ '<div class="qp-overlay"><div class="qp-spinner"></div><p class="qp-msg"></p>'
++ '<div class="qp-actions" hidden></div></div></div>'
++ '<div class="qp-bar">'
++ '<button class="qp-btn qp-play" type="button" aria-label="播放 / 暂停">⏸</button>'
++ '<input class="qp-seek" type="range" min="0" max="1000" value="0" aria-label="播放进度">'
++ '<span class="qp-time"><i class="qp-cur">00:00</i>/<i class="qp-dur">00:00</i></span>'
++ '<button class="qp-btn qp-mute" type="button" aria-label="静音">🔊</button>'
++ '<input class="qp-vol" type="range" min="0" max="100" value="100" aria-label="音量">'
++ '<button class="qp-btn qp-rate" type="button" aria-label="倍速">1.0×</button>'
++ '<button class="qp-btn qp-pip" type="button">画中画</button>'
++ '<button class="qp-btn qp-fs" type="button">全屏</button>'
++ '</div>'
++ '<div class="qp-nextbar" hidden><button class="qp-next" type="button">下一集 →</button>'
++ '<span class="qp-autonext"></span><button class="qp-cancel" type="button">取消</button></div>'
++ '<section class="qp-eps" data-open="1">'
++ '<div class="qp-eps-h"><h4>选集</h4><span class="qp-eps-hint"></span>'
++ '<button class="qp-eps-toggle" type="button">收起</button></div>'
++ '<div class="qp-eps-list" role="listbox" aria-label="选集"></div>'
++ '</section>'
++ '<section class="qp-lines" data-open="0">'
++ '<div class="qp-lines-h"><h4>线路</h4><button class="qp-lines-toggle" type="button">展开</button></div>'
++ '<div class="qp-lines-body">'
++ '<input class="qp-line-url" type="url" placeholder="粘贴 m3u8 / mp4 直链（自备源）" aria-label="线路地址">'
++ '<input class="qp-line-label" type="text" placeholder="线路名称（可选）" aria-label="线路名称">'
++ '<button class="qp-btn qp-line-add" type="button">添加并播放</button>'
++ '<div class="qp-line-list"></div>'
++ '</div></section>';
+var STATES = {
+loading: { msg: '正在准备播放…' },
+transcoding: { msg: '转码中… 约 1 分钟' },
+none: { msg: '没有找到可播放的视频源' },
+login: { msg: '登录后才能使用网盘播放' },
+quota: { msg: '网盘空间不足，清理后再试' },
+rebind: { msg: '夸克登录已失效，请重新扫码' },
+error: { msg: '播放失败，请重试或换源' },
+ready: { msg: '' }
+};
+var SEQ = 0;
+var cur = null;              // 同一时刻只有一个播放器（弹窗是单例）
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+function fmtTime(t) {
+t = Math.max(0, Math.floor(Number(t) || 0));
+var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+return (h ? h + ':' + pad2(m) : pad2(m)) + ':' + pad2(s);
+}
+function rateLabel(r) { return (r % 1 === 0 ? r.toFixed(1) : String(r)) + '×'; }
+function isUrl(u) {
+u = String(u || '');
+return /^(https?:|blob:)/i.test(u) || /^data:video\//i.test(u);
+}
+function typeOf(u) { return /\.m3u8(?:[?#]|$)/i.test(String(u || '')) ? 'hls' : 'mp4'; }
+function hlsSupported(v) {
+try { return !!(v && v.canPlayType && v.canPlayType('application/vnd.apple.mpegurl')); }
+catch (e) { return false; }
+}
+function labelOf(u) {
+try { return new URL(u).hostname || '直链'; } catch (e) { return '直链'; }
+}
+function readStore() {
+try {
+var v = JSON.parse(localStorage.getItem(QP_LINES_KEY) || '{}');
+return v && typeof v === 'object' && Object.prototype.toString.call(v) !== '[object Array]' ? v : {};
+} catch (e) { return {}; }
+}
+function writeStore(obj) {
+try { localStorage.setItem(QP_LINES_KEY, JSON.stringify(obj)); } catch (e) { /* 隐私模式 / 配额满：静默 */ }
+}
+function byoOf(id) {
+var arr = readStore()[String(id)];
+return Object.prototype.toString.call(arr) === '[object Array]' ? arr : [];
+}
+function cleanLine(x) {
+if (!x || !isUrl(x.url)) return null;
+var u = String(x.url);
+return { label: String(x.label || ''), url: u, type: x.type === 'hls' ? 'hls' : typeOf(u) };
+}
+function saveByo(id, rec) {
+var all = readStore(), k = String(id), arr = byoOf(k), out = [];
+for (var i = 0; i < arr.length; i++) {
+var x = cleanLine(arr[i]);
+if (!x || x.url === rec.url) continue;      // 同 URL 去重：新记录排最前
+out.push(x);
+}
+out.unshift({ label: String(rec.label || ''), url: rec.url, type: rec.type === 'hls' ? 'hls' : typeOf(rec.url) });
+all[k] = out.slice(0, QP_LINE_MAX);
+writeStore(all);
+}
+function delByo(id, url) {
+var all = readStore(), k = String(id), arr = byoOf(k), out = [];
+for (var i = 0; i < arr.length; i++) {
+var x = cleanLine(arr[i]);
+if (x && x.url !== url) out.push(x);
+}
+all[k] = out;
+writeStore(all);
+}
+function alive(S) { return !!(S && !S.dead && S.root && S.root.isConnected); }
+function addLine(S, src) {
+if (!src || !isUrl(src.url)) return -1;
+var url = String(src.url);
+for (var i = 0; i < S.lines.length; i++) {
+if (S.lines[i].url === url) {
+if (src.label) S.lines[i].label = String(src.label).trim() || S.lines[i].label;
+return i;                                 // 同地址只留一条（换 label 不必重开）
+}
+}
+S.lines.push({
+label: String(src.label || '').trim() || labelOf(url),
+url: url,
+type: src.type === 'hls' || src.type === 'mp4' ? src.type : typeOf(url),
+kind: src.kind === 'byo' ? 'byo' : 'official',
+fid: String(src.fid || ''),
+tried: false,
+err: ''
+});
+return S.lines.length - 1;
+}
+function renderLines(S) {
+var box = S.root.querySelector('.qp-line-list');
+if (!box) return;
+box.innerHTML = S.lines.map(function (l, i) {
+var on = i === S.lineIdx;
+var cls = 'qp-line' + (on ? ' on' : '') + (l.tried && !on ? ' is-bad' : '');
+return '<span class="qp-line-row">'
++ '<button class="' + cls + '" type="button" data-i="' + i + '" title="'
++ esc(l.err || l.url) + '">' + esc(l.label) + '</button>'
++ (l.kind === 'byo'
+? '<button class="qp-line-del" type="button" data-i="' + i + '" aria-label="删除线路">×</button>'
+: '')
++ '</span>';
+}).join('');
+}
+function renderEps(S, hint) {
+if (hint !== undefined) S.epsHint = String(hint || '');
+var list = S.root.querySelector('.qp-eps-list');
+if (!list) return;
+list.innerHTML = S.eps.map(function (e) {
+var on = Number(e.ep) === Number(S.ep);
+return '<button class="qp-ep' + (on ? ' on' : '') + '" type="button" role="option" data-ep="'
++ e.ep + '" aria-selected="' + (on ? 'true' : 'false') + '">' + esc(e.label) + '</button>';
+}).join('');
+var h = S.root.querySelector('.qp-eps-hint');
+if (h) h.textContent = S.epsHint;
+}
+function defaultEpsHint(list) {
+return list.length ? list.length + ' 集' : '暂无选集信息';
+}
+function updateSub(S) {
+var sub = S.root.querySelector('.qp-sub');
+if (!sub) return;
+var bits = [];
+if (S.ep > 0) bits.push('第 ' + S.ep + ' 集');
+var l = S.lines[S.lineIdx];
+if (l) bits.push(l.label);
+sub.textContent = bits.join(' · ');
+}
+function toggleSec(sec, btnSel) {
+if (!sec) return;
+var open = sec.getAttribute('data-open') !== '1';
+sec.setAttribute('data-open', open ? '1' : '0');
+var b = sec.querySelector(btnSel);
+if (b) b.textContent = open ? '收起' : '展开';
+}
+function setSecOpen(sec, btnSel, open) {
+if (!sec) return;
+sec.setAttribute('data-open', open ? '1' : '0');
+var b = sec.querySelector(btnSel);
+if (b) b.textContent = open ? '收起' : '展开';
+}
+function actionsFor(S, s) {
+if (s === 'login') return [{ label: '登录', fn: function () { if (window.__openLogin) window.__openLogin('email'); } }];
+if (s === 'rebind') return [{ label: '去扫码', href: QP_REBIND }];
+if (s === 'quota') return [{ label: '重试', fn: function () { retry(S); } }];
+if (s === 'error') return [
+{ label: '重试', fn: function () { retry(S); } },
+{ label: '换源', fn: function () { setSecOpen(S.root.querySelector('.qp-lines'), '.qp-lines-toggle', true); } }
+];
+if (s === 'none') return [{ label: '换源', fn: function () { setSecOpen(S.root.querySelector('.qp-lines'), '.qp-lines-toggle', true); } }];
+return [];
+}
+function setState(S, s, extra) {
+if (!alive(S)) return;
+var def = STATES[s] || STATES.loading;
+var x = extra || {};
+S.state = s;
+S.root.setAttribute('data-state', s);
+var msg = S.root.querySelector('.qp-msg');
+if (msg) msg.textContent = x.msg || def.msg || '';
+var box = S.root.querySelector('.qp-actions');
+if (box) {
+var acts = x.actions || actionsFor(S, s);
+box.textContent = '';
+if (!acts.length) box.hidden = true;
+else {
+box.hidden = false;
+acts.forEach(function (a) {
+var b;
+if (a && a.href) {
+b = document.createElement('a');
+b.className = 'btn qp-act';
+b.href = a.href;
+b.target = '_blank';
+b.rel = 'noopener';
+} else {
+b = document.createElement('button');
+b.className = 'btn qp-act';
+b.type = 'button';
+b.onclick = function () { if (alive(S) && typeof a.fn === 'function') a.fn(); };
+}
+b.textContent = (a && a.label) || '';
+box.appendChild(b);
+});
+}
+}
+if (s !== 'loading' && s !== 'transcoding') hideBigPlay(S);
+}
+function state(s, extra) {
+if (!cur) return;
+setState(cur, s, extra);
+}
+function showBigPlay(S) {
+var b = S.root && S.root.querySelector('.qp-bigplay');
+if (b) b.hidden = false;
+}
+function hideBigPlay(S) {
+var b = S.root && S.root.querySelector('.qp-bigplay');
+if (b) b.hidden = true;
+}
+function nextUntried(S) {
+var n = S.lines.length;
+if (!n) return -1;
+var from = S.lineIdx;
+for (var k = 1; k <= n; k++) {
+var i = (from + k + n) % n;
+if (i === from) continue;
+if (!S.lines[i].tried && S.lines[i].url) return i;
+}
+return -1;
+}
+function retry(S) {
+if (!alive(S)) return;
+var l = S.lines[S.lineIdx];
+if (!l || l.kind !== 'byo') {
+if (typeof S.ctx.onRetry === 'function') { S.ctx.onRetry(); return; }
+}
+for (var i = 0; i < S.lines.length; i++) S.lines[i].tried = false;
+renderLines(S);
+if (S.lineIdx >= 0) startLine(S, S.lineIdx);
+else if (S.lines.length) startLine(S, 0);
+}
+function onLoadFail(S, line) {
+if (!alive(S)) return;
+clearStall(S);
+if (line) { line.tried = true; line.err = '加载失败'; }
+renderLines(S);
+var next = nextUntried(S);
+if (next >= 0) { startLine(S, next); return; }       // 失败回退：自动切下一条线路
+setState(S, 'error', { msg: '播放失败，试试换一条线路' });
+}
+function startLine(S, idx) {
+var line = S.lines[idx];
+if (!alive(S) || !line) return false;
+if (line.type === 'hls' && !S.hlsOk) {
+line.tried = true;
+line.err = '此浏览器不支持 HLS';
+renderLines(S);
+var nx = nextUntried(S);
+if (nx >= 0) return startLine(S, nx);
+setState(S, 'error', { msg: '此浏览器不支持 HLS，请用 Safari 或换 mp4 源' });
+return false;
+}
+S.lineIdx = idx;
+S.fid = String(line.fid || '');          // 换到自备源 / 另一条官方源时，进度不能记到上一条的 fid 上
+S.resumeDone = !(S.resumeAt > 0);
+renderLines(S);
+updateSub(S);
+setState(S, 'loading', { msg: '正在加载 ' + line.label + '…' });
+clearStall(S);
+try { S.v.pause(); } catch (e) { /* 未加载时 pause 会抛，忽略 */ }
+S.v.setAttribute('src', line.url);       // 签名直链带 & ?：属性赋值不经 HTML 转义
+try { if (S.v.load) S.v.load(); } catch (e) { /* 忽略 */ }
+var p = null;
+try { p = S.v.play(); } catch (e) { p = null; }
+if (p && typeof p.then === 'function') {
+p.then(null, function (err) {
+if (!alive(S)) return;
+if (err && err.name === 'NotAllowedError') {      // 自动播放被拦：给大字按钮，不当作失败
+setState(S, 'ready');
+showBigPlay(S);
+return;
+}
+onLoadFail(S, line);
+});
+} else if (!p) {
+onLoadFail(S, line);
+}
+return true;
+}
+function play(url, label, opt) {
+var S = cur;
+if (!alive(S)) return false;
+if (!isUrl(url)) { setState(S, 'error', { msg: '视频地址无效' }); return false; }
+var o = opt || {};
+if (o.startAt != null) S.resumeAt = Math.max(0, Number(o.startAt) || 0);
+if (o.fid) S.fid = String(o.fid);
+var idx = addLine(S, { url: url, label: label || '直链', kind: 'official', fid: o.fid });
+for (var i = 0; i < S.lines.length; i++) S.lines[i].tried = false;   // 新地址 = 重新开始一轮回退
+renderLines(S);
+return startLine(S, idx);
+}
+function setSources(list) {
+var S = cur;
+if (!alive(S)) return;
+S.lines = S.lines.filter(function (l) { return l.kind === 'byo'; });
+(list || []).forEach(function (src) { if (src && src.url) addLine(S, src); });
+if (S.lineIdx >= S.lines.length) S.lineIdx = -1;
+renderLines(S);
+updateSub(S);
+}
+function setEpisodes(list, curEp, hint) {
+var S = cur;
+if (!alive(S)) return;
+var out = [];
+(list || []).forEach(function (it) {
+if (it == null) return;
+var ep = Number(it.ep != null ? it.ep : it);
+if (!(ep > 0) || ep !== Math.floor(ep)) return;
+out.push({
+ep: ep,
+label: String((it && it.label) || pad2(ep)),
+fid: String((it && it.fid) || ''),
+magnet: String((it && it.magnet) || '')
+});
+});
+S.eps = out;
+var n = Number(curEp);
+if (n > 0) S.ep = n;
+renderEps(S, hint !== undefined ? hint : defaultEpsHint(out));
+updateSub(S);
+}
+function setFid(fid) {
+if (cur) cur.fid = String(fid == null ? '' : fid);
+}
+function pause() {
+if (!alive(cur)) return;
+try { cur.v.pause(); } catch (e) { /* 忽略 */ }
+}
+function gate(prevPos, pos, lastMs, nowMs) {
+var dp = Math.abs(Number(pos) - Number(prevPos));
+var dt = Number(nowMs) - Number(lastMs);
+if (!lastMs) return { send: true, dp: dp, dt: 0 };
+return { send: dt >= 5000 && dp >= 5, dp: dp, dt: dt };
+}
+function report(S, final, atEnd) {
+if (!alive(S)) return;
+var v = S.v;
+var dur = Number(v.duration) || 0;
+var pos = atEnd ? dur : Number(v.currentTime) || 0;
+if (!(dur > 0) || !(pos >= 0)) return;
+S.lastMs = Date.now();
+S.lastPos = pos;
+var payload = {
+ep: S.ep,
+fid: S.fid,
+pos: Math.round(pos * 10) / 10,
+dur: Math.round(dur * 10) / 10
+};
+if (final) payload.final = true;
+if (typeof S.ctx.onProgress === 'function') {
+try { S.ctx.onProgress(payload); } catch (e) { /* 上报失败不影响播放 */ }
+}
+}
+function paint(S) {
+if (!alive(S)) return;
+var v = S.v, d = Number(v.duration) || 0, p = Number(v.currentTime) || 0;
+var seek = S.root.querySelector('.qp-seek');
+if (seek && !S.seekDrag) seek.value = String(d > 0 ? Math.round(p / d * 1000) : 0);
+var curEl = S.root.querySelector('.qp-cur');
+var durEl = S.root.querySelector('.qp-dur');
+if (curEl) curEl.textContent = fmtTime(p);
+if (durEl) durEl.textContent = fmtTime(d);
+var btn = S.root.querySelector('.qp-play');
+if (btn) btn.textContent = v.paused ? '▶' : '⏸';
+var mute = S.root.querySelector('.qp-mute');
+if (mute) mute.textContent = (v.muted || !v.volume) ? '🔇' : '🔊';
+var rate = S.root.querySelector('.qp-rate');
+if (rate) rate.textContent = rateLabel(Number(v.playbackRate) || 1);
+var fs = S.root.querySelector('.qp-fs');
+if (fs) {
+var full = !!(document.fullscreenElement || document.webkitFullscreenElement);
+fs.textContent = full ? '退出全屏' : '全屏';
+}
+}
+function schedule(S) {
+if (!alive(S) || S.pending) return;
+S.pending = true;
+var raf = window.requestAnimationFrame || function (cb) { return setTimeout(cb, 16); };
+raf(function () { S.pending = false; paint(S); });
+}
+function armStall(S) {
+if (!alive(S) || S.stallTimer) return;
+S.stallTimer = setTimeout(function () {
+S.stallTimer = 0;
+if (!alive(S)) return;
+if (S.v.readyState >= 2) return;            // 已经有数据，只是短暂缓冲
+onLoadFail(S, S.lines[S.lineIdx]);
+}, 15000);
+}
+function clearStall(S) {
+if (S.stallTimer) { clearTimeout(S.stallTimer); S.stallTimer = 0; }
+}
+function cancelNext(S) {
+if (S.nextTimer) { clearInterval(S.nextTimer); S.nextTimer = 0; }
+var bar = S.root && S.root.querySelector('.qp-nextbar');
+if (bar) bar.hidden = true;
+}
+function goNext(S, auto) {
+cancelNext(S);
+if (!alive(S)) return;
+if (auto) {
+if (typeof S.ctx.onEnded === 'function') { S.ctx.onEnded(); return; }
+}
+if (typeof S.ctx.onNext === 'function') { S.ctx.onNext(); return; }
+if (typeof S.ctx.onEnded === 'function') S.ctx.onEnded();
+}
+function showNext(S) {
+var bar = S.root.querySelector('.qp-nextbar');
+if (!bar) return;
+var hint = S.root.querySelector('.qp-autonext');
+S.nextLeft = 5;
+bar.hidden = false;
+if (hint) hint.textContent = S.nextLeft + ' 秒后自动播放下一集';
+if (S.nextTimer) clearInterval(S.nextTimer);
+S.nextTimer = setInterval(function () {
+if (!alive(S)) { cancelNext(S); return; }
+S.nextLeft -= 1;
+if (S.nextLeft > 0) {
+if (hint) hint.textContent = S.nextLeft + ' 秒后自动播放下一集';
+return;
+}
+goNext(S, true);
+}, 1000);
+}
+function toggleFs(S) {
+var d = document, root = S.root, v = S.v;
+if (d.fullscreenElement || d.webkitFullscreenElement) {
+try {
+if (d.exitFullscreen) d.exitFullscreen();
+else if (d.webkitExitFullscreen) d.webkitExitFullscreen();
+} catch (e) { /* 忽略 */ }
+return;
+}
+try {
+if (root.requestFullscreen) root.requestFullscreen();
+else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();     // iOS 只允许 video 元素
+else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen();
+else if (v.requestFullscreen) v.requestFullscreen();
+} catch (e) { /* 用户拒绝 / 不支持：保持原状 */ }
+}
+function togglePip(S) {
+var v = S.v;
+try {
+if (document.pictureInPictureElement) { document.exitPictureInPicture(); return; }
+if (v.requestPictureInPicture) v.requestPictureInPicture();
+} catch (e) { /* 忽略 */ }
+}
+function bind(S) {
+var v = S.v, root = S.root;
+function q(sel) { return root.querySelector(sel); }
+v.addEventListener('loadedmetadata', function () {
+if (!alive(S)) return;
+if (!S.resumeDone && S.resumeAt > 0) {
+S.resumeDone = true;
+var d = Number(v.duration) || 0;
+if (!(d > 0) || S.resumeAt < d - 5) {
+try { v.currentTime = S.resumeAt; } catch (e) { /* 忽略 */ }
+}
+}
+schedule(S);
+});
+v.addEventListener('playing', function () {
+if (!alive(S)) return;
+clearStall(S);
+hideBigPlay(S);
+if (S.state !== 'ready') setState(S, 'ready');
+schedule(S);
+});
+v.addEventListener('timeupdate', function () {
+if (!alive(S)) return;
+schedule(S);
+var pos = Number(v.currentTime) || 0;
+if (gate(S.lastPos, pos, S.lastMs, Date.now()).send) report(S, false);
+});
+v.addEventListener('pause', function () {
+if (!alive(S)) return;
+schedule(S);
+report(S, false);
+});
+v.addEventListener('play', function () { schedule(S); });
+v.addEventListener('seeked', function () {
+if (!alive(S)) return;
+if (S.seekTimer) clearTimeout(S.seekTimer);
+S.seekTimer = setTimeout(function () {
+S.seekTimer = 0;
+report(S, false);                       // 拖动结束 800ms 后再报，避免拖一次发几十条
+}, 800);
+schedule(S);
+});
+v.addEventListener('waiting', function () { if (alive(S)) armStall(S); });
+v.addEventListener('stalled', function () { if (alive(S)) armStall(S); });
+v.addEventListener('error', function () { onLoadFail(S, S.lines[S.lineIdx]); });
+v.addEventListener('volumechange', function () {
+if (!alive(S)) return;
+var vol = q('.qp-vol');
+if (vol) vol.value = String(Math.round((v.muted ? 0 : v.volume) * 100));
+schedule(S);
+});
+v.addEventListener('ratechange', function () { schedule(S); });
+v.addEventListener('ended', function () {
+if (!alive(S)) return;
+report(S, true, true);                     // 先把 pos=dur 记下，再谈下一集
+showNext(S);
+schedule(S);
+});
+v.addEventListener('click', function () {
+if (!alive(S)) return;
+try { root.focus({ preventScroll: true }); } catch (e) { try { root.focus(); } catch (e2) {} }
+togglePlay(S);
+});
+var big = q('.qp-bigplay');
+if (big) big.onclick = function () {
+if (!alive(S)) return;
+hideBigPlay(S);
+var p = v.play();
+if (p && p.then) p.then(null, function () { showBigPlay(S); });
+};
+var closeBtn = q('.qp-close');
+if (closeBtn) closeBtn.onclick = function () { close(); };
+var playBtn = q('.qp-play');
+if (playBtn) playBtn.onclick = function () { togglePlay(S); };
+var muteBtn = q('.qp-mute');
+if (muteBtn) muteBtn.onclick = function () {
+v.muted = !v.muted;
+if (!v.muted && !v.volume) v.volume = 0.6;
+};
+var seek = q('.qp-seek');
+if (seek) {
+seek.addEventListener('pointerdown', function () { S.seekDrag = true; });
+seek.addEventListener('input', function () {
+S.seekDrag = true;
+var d = Number(v.duration) || 0;
+if (d > 0) {
+var t = d * (Number(seek.value) || 0) / 1000;
+try { v.currentTime = Math.max(0, Math.min(d - 0.1, t)); } catch (e) { /* 忽略 */ }
+}
+});
+seek.addEventListener('change', function () { S.seekDrag = false; schedule(S); });
+seek.addEventListener('pointerup', function () { S.seekDrag = false; });
+seek.addEventListener('blur', function () { S.seekDrag = false; });
+}
+var vol = q('.qp-vol');
+if (vol) vol.addEventListener('input', function () {
+var x = Math.max(0, Math.min(100, Number(vol.value) || 0));
+v.volume = x / 100;
+v.muted = x === 0;
+});
+var rate = q('.qp-rate');
+if (rate) rate.onclick = function () {
+var i = QP_RATES.indexOf(Number(v.playbackRate) || 1);
+i = (i < 0 ? 3 : i + 1) % QP_RATES.length;
+try { v.playbackRate = QP_RATES[i]; } catch (e) { /* 忽略 */ }
+rate.textContent = rateLabel(QP_RATES[i]);
+};
+var pip = q('.qp-pip');
+if (pip) {
+if (document.pictureInPictureEnabled && v.requestPictureInPicture) {
+pip.onclick = function () { togglePip(S); };
+} else {
+pip.hidden = true;
+}
+}
+var fs = q('.qp-fs');
+if (fs) fs.onclick = function () { toggleFs(S); };
+var nextBtn = q('.qp-next');
+if (nextBtn) nextBtn.onclick = function () { goNext(S, false); };
+var cancelBtn = q('.qp-cancel');
+if (cancelBtn) cancelBtn.onclick = function () { cancelNext(S); };
+var epsSec = q('.qp-eps');
+var epsToggle = q('.qp-eps-toggle');
+if (epsToggle) epsToggle.onclick = function () { toggleSec(epsSec, '.qp-eps-toggle'); };
+var linesSec = q('.qp-lines');
+var linesToggle = q('.qp-lines-toggle');
+if (linesToggle) linesToggle.onclick = function () { toggleSec(linesSec, '.qp-lines-toggle'); };
+var epsList = q('.qp-eps-list');
+if (epsList) epsList.addEventListener('click', function (ev) {
+var t = ev.target;
+var b = t && t.closest ? t.closest('.qp-ep') : null;
+if (!b || !alive(S)) return;
+var ep = Number(b.getAttribute('data-ep'));
+if (!(ep > 0) || ep === Number(S.ep)) return;
+S.ep = ep;
+renderEps(S, S.epsHint);
+updateSub(S);
+if (window.innerWidth <= 760) setSecOpen(epsSec, '.qp-eps-toggle', false);   // 手机上点完自动收起
+if (typeof S.ctx.onPickEp === 'function') S.ctx.onPickEp(ep);
+});
+var lineList = q('.qp-line-list');
+if (lineList) lineList.addEventListener('click', function (ev) {
+var t = ev.target;
+if (!t || !t.classList || !alive(S)) return;
+if (t.classList.contains('qp-line-del')) {
+var di = Number(t.getAttribute('data-i'));
+var dl = S.lines[di];
+if (!dl || dl.kind !== 'byo') return;
+delByo(S.id, dl.url);
+S.lines.splice(di, 1);
+if (di < S.lineIdx) S.lineIdx -= 1;
+else if (di === S.lineIdx) S.lineIdx = -1;
+renderLines(S);
+updateSub(S);
+return;
+}
+if (t.classList.contains('qp-line')) {
+var i = Number(t.getAttribute('data-i'));
+if (!(i >= 0) || i >= S.lines.length) return;
+for (var k = 0; k < S.lines.length; k++) S.lines[k].tried = false;
+startLine(S, i);
+}
+});
+var urlIn = q('.qp-line-url');
+var labIn = q('.qp-line-label');
+var addBtn = q('.qp-line-add');
+if (addBtn) addBtn.onclick = function () {
+if (!alive(S)) return;
+var url = String((urlIn && urlIn.value) || '').trim();
+var label = String((labIn && labIn.value) || '').trim();
+if (!/^https?:\/\//i.test(url)) {
+var old = addBtn.textContent;
+addBtn.textContent = '请粘贴 http(s) 直链';
+setTimeout(function () { if (addBtn.isConnected) addBtn.textContent = old; }, 1400);
+return;
+}
+var type = typeOf(url);
+saveByo(S.id, { label: label || labelOf(url), url: url, type: type });
+if (urlIn) urlIn.value = '';
+if (labIn) labIn.value = '';
+var idx = addLine(S, { url: url, label: label, kind: 'byo' });
+for (var k = 0; k < S.lines.length; k++) S.lines[k].tried = false;
+renderLines(S);
+startLine(S, idx);
+};
+root.addEventListener('keydown', function (ev) {
+if (!alive(S)) return;
+var t = ev.target;
+var tag = t && t.tagName ? String(t.tagName).toUpperCase() : '';
+if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;   // 滑块/输入框自己处理方向键
+var k = ev.key;
+if (k === ' ' || k === 'Spacebar') {
+if (tag === 'BUTTON' || tag === 'A') return;    // 让获得焦点的按钮自己响应空格
+ev.preventDefault();
+togglePlay(S);
+} else if (k === 'ArrowLeft') {
+ev.preventDefault(); seekBy(S, -5);
+} else if (k === 'ArrowRight') {
+ev.preventDefault(); seekBy(S, 5);
+} else if (k === 'ArrowUp') {
+ev.preventDefault(); bumpVolume(S, 0.1);
+} else if (k === 'ArrowDown') {
+ev.preventDefault(); bumpVolume(S, -0.1);
+} else if (k === 'f' || k === 'F') {
+ev.preventDefault(); toggleFs(S);
+} else if (k === 'm' || k === 'M') {
+ev.preventDefault(); S.v.muted = !S.v.muted;
+}
+});
+S.onVis = function () {
+if (document.visibilityState === 'hidden') report(S, true);
+};
+S.onPageHide = function () { report(S, true); };
+document.addEventListener('visibilitychange', S.onVis);
+window.addEventListener('pagehide', S.onPageHide);
+}
+function togglePlay(S) {
+if (!alive(S)) return;
+var v = S.v;
+if (v.paused) {
+var p = v.play();
+if (p && p.then) p.then(null, function () { showBigPlay(S); });
+} else {
+v.pause();
+}
+}
+function seekBy(S, delta) {
+var v = S.v, d = Number(v.duration) || 0;
+if (!(d > 0)) return;
+try { v.currentTime = Math.max(0, Math.min(d, (Number(v.currentTime) || 0) + delta)); } catch (e) { /* 忽略 */ }
+}
+function bumpVolume(S, delta) {
+var v = S.v;
+var x = Math.max(0, Math.min(1, (Number(v.volume) || 0) + delta));
+v.volume = x;
+if (x > 0 && v.muted) v.muted = false;
+}
+function open(ctx) {
+var m = ctx && ctx.m;
+if (!m) return 0;
+close();                                    // 同一弹窗只允许一个实例
 var old = m.querySelector('.trailer');
 if (old && old.parentNode) {
 var ov = old.querySelector('video');
@@ -1090,76 +2147,92 @@ try { ov.pause(); ov.removeAttribute('src'); if (ov.load) ov.load(); } catch (e)
 }
 old.parentNode.removeChild(old);
 }
-var bar = document.createElement('div');
-bar.className = 'trailer qpmsg';
-bar.textContent = '正在查找网盘文件…';
-m.appendChild(bar);
-bar.scrollIntoView({ block: 'center' });
-function alive() { return gen === QP_GEN && bar.isConnected; }
-function say(text) { if (alive()) bar.textContent = text; }
-function needLogin() {
-if (!alive()) return;
-if (bar.parentNode) bar.parentNode.removeChild(bar);
-if (window.__openLogin) window.__openLogin('email');
+var root = document.createElement('div');
+root.className = 'trailer qplayer';
+root.setAttribute('data-state', 'loading');
+root.setAttribute('tabindex', '0');
+root.innerHTML = TPL;
+var v = root.querySelector('.qp-video');
+var S = {
+tok: ++SEQ,
+ctx: ctx || {},
+m: m,
+root: root,
+v: v,
+id: String(ctx.id == null ? '' : ctx.id),
+title: String(ctx.title || ''),
+ep: Number(ctx.ep) > 0 ? Number(ctx.ep) : 0,
+fid: '',
+state: 'loading',
+lines: [],
+lineIdx: -1,
+eps: [],
+epsHint: '',
+hlsOk: hlsSupported(v),
+resumeAt: Math.max(0, Number(ctx.startAt) || 0),
+resumeDone: false,
+lastMs: 0,
+lastPos: 0,
+seekDrag: false,
+pending: false,
+nextTimer: 0,
+nextLeft: 0,
+stallTimer: 0,
+seekTimer: 0,
+dead: false
+};
+cur = S;
+root.querySelector('.qp-title').textContent = S.title || '在线播放';
+bind(S);
+renderEps(S, S.eps.length ? '' : '正在读取选集…');
+renderLines(S);
+updateSub(S);
+(ctx.sources || []).forEach(function (src) { if (src && src.url) addLine(S, src); });
+renderLines(S);
+m.appendChild(root);
+try { root.scrollIntoView({ block: 'center' }); } catch (e) { /* 忽略 */ }
+if (S.lines.length) startLine(S, 0);
+else setState(S, 'loading', { msg: '正在准备播放…' });
+return S.tok;
 }
-function needRebind() {
-if (!alive()) return;
-bar.innerHTML = '夸克登录已失效，去 <a href="' + QP_BASE + '/qr/" target="_blank" '
-+ 'rel="noopener">https://120.48.56.189/qr/</a> 重新扫码';
+function close() {
+var S = cur;
+if (!S) return;                             // 幂等
+cur = null;
+S.dead = true;
+if (S.nextTimer) { clearInterval(S.nextTimer); S.nextTimer = 0; }
+clearStall(S);
+if (S.seekTimer) { clearTimeout(S.seekTimer); S.seekTimer = 0; }
+try { document.removeEventListener('visibilitychange', S.onVis); } catch (e) { /* 忽略 */ }
+try { window.removeEventListener('pagehide', S.onPageHide); } catch (e) { /* 忽略 */ }
+try {
+S.v.pause();
+S.v.removeAttribute('src');
+if (S.v.load) S.v.load();                 // 断流：否则移除节点后仍可能继续取流
+} catch (e) { /* 忽略 */ }
+if (S.root && S.root.parentNode) S.root.parentNode.removeChild(S.root);
+S.lines = [];
+S.eps = [];
 }
-function play(url) {
-if (!alive()) return;
-var d = document.createElement('div');
-d.className = 'trailer';
-d.innerHTML = '<video controls autoplay playsinline preload="metadata"></video>';
-var v = d.querySelector('video');
-if (v) v.setAttribute('src', url);          // 直链带签名参数，用属性赋值不经 innerHTML 转义
-if (bar.parentNode) bar.parentNode.replaceChild(d, bar);   // 换上视频 = 同时移除状态条
-else m.appendChild(d);
-d.scrollIntoView({ block: 'center' });
+function isCurrent(tok) {
+return !!cur && !!tok && cur.tok === tok && isConn(cur.root);
 }
-function askUrl(fid, tries) {
-if (!alive()) return;
-if (tries > 10) { say('转码超时，稍后再试'); return; }
-qpJson('/tvplay/url?fid=' + encodeURIComponent(fid) + '&wait=45', tk).then(function (j) {
-if (!alive()) return;
-if (j.state === 'ready' && j.url) { play(String(j.url)); return; }
-if (j.state === 'transcoding') {
-say('转码中… 约 1 分钟');
-var wait = Number(j.retry_after);
-if (!(wait > 0)) wait = 5;
-QP_TIMER = setTimeout(function () {
-QP_TIMER = 0;
-if (!alive()) return;                 // 弹窗已关：不再排下一轮
-askUrl(fid, tries + 1);
-}, Math.min(wait, 60) * 1000);
-return;
-}
-if (j.state === 'need_rebind') { needRebind(); return; }
-if (j.state === 'unauthorized') { needLogin(); return; }
-say('播放服务暂时不可用');
-});
-}
-qpJson('/tvplay/find?q=' + encodeURIComponent(String(title || '')) + '&limit=5', tk).then(function (j) {
-if (!alive()) return;
-if (j.state === 'found') {
-var items = j.items || [];
-var best = j.best || items[0] || null;
-if (!best || best.fid == null || best.fid === '') { say('播放服务暂时不可用'); return; }
-say('找到 ' + items.length + ' 个文件，正在准备播放…');
-askUrl(String(best.fid), 0);
-return;
-}
-if (j.state === 'none') {
-say('你的夸克网盘里还没有这部；先点磁力行复制链接到夸克离线下载');
-return;
-}
-if (j.state === 'need_rebind') { needRebind(); return; }
-if (j.state === 'unauthorized') { needLogin(); return; }
-say('播放服务暂时不可用');
-});
-}
-window.__qp = openQuarkPlay;
+function isConn(node) { return !!(node && node.isConnected); }
+return {
+open: open,
+close: close,
+state: state,
+play: play,
+setSources: setSources,
+setEpisodes: setEpisodes,
+setFid: setFid,
+pause: pause,
+isCurrent: isCurrent,
+_gate: gate,                                 // 离线自检：进度节流是纯函数
+_lines: { of: byoOf, save: saveByo, del: delByo }
+};
+})();
+window.QPlayer = QPlayer;
 var BILI = {};          // id -> {bvid, aid, pages:[{page,cid,part}]}
 var BILI_P = {};        // id -> 在途的 resolve：同 id 并发共用一次请求
 var BILI_BASE = 'https://120.48.56.189/bili/';
@@ -1283,62 +2356,6 @@ return biliGet('reply', { aid: v.aid, ps: 20 }).then(function (d) { renderRp(m.q
 }
 };
 });
-var bp = m.querySelector('#watch');
-if (bp) {
-bp.onclick = function () {
-bp.textContent = '匹配中…';
-biliResolve(id, title, year).then(function (v) {
-if (!v || !v.pages || !v.pages.length) {
-bp.textContent = '未找到 B 站源';
-bp.setAttribute('data-miss', '1');
-setTimeout(function () { bp.textContent = '开始观看'; }, 2200);
-return;
-}
-bp.textContent = '开始观看';
-var page = 1;
-var on = m.querySelector('#pdm [data-pg].on');
-if (on) page = Number(on.getAttribute('data-pg')) || 1;
-var old = m.querySelector('.trailer');
-if (old) old.remove();
-var oldBar = m.querySelector('.bplay-bar');
-if (oldBar) oldBar.remove();
-var score = biliScore(v, title);
-var bvid = v.bvid;
-var mkSrc = function (pg) {
-return 'https://player.bilibili.com/player.html?bvid=' + encodeURIComponent(bvid)
-+ '&page=' + pg + '&autoplay=1&danmaku=1&high_quality=1';
-};
-var barHtml = '';
-if (score < 0) barHtml += '<div class="mnote">未找到正片源，这是 B 站上最接近的视频（可能是 OP/剪辑/相关视频）</div>';
-if (score < 2) barHtml += '<div class="mnote">B 站官方番剧多为会员专享，这里的「集」是 UP 主上传的分P，不一定对应正片集数</div>';
-if (v.pages.length >= 2) {
-barHtml += '<select id="bsel">' + v.pages.map(function (p, i) {
-return '<option value="' + (p.page || i + 1) + '">' + esc(p.part || ('第 ' + (i + 1) + ' 集')) + '</option>';
-}).join('') + '</select>';
-}
-if (barHtml) {
-var bar = document.createElement('div');
-bar.className = 'bplay-bar';
-bar.innerHTML = barHtml;
-m.appendChild(bar);
-}
-var d = document.createElement('div');
-d.className = 'trailer';
-d.innerHTML = '<iframe src="' + mkSrc(page) + '" '
-+ 'allow="autoplay; fullscreen" allowfullscreen referrerpolicy="no-referrer"></iframe>';
-m.appendChild(d);
-d.scrollIntoView({ behavior: 'smooth', block: 'center' });
-var selEl = m.querySelector('#bsel');
-if (selEl) {
-selEl.value = String(page);
-selEl.onchange = function () {
-var fr = d.querySelector('iframe');
-if (fr) fr.src = mkSrc(Number(selEl.value) || 1);
-};
-}
-});
-};
-}
 }
 var THEME_KEY = 'theme';
 function currentTheme() {

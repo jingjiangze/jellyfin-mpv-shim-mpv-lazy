@@ -656,7 +656,11 @@ toast(ok ? '已复制磁力链接' : '复制失败，请长按链接手动复制
 });
 var epAttr = c.getAttribute('data-ep');
 if (epAttr && window.__prog) {
-window.__prog.report(m.getAttribute('data-bgm'), Number(epAttr));
+var bgmId = m.getAttribute('data-bgm');
+var prev = window.__prog.get ? window.__prog.get(bgmId) : null;
+window.__prog.report(bgmId, Number(epAttr), prev && Number(prev.ep) === Number(epAttr) ? {
+fid: prev.fid || '', pos: prev.pos || 0, dur: prev.dur || 0
+} : null);
 }
 }
 m.addEventListener('click', onChip);
