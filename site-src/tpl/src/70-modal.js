@@ -45,8 +45,7 @@
       +       '<span><b>—</b><i>想看</i></span><span><b>—</b><i>在看</i></span><span><b>—</b><i>看过</i></span>'
       +     '</div>'
       +     '<div class="acts">'
-      +       '<span class="btn pri" id="watch" role="button" tabindex="0">开始观看</span>'
-      +       '<span class="btn" id="qplay" role="button" tabindex="0">▶ 在线播放</span>'
+      +       '<span class="btn pri" id="watch" role="button" tabindex="0">▶ 播放</span>'
       +       '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
       +       (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
       +       '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
@@ -74,20 +73,14 @@
     if (m && m.setAttribute) m.setAttribute('data-bgm', String(id));
     m.querySelector('.x').onclick = close;
 
-    /* 开始观看 = B 站弹幕播放：点击绑定在 bindBili（80-bili.js），这里只补键盘可达性 */
+    /* 「▶ 播放」= 自研播放器（75-quarkplay.js 的 openQuarkPlay）：只跟盒子服务要一条 CDN
+       mp4 地址，字节不经服务器。同 IIFE 内的函数声明会提升，这里直接调用。
+       span 的 role=button 不会自带键盘激活，键位一并补上。 */
     var wb = m.querySelector('#watch');
-    if (wb) wb.onkeydown = function (ev) {
-      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); wb.click(); }
-    };
-
-    /* 在线播放 = 夸克网盘直链（75-quarkplay.js）：只跟盒子服务要一条 CDN mp4 地址，
-       字节不经服务器。同 IIFE 内的函数声明会提升，这里直接调用。 */
-    var qp = m.querySelector('#qplay');
-    if (qp) {
-      qp.onclick = function () { openQuarkPlay(m, id, title); };
-      /* 与 #watch 同一处理：span 的 role=button 不会自带键盘激活 */
-      qp.onkeydown = function (ev) {
-        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); qp.click(); }
+    if (wb) {
+      wb.onclick = function () { openQuarkPlay(m, id, title); };
+      wb.onkeydown = function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); wb.click(); }
       };
     }
 

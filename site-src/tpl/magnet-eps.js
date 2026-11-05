@@ -883,7 +883,13 @@
          data-bgm 由 70-modal.js 在打开详情时写入）。合集行没有 data-ep，这里自然跳过。 */
       var epAttr = c.getAttribute('data-ep');
       if (epAttr && window.__prog) {
-        window.__prog.report(m.getAttribute('data-bgm'), Number(epAttr));
+        /* 只记「看到第几集」，保留播放器已写入的 pos/dur/fid：
+           两参调用会把进度整条覆盖成 pos=0，续播就断了。 */
+        var bgmId = m.getAttribute('data-bgm');
+        var prev = window.__prog.get ? window.__prog.get(bgmId) : null;
+        window.__prog.report(bgmId, Number(epAttr), prev && Number(prev.ep) === Number(epAttr) ? {
+          fid: prev.fid || '', pos: prev.pos || 0, dur: prev.dur || 0
+        } : null);
       }
     }
     m.addEventListener('click', onChip);

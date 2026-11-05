@@ -172,4 +172,7 @@
 
   /* 磁力层（magnet-eps.js）是独立 IIFE、拿不到本文件的闭包：点行复制后经这个入口
      上报「看到第几集」。id 传 #modal 的 data-bgm，ep 是行上的数字集号（合集行没有）。 */
-  window.__prog = { report: function (id, ep) { setProgress(id, ep); } };
+  window.__prog = {
+    report: function (id, ep, extra) { return setProgress(id, ep, extra); },
+    get: function (id) { return progressOf(id); }
+  };

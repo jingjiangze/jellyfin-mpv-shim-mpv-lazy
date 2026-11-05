@@ -2839,3 +2839,115 @@ main {
   font-size: var(--fs-sm); color: var(--fg2); background: var(--card2); }
 .trailer.qpmsg a { color: var(--accent); }
 
+/* ---------------------------------------------------------------- 19 自研播放器（76-qplayer.js）
+   .trailer 基类是给预告 iframe 用的 16:9 + overflow:hidden；播放器下面还挂着选集与线路，
+   必须还原成自适应高度，否则区块被裁掉。16:9 由 .qp-stage 自己负责。 */
+.trailer.qplayer { aspect-ratio: auto; overflow: visible; background: transparent; }
+
+.qp-head { display: flex; align-items: baseline; gap: var(--s2); padding: 0 var(--s1) var(--s2); }
+.qp-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--fs-md); font-weight: 600; color: var(--fg); line-height: var(--lh-snug); }
+.qp-sub { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--fs-xs); color: var(--dim); }
+
+/* 控件统一按 --ctl-h 高；边框 / 前景 / 圆角全部走令牌，不写新色值 */
+.qp-btn { display: inline-flex; align-items: center; justify-content: center; height: var(--ctl-h);
+  min-width: var(--ctl-h); padding: 0 var(--s2); border: 1px solid var(--line); border-radius: var(--r-ctl);
+  background: var(--card2); color: var(--fg); font-size: var(--fs-sm); line-height: 1; white-space: nowrap;
+  cursor: pointer; transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+.qp-btn:hover { border-color: var(--accent-line); color: var(--accent); }
+.qp-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.qp-head .qp-close { margin-left: auto; border-color: transparent; background: none; font-size: var(--fs-lg); }
+
+/* 舞台：纯黑只用于 video 的 letterbox 底，其余颜色仍走令牌 */
+.qp-stage { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: var(--r); overflow: hidden; }
+.qp-stage video { width: 100%; height: 100%; max-height: none; object-fit: contain; }
+.qp-bigplay { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 64px; height: 64px; padding: 0; border: 0; border-radius: 50%; font-size: var(--fs-h2); line-height: 1;
+  color: #fff; background: rgba(6, 6, 10, .62); cursor: pointer; }
+.qp-bigplay:hover { background: rgba(6, 6, 10, .82); }
+.qp-bigplay[hidden] { display: none; }
+/* 状态遮罩：loading / transcoding / none / login / quota / rebind / error 共用 */
+.qp-overlay { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center;
+  gap: var(--s3); padding: var(--s4); text-align: center;
+  background: rgba(6, 6, 10, .72); color: #fff; }
+.qplayer[data-state="ready"] .qp-overlay { display: none; }
+.qp-spinner { display: none; width: 32px; height: 32px; border: 3px solid rgba(255, 255, 255, .24);
+  border-top-color: #fff; border-radius: 50%; animation: qp-spin .9s linear infinite; }
+.qplayer[data-state="loading"] .qp-spinner,
+.qplayer[data-state="transcoding"] .qp-spinner { display: block; }
+@keyframes qp-spin { to { transform: rotate(360deg); } }
+.qp-msg { margin: 0; max-width: 40em; font-size: var(--fs-sm); line-height: var(--lh-base); }
+.qp-msg a { color: #fff; text-decoration: underline; }
+.qp-actions { display: flex; flex-wrap: wrap; gap: var(--s2); justify-content: center; }
+.qp-actions[hidden] { display: none; }
+
+/* 控制条 */
+.qp-bar { display: flex; gap: var(--s2); align-items: center; padding: var(--s2) 0; }
+.qp-bar input[type="range"] { height: var(--ctl-h); accent-color: var(--accent); }
+.qp-seek { flex: 1 1 auto; min-width: 0; }
+.qp-vol { flex: 0 0 auto; width: 84px; }
+.qp-time { flex: 0 0 auto; font-family: var(--mono); font-size: var(--fs-xs); color: var(--dim); white-space: nowrap; }
+.qp-time i { font-style: normal; }
+.qp-cur { color: var(--fg2); }
+.qp-dur { color: var(--dim); }
+
+/* 下一集提示条（5s 倒计时） */
+.qp-nextbar { display: flex; align-items: center; gap: var(--s2); margin: 0 0 var(--s2);
+  padding: var(--s2) var(--s3); border: 1px solid var(--line); border-radius: var(--r-ctl);
+  background: var(--card2); font-size: var(--fs-sm); color: var(--fg2); }
+.qp-nextbar[hidden] { display: none; }
+.qp-next { height: var(--ctl-h); padding: 0 var(--s3); border: 0; border-radius: var(--r-ctl);
+  background: var(--accent); color: var(--accent-ink); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+.qp-autonext { font-size: var(--fs-xs); color: var(--dim); }
+.qp-cancel { margin-left: auto; height: var(--ctl-h); padding: 0 var(--s2); border: 1px solid var(--line);
+  border-radius: var(--r-ctl); background: transparent; color: var(--dim); font-size: var(--fs-xs); cursor: pointer; }
+/* 选集 / 线路两个折叠区块 */
+.qp-eps, .qp-lines { border-top: 1px solid var(--line); padding: var(--s3) 0; }
+.qp-eps-h, .qp-lines-h { display: flex; align-items: center; gap: var(--s2); }
+.qp-eps-h h4, .qp-lines-h h4 { margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--fg); }
+.qp-eps-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--fs-xs); color: var(--dim); }
+.qp-eps-toggle, .qp-lines-toggle { margin-left: auto; height: var(--ctl-h); padding: 0 var(--s2);
+  border: 1px solid var(--line); border-radius: var(--r-ctl); background: var(--card2); color: var(--dim);
+  font-size: var(--fs-xs); cursor: pointer; }
+.qp-eps-toggle:hover, .qp-lines-toggle:hover { border-color: var(--accent-line); color: var(--accent); }
+
+.qp-eps-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px;
+  padding-top: var(--s2); }
+.qp-ep { min-height: var(--ctl-h-lg); padding: 0 6px; border: 1px solid var(--line);
+  border-radius: var(--r-ctl); background: var(--card2); color: var(--fg); font-size: var(--fs-sm); cursor: pointer; }
+.qp-ep:hover { border-color: var(--accent-line); color: var(--accent); }
+.qp-ep.on { background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 600; }
+.qp-eps[data-open="0"] .qp-eps-list { display: none; }
+
+/* BYO 线路：折叠体默认收起，data-open=1 才展开 */
+.qp-lines-body { display: none; padding-top: var(--s2); }
+.qp-lines[data-open="1"] .qp-lines-body { display: block; }
+.qp-lines-body input[type="url"], .qp-lines-body input[type="text"] { width: 100%; height: var(--ctl-h-lg);
+  margin: 0 0 var(--s2); padding: 0 var(--s3); border: 1px solid var(--line); border-radius: var(--r-ctl);
+  background: var(--bg2); color: var(--fg); font-size: var(--fs-sm); }
+.qp-lines-body input::placeholder { color: var(--dim2); }
+.qp-line-add { width: 100%; margin-bottom: var(--s2); }
+.qp-line-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.qp-line-row { display: inline-flex; align-items: center; gap: var(--s1); }
+.qp-line { height: var(--ctl-h); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 0 var(--s3); border: 1px solid var(--line); border-radius: var(--r-pill);
+  background: var(--card2); color: var(--fg2); font-size: var(--fs-xs); cursor: pointer; }
+.qp-line:hover { border-color: var(--accent-line); color: var(--accent); }
+.qp-line.on { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.qp-line.is-bad { opacity: .55; }
+.qp-line-del { display: inline-flex; align-items: center; justify-content: center; width: var(--ctl-h);
+  height: var(--ctl-h); padding: 0; border: 0; border-radius: 50%; background: transparent;
+  color: var(--dim); font-size: var(--fs-md); cursor: pointer; }
+.qp-line-del:hover { background: var(--card2); color: var(--danger); }
+
+/* 窄屏：控制条改三列网格（播放 / 进度 / 时间），音量隐藏；选集横向滚动吸附 */
+@media (max-width: 760px) {
+  .qp-bar { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; }
+  .qp-vol { display: none; }
+  .qp-eps-list { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: var(--s1); }
+  .qp-ep { flex: 0 0 44px; scroll-snap-align: start; }
+  .qp-nextbar { flex-wrap: wrap; }
+  .qp-autonext { flex: 1 1 100%; order: 3; }
+}
