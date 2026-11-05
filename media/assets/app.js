@@ -329,6 +329,7 @@ main.innerHTML = '<div class="home-head">' + head + '</div>'
 mountRanks();
 }
 var BROWSE = { view: [], shown: 0, page: 120 };
+var FAV_ONLY = /[?&]fav=1\b/.test(location.search);
 function renderBrowse(mode) {
 var grid = $('#grid');
 if (!grid) return;
@@ -344,13 +345,19 @@ BROWSE.shown = 0;
 }
 var html = '';
 for (var i = BROWSE.shown; i < want; i++) html += animeCard(BROWSE.view[i], { showYear: 1 });
-if (!BROWSE.view.length) html = '<div class="empty">这个组合没有作品 —— 换个年份/类型，或点「全部」再试</div>';
+if (!BROWSE.view.length) {
+html = FAV_ONLY
+? '<div class="empty favhint">还没有追番 —— 去「番剧」点卡片或详情里的 ☆ 追番</div>'
+: '<div class="empty">这个组合没有作品 —— 换个年份/类型，或点「全部」再试</div>';
+}
 grid.insertAdjacentHTML('beforeend', html);
 BROWSE.shown = want;
 var left = BROWSE.view.length - BROWSE.shown;
 $('#morewrap').hidden = left <= 0;
 if (left > 0) $('#morebtn').textContent = '加载更多 · 还剩 ' + left + ' 部';
-$('#hint').textContent = '筛出 ' + BROWSE.view.length + ' 部，已显示 ' + BROWSE.shown;
+$('#hint').textContent = FAV_ONLY
+? '我的追番 · ' + BROWSE.view.length + ' 部'
+: '筛出 ' + BROWSE.view.length + ' 部，已显示 ' + BROWSE.shown;
 }
 function applyBrowse(reset) {
 var q = nrm(($('#q').value || '').trim());
@@ -358,12 +365,21 @@ var y = ($('#f-year') || {}).value || '';
 var t = ($('#f-type') || {}).value || '';
 var sort = ($('#f-sort') || {}).value || 'year';
 var tg = ($('#f-tag') || {}).value || '';
+var favSet = null;
+if (FAV_ONLY) {
+favSet = {};
+favList().forEach(function (id) { favSet[String(id)] = 1; });
+y = '';
+var fy = $('#f-year');
+if (fy) fy.value = '';
+}
 var tgSet = null;
 if (tg && TAGS && TAGS[tg]) {
 tgSet = {};
 TAGS[tg].forEach(function (id) { tgSet[id] = 1; });
 }
 BROWSE.view = ANI.rows.filter(function (r) {
+if (favSet && !favSet[String(r[0])]) return false;
 if (tgSet && !tgSet[r[0]]) return false;
 if (!q && y && String(r[4] || '') !== y) return false;
 if (t && r[3] !== t) return false;
@@ -462,6 +478,17 @@ mountTagFilter();
 var deepTag = pickTagFromUrl();
 if (deepTag && TAGS && TAGS[deepTag]) { $('#f-tag').value = deepTag; $('#f-year').value = ''; }
 applyBrowse();
+if (FAV_ONLY) {
+var maskEl = $('#mask');
+if (maskEl && window.MutationObserver) {
+var wasOpen = maskEl.classList.contains('on');
+new MutationObserver(function () {
+var open = maskEl.classList.contains('on');
+if (wasOpen && !open) applyBrowse();
+wasOpen = open;
+}).observe(maskEl, { attributes: true, attributeFilter: ['class'] });
+}
+}
 }
 var MOVIE = { all: [], view: [], shown: 0, page: 120, db: [], tm: [] };
 function openExtModal(kind, i) {
@@ -1428,10 +1455,10 @@ paintLoginEntry(el);
 });
 }
 function bootHeader() {
-var P = PAGE;
+var P = PAGE === 'anime' && FAV_ONLY ? 'fav' : PAGE;
 var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
-var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
-['rank', 'rank', '排行榜']]
+var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['anime?fav=1', 'fav', '追番'],
+['movie', 'movie', '电影'], ['rank', 'rank', '排行榜']]
 .map(function (x) {
 return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
 }).join('');
