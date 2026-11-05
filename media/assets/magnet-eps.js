@@ -250,21 +250,26 @@ LIVE_DOWN = true;
 return null;
 });
 }
-function dbLive(name) {
+function dbLive(name, bgm) {
 var u = LIVE_URL + '?kw=' + encodeURIComponent(name) + '&db=1&_=' + Date.now();
+if (bgm) u += '&bgm=' + encodeURIComponent(bgm);
 return getJSON(u, 9000).then(function (d) {
 if (!d || d.miss || d.ok === false) return null;
 var eps = (d.eps && Object.keys(d.eps).length) ? d.eps : {};
 var batch = d.batch || [];
 if (!Object.keys(eps).length && !batch.length) return null;
-return { n: name, eps: eps, batch: batch, db: 1 };
+return { n: name, eps: eps, batch: batch, db: 1, key: d.key || '' };
 }).catch(function () { return null; });
 }
-function resolveEntry(name) {
+function resolveEntry(name, bgm) {
 if (!name) return Promise.resolve(null);
 var n = shardOf(name);
 return loadManifest().then(function () { return loadShard(n); })
-.then(function (d) { return findByName(d, name); })
+.then(function (d) {
+var byId = bgm ? (d && d[String(bgm)]) : null;
+if (byId) { byId.key = String(bgm); return byId; }
+return findByName(d, name);
+})
 .catch(function () { return null; });
 }
 function findByName(store, name) {
@@ -479,6 +484,16 @@ function sameTitle(a, b) {
 var x = titleKey(a);
 return !!x && x === titleKey(b);
 }
+function identityOk(a, b) {
+var x = titleKey(a), y = titleKey(b);
+if (!x || !y) return true;
+if (x === y) return true;
+var strip = function (s) {
+return s.replace(/(第[一二三四五六七八九十0-9]{1,2}[季期部])|(season[0-9]{1,2})|(s[0-9]{1,2})|(part[0-9]{1,2})|([0-9]{1,2})|([ivx]{1,3})$/g, '');
+};
+var xs = strip(x), ys = strip(y);
+return !!xs && !!ys && (xs === ys || (xs.length >= 4 && ys.indexOf(xs) === 0) || (ys.length >= 4 && xs.indexOf(ys) === 0));
+}
 function paint(e, titleHint) {
 var m = document.getElementById('modal');
 if (!m) return false;
@@ -667,10 +682,13 @@ CUR_BOX = box;                  // 供 reload() 把行数 / state 同步到最�
 CUR_STATE = state;
 var origEl = m.querySelector('.orig');
 var origName = origEl ? origEl.textContent.trim() : '';
+var bgm = m.getAttribute('data-bgm') || '';
 function stale() { return !box.parentNode || m.querySelector('#epsbox') !== box; }
 function take(e) {
 if (my !== EPOCH) return false;          // 这几条是刷新前发出的旧响应
 if (stale() || !hasRows(e)) return false;
+var byId = !!(bgm && e && String(e.key || '') === String(bgm));
+if (!byId && !identityOk(e.n, name)) return false;
 var c = epCount(e);
 if (c <= state.cnt) return false;
 state.e = e;
@@ -706,8 +724,8 @@ state.settled++;
 if (take(e)) state.got = true;
 if (!state.got && state.settled >= 2) finish();
 }
-resolveEntry(name).then(one, function () { one(null); });
-dbLive(name).then(one, function () { one(null); });
+resolveEntry(name, bgm).then(one, function () { one(null); });
+dbLive(name, bgm).then(one, function () { one(null); });
 }).observe(m, { childList: true, subtree: false });
 }
 if (document.readyState === 'loading') {

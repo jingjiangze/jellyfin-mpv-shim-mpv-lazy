@@ -655,6 +655,7 @@ m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
 + '<div class="mbody" data-p="dm" hidden><div id="pdm"></div></div>'
 + '<div class="mbody" data-p="rp" hidden><div id="prp"></div></div>';
 $('#mask').classList.add('on');
+if (m && m.setAttribute) m.setAttribute('data-bgm', String(id));
 m.querySelector('.x').onclick = close;
 var wb = m.querySelector('#watch');
 if (wb) wb.onkeydown = function (ev) {
