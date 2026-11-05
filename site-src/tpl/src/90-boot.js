@@ -539,11 +539,13 @@
   }
 
   function bootHeader() {
-    var P = PAGE;
+    /* 追番列表复用番剧页（anime.html?fav=1）：把页标识派生成 fav，
+       让「追番」高亮、「番剧」不高亮（FAV_ONLY 定义在 50-browse.js）。 */
+    var P = PAGE === 'anime' && FAV_ONLY ? 'fav' : PAGE;
     /* 首页 / 番剧 / 排行榜都搜番剧，电影页搜电影 */
     var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
-    var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
-      ['rank', 'rank', '排行榜']]
+    var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['anime?fav=1', 'fav', '追番'],
+      ['movie', 'movie', '电影'], ['rank', 'rank', '排行榜']]
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');

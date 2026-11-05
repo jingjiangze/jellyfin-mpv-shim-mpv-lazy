@@ -2625,3 +2625,6 @@ main {
 #authemailtip { margin: var(--s3) 0 0; font-size: var(--fs-xs); }
 #authverifytip { margin: 0 0 var(--s3); font-size: var(--fs-xs); }
 
+/* 追番空态与提示 */
+.favhint { margin: 0 0 var(--s4); font-size: var(--fs-sm); color: var(--dim); }
+
