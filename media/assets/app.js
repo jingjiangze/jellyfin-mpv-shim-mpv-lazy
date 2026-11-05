@@ -105,12 +105,78 @@ fetch(FOLLOW_API, { headers: { authorization: 'Bearer ' + tk } })
 .then(function (d) { if (d && d.ok && d.items) mergeRemote(d.items); })
 .catch(function () { /* 静默：追番是增值功能，拉不到不影响任何页面渲染 */ });
 }
+var PROG_API = 'https://120.48.56.189/auth/progress';
+var PROG_KEY = 'prog';
+function progRec(ep, extra, nowTs) {
+var n = Number(ep);
+if (!isFinite(n) || n <= 0 || n !== Math.floor(n)) return null;
+var x = extra || {}, ts = Number(x.ts);
+return {
+ep: n,
+fid: String(x.fid == null ? '' : x.fid),
+pos: Math.max(0, Number(x.pos) || 0),
+dur: Math.max(0, Number(x.dur) || 0),
+ts: ts > 0 ? ts : (nowTs || 0)
+};
+}
+var PROG = (function () {
+try {
+var v = JSON.parse(localStorage.getItem(PROG_KEY) || '{}');
+return v && typeof v === 'object' && Object.prototype.toString.call(v) !== '[object Array]' ? v : {};
+} catch (e) { return {}; }
+})();
+function progressOf(id) {
+var r = PROG[String(id)];
+return r && Number(r.ep) > 0 ? r : null;
+}
+function progressAll() { return PROG; }
+function setProgress(id, ep, extra) {
+var k = String(id), rec = progRec(ep, extra, Date.now());
+if (!rec) return null;
+PROG[k] = rec;
+try { localStorage.setItem(PROG_KEY, JSON.stringify(PROG)); } catch (e) { /* 忽略 */ }
+var tk = followToken();
+if (tk) {
+fetch(PROG_API, {
+method: 'POST',
+headers: { 'content-type': 'application/json', authorization: 'Bearer ' + tk },
+body: JSON.stringify({ id: k, ep: rec.ep, fid: rec.fid, pos: rec.pos, dur: rec.dur })
+}).catch(function () { /* 静默：本地已写入，不弹错、不回滚 */ });
+}
+return rec;
+}
+function mergeProgress(items) {
+if (!items || !items.length) return false;
+var changed = false;
+for (var i = 0; i < items.length; i++) {
+var it = items[i];
+if (!it || it.id == null) continue;
+var k = String(it.id), rec = progRec(it.ep, it, 0);
+if (!rec) continue;
+var cur = PROG[k];
+if (cur && Number(cur.ts) >= rec.ts) continue;
+PROG[k] = rec;
+changed = true;
+}
+if (changed) { try { localStorage.setItem(PROG_KEY, JSON.stringify(PROG)); } catch (e) { /* 忽略 */ } }
+return changed;
+}
+function pullProgress() {
+var tk = followToken();
+if (!tk) return;
+fetch(PROG_API, { headers: { authorization: 'Bearer ' + tk } })
+.then(function (r) { return r.ok ? r.json() : null; })
+.then(function (d) { if (d && d.ok && d.items) mergeProgress(d.items); })
+.catch(function () { /* 静默：进度是增值功能，拉不到不影响任何页面渲染 */ });
+}
 var PSZ = { mode: 'hd' };
 try {
 var _psz = localStorage.getItem('psz');
 if (_psz === 'hd' || _psz === 'sd') PSZ.mode = _psz;
 } catch (e) { /* 隐私模式 / file:// 下 localStorage 可能不可用，忽略 */ }
 pullFollow();
+pullProgress();
+window.__prog = { report: function (id, ep) { setProgress(id, ep); } };
 function fbAttr(list) {
 var q = list.filter(Boolean);
 return q.length ? ' data-fb="' + esc(q.join('|')) + '" onerror="__fb(this)"' : '';
@@ -142,6 +208,7 @@ var h = '<article class="card" data-id="' + id + '"><div class="pw">'
 + '<img src="' + esc(src) + '"' + fbAttr(fb) + ' loading="lazy" decoding="async" alt="">'
 + (r[7] ? '<span class="rate">★ ' + Number(r[7]).toFixed(1) + '</span>' : '')
 + (r[8] ? '<span class="ep">' + r[8] + ' 集</span>' : '')
++ (function () { var pr = progressOf(id); return pr && pr.ep ? '<span class="prg">看到 第 ' + pr.ep + ' 集</span>' : ''; })()
 + '</div><div class="t">' + titleHTML(name) + '</div><div class="sub2">'
 + [(opt && opt.showYear ? (r[4] || '') : ''), TYPE[r[3]] || r[3] || ''].filter(Boolean).join(' · ')
 + '</div></article>';
@@ -192,8 +259,6 @@ h += '<div class="lv"><div class="lv-h">星期</div><div class="chips chips--wd"
 + chip('全部', !HOME.wd, 'data-wd', 0)
 + WD.map(function (d, i) { return chip(d, HOME.wd === i + 1, 'data-wd', i + 1); }).join('')
 + '</div></div>';
-h += '<div class="lv"><div class="lv-h">榜单</div>'
-+ '<div class="chips chips--col"><a class="lv-link" href="rank">排行榜 ›</a></div></div>';
 return h + '</aside>';
 }
 function rankBlock(id, title, sub, extra) {
@@ -327,6 +392,153 @@ main.innerHTML = '<div class="home-head">' + head + '</div>'
 '<a class="morelink" href="movie">全部 ' + movieAll.length + ' 部 ›</a>')
 : '');
 mountRanks();
+}
+var USER = null;
+var userWatch = 0;
+function maskEmail(s) {
+var v = String(s || '');
+var at = v.indexOf('@');
+if (at <= 0) return v;
+return v.charAt(0) + '***' + v.slice(at);
+}
+function userName(u) {
+var name = String((u && u.name) || '');
+if (name && name.indexOf('@') < 0) return name;
+return String((u && (u.login || u.nickname || u.email)) || '');
+}
+function watchedCount() {
+try {
+if (typeof progressAll === 'function') {
+var m = progressAll();
+return m ? Object.keys(m).length : 0;
+}
+} catch (e) { /* 进度表坏了也不影响主页其它部分 */ }
+return 0;
+}
+function favRows(n) {
+var ids = {};
+favList().forEach(function (id) { ids[String(id)] = 1; });
+return (ANI.rows || []).filter(function (r) { return ids[String(r[0])]; }).slice(0, n);
+}
+function loadMe() {
+var tk = authToken();
+return authFetch('/auth/me', null, 12000, { authorization: 'Bearer ' + tk }, { method: 'GET' })
+.then(function (r) {
+if (r.status === 401) throw new Error('登录已失效，请重新登录');
+var j = r.j || {};
+if (!r.ok || !j.user) throw new Error('资料加载失败（HTTP ' + r.status + '）');
+return j.user;
+});
+}
+function loadProfile() {
+var tk = authToken();
+return authFetch('/auth/profile', null, 12000, { authorization: 'Bearer ' + tk }, { method: 'GET' })
+.then(function (r) {
+if (r.status === 404) return loadMe();
+if (r.status === 401) throw new Error('登录已失效，请重新登录');
+var j = r.j || {};
+if (!r.ok) throw new Error('资料加载失败（HTTP ' + r.status + '）');
+if (j.user) return j.user;
+if (j.login || j.email || j.name) return j;
+throw new Error('资料格式不对，稍后重试');
+});
+}
+function userLoginHTML() {
+return '<div class="pf-hero"></div>'
++ '<div class="empty">登录后查看我的主页 —— 追番、观看进度和账号设置都在这里</div>'
++ '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录</button></div>';
+}
+function userHTML(u) {
+var name = userName(u) || '未登录用户';
+var mail = maskEmail(u.email || (String(u.login || '').indexOf('@') >= 0 ? u.login : ''));
+var av = String(u.avatar || '');
+var avHtml = av
+? '<img class="av" src="' + esc(av) + '" alt="">'
+: '<span class="av">' + esc(name.slice(0, 1).toUpperCase()) + '</span>';
+var rows = favRows(12);
+var body;
+if (!ANI.rows || !ANI.rows.length) {
+body = '<div class="empty">番剧数据还没加载好 —— 稍后刷新看看</div>';
+} else if (!rows.length) {
+body = '<div class="empty">还没有追番 —— 打开一部番剧，点详情里的「☆ 追番」</div>'
++ '<div class="pf-actions"><a class="btn" href="anime">去番剧页</a></div>';
+} else {
+body = '<div class="grid">' + rows.map(function (r) {
+return animeCard(r, { showYear: 1 });
+}).join('') + '</div>';
+}
+return '<div class="pf-hero"></div>'
++ '<div class="pf-id">' + avHtml
++ '<div class="pf-name"><h1>' + esc(name) + '</h1>'
++ (mail ? '<p>' + esc(mail) + '</p>' : '') + '</div></div>'
++ '<div class="pf-stats">'
++ '<div><b>' + favList().length + '</b><i>追番</i></div>'
++ '<div><b>' + watchedCount() + '</b><i>看过</i></div>'
++ '</div>'
++ '<div class="pf-actions">'
++ '<button class="btn" id="pfpw" type="button">修改密码</button>'
++ '<button class="btn" id="pfout" type="button">退出登录</button>'
++ '<a class="btn" href="https://120.48.56.189/qr/" target="_blank" rel="noopener">绑定夸克网盘</a>'
++ '</div>'
++ '<div class="pf-tabs"><button class="on" type="button">我的追番</button></div>'
++ '<div class="pf-body">' + body + '</div>';
+}
+function watchLogin() {
+if (userWatch) return;
+var n = 0;
+userWatch = setInterval(function () {
+if (authToken()) {
+clearInterval(userWatch);
+userWatch = 0;
+USER = null;
+renderUser();
+return;
+}
+n += 1;
+if (n > 450) { clearInterval(userWatch); userWatch = 0; }
+}, 400);
+}
+function bindUserLogin() {
+var b = document.getElementById('pflogin');
+if (!b) return;
+b.onclick = function () {
+if (window.__openLogin) window.__openLogin();
+watchLogin();
+};
+}
+function bindUserActions() {
+var pw = document.getElementById('pfpw');
+if (pw) pw.onclick = function () { openAuthPanel('account'); };
+var out = document.getElementById('pfout');
+if (out) out.onclick = function () {
+logoutAccount();
+USER = null;
+var m = $('#main');
+if (m) { m.innerHTML = userLoginHTML(); bindUserLogin(); }
+};
+}
+function renderUser() {
+var main = $('#main');
+if (!main) return;
+if (!authToken()) {
+main.innerHTML = userLoginHTML();
+bindUserLogin();
+return;
+}
+if (USER) {
+main.innerHTML = userHTML(USER);
+bindUserActions();
+return;
+}
+if (!main.querySelector('.pf-hero')) main.innerHTML = '<div class="loading">加载中…</div>';
+loadProfile().then(function (u) {
+USER = u;
+main.innerHTML = userHTML(u);
+bindUserActions();
+}).catch(function (e) {
+main.innerHTML = '<div class="empty">' + esc((e && e.message) || '资料加载失败')
++ '</div><div class="pf-actions"><a class="btn" href="user">重试</a></div>';
+});
 }
 var BROWSE = { view: [], shown: 0, page: 120 };
 var FAV_ONLY = /[?&]fav=1\b/.test(location.search);
@@ -1099,6 +1311,7 @@ function repaint() {
 if (PAGE === 'anime') applyBrowse(true);
 else if (PAGE === 'movie') refreshMovie(true);
 else if (PAGE === 'rank') renderRank();
+else if (PAGE === 'user') renderUser();
 else renderHome();
 }
 function syncPsz(btn) {
@@ -1443,12 +1656,13 @@ return r.j;
 var u = (d && d.ok && d.user) || null;
 if (!u) { var e = new Error('login_required'); e.auth = 1; throw e; }
 AUTH_LOGIN = String(u.login || '');
-el.title = '账号设置';
+el.title = '我的主页';
 var av = u.avatar
 ? '<img class="av" src="' + esc(u.avatar) + '" alt="">'
 : '<span class="avt">' + esc(String(u.login || '?').slice(0, 1).toUpperCase()) + '</span>';
 el.innerHTML = av + '<b>' + esc(u.login) + '</b>';
-el.onclick = function () { openAuthPanel('account'); };
+el.onclick = function () { location.href = 'user'; };
+el.classList.add('is-user');
 }).catch(function (e) {
 if (e && e.auth) { try { localStorage.removeItem(TOKEN_KEY); } catch (err) { /* 忽略 */ } }
 paintLoginEntry(el);
@@ -1512,6 +1726,8 @@ initMovie();
 } else if (PAGE === 'rank') {
 renderRank();
 bindSearch(renderRank);
+} else if (PAGE === 'user') {
+renderUser();
 } else {
 renderHome();
 bindSearch(renderHome);

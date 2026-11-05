@@ -346,9 +346,10 @@ if (c && c.sd) bits.push(c.sd + ' 种');
 if (sub) bits.push('字幕 ' + sub);   // 不带字段名时「· 无 / · 中」看不出是什么
 return bits.join(' · ');
 }
-function rowOf(c, idx) {
+function rowOf(c, idx, ep) {
 var t = String((c && c.t) || '').replace(/\s+/g, ' ').trim();
 return '<button class="mgrow" type="button" data-m="' + escAttr(c && c.m) + '"'
++ (ep == null || ep === '' ? '' : ' data-ep="' + escAttr(ep) + '"')
 + (t ? ' title="' + escAttr(t) + '"' : '') + '>'
 + '<span class="mgidx">' + escText(idx) + '</span>'
 + '<span class="mgmain"><span class="mgt">' + escText(t) + '</span>'
@@ -449,7 +450,9 @@ if (!groups.length) return '';
 var open = defaultOpen(groups), h = '<div class="tgs">';
 for (var i = 0; i < groups.length; i++) {
 var g = groups[i], rows = '';
-for (var j = 0; j < g.rows.length; j++) rows += rowOf(g.rows[j].it, g.rows[j].lab);
+for (var j = 0; j < g.rows.length; j++) {
+rows += rowOf(g.rows[j].it, g.rows[j].lab, g.rows[j].lab === '合集' ? null : g.rows[j].ep);
+}
 h += '<div class="mgteam" data-open="' + (open[g.name] ? '1' : '0') + '">'
 + '<button class="tg-h" type="button" data-tg="' + escAttr(g.name) + '">'
 + '<span class="tg-n">' + escText(g.name) + '</span>'
@@ -651,6 +654,10 @@ if (!mg) return;
 copyText(mg).then(function (ok) {
 toast(ok ? '已复制磁力链接' : '复制失败，请长按链接手动复制');
 });
+var epAttr = c.getAttribute('data-ep');
+if (epAttr && window.__prog) {
+window.__prog.report(m.getAttribute('data-bgm'), Number(epAttr));
+}
 }
 m.addEventListener('click', onChip);
 m.addEventListener('keydown', function (ev) {
