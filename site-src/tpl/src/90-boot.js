@@ -110,6 +110,7 @@
     if (PAGE === 'anime') applyBrowse(true);
     else if (PAGE === 'movie') refreshMovie(true);
     else if (PAGE === 'rank') renderRank();
+    else if (PAGE === 'user') renderUser();
     else renderHome();
   }
 
@@ -525,13 +526,14 @@
       var u = (d && d.ok && d.user) || null;
       if (!u) { var e = new Error('login_required'); e.auth = 1; throw e; }
       AUTH_LOGIN = String(u.login || '');
-      el.title = '账号设置';
+      el.title = '我的主页';
       var av = u.avatar
         ? '<img class="av" src="' + esc(u.avatar) + '" alt="">'
         : '<span class="avt">' + esc(String(u.login || '?').slice(0, 1).toUpperCase()) + '</span>';
       el.innerHTML = av + '<b>' + esc(u.login) + '</b>';
-      /* 点头像区块不再直接退出，改成打开账号面板（改密 / 退出都在面板里） */
-      el.onclick = function () { openAuthPanel('account'); };
+      /* 点头像区块不再开账号面板，跳个人主页（改密 / 退出都在那边） */
+      el.onclick = function () { location.href = 'user'; };
+      el.classList.add('is-user');
     }).catch(function (e) {
       if (e && e.auth) { try { localStorage.removeItem(TOKEN_KEY); } catch (err) { /* 忽略 */ } }
       paintLoginEntry(el);
@@ -605,6 +607,9 @@
     } else if (PAGE === 'rank') {
       renderRank();
       bindSearch(renderRank);
+    } else if (PAGE === 'user') {
+      /* 主页不绑搜索：搜索框在这里会让 #main 被搜索页顶掉，而主页没有「清空回主页」的语义 */
+      renderUser();
     } else {
       renderHome();
       bindSearch(renderHome);

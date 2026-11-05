@@ -2628,3 +2628,117 @@ main {
 /* 追番空态与提示 */
 .favhint { margin: 0 0 var(--s4); font-size: var(--fs-sm); color: var(--dim); }
 
+/* ---------------------------------------------------------------- 13 个人主页（user.html, 2026-11）
+   顶部渐变条 → 头像 / 昵称 / 邮箱 → 追番统计 → 操作按钮 → 追番 tab。
+   只用现有令牌（--s* / --fs-* / --r / --card / --line），不新增字号与间距字面量。
+   头像 80px 与 tab 的 40px/2px 沿用 #cnt .av 与 .mtab 的既有尺寸。 */
+.pf-hero {
+  height: 120px;
+  border-radius: var(--r);
+  background: linear-gradient(135deg, var(--accent-soft), transparent 70%);
+  margin-bottom: calc(-1 * var(--s6));
+}
+
+.pf-id {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s4);
+  padding: 0 var(--s4);
+}
+
+.pf-id .av {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 3px solid var(--card);
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  background: var(--card2);
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.pf-id .pf-name { min-width: 0; }
+
+.pf-id h1 {
+  margin: 0;
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-id p {
+  margin: var(--s1) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--dim);
+}
+
+.pf-stats {
+  display: flex;
+  gap: var(--s6);
+  padding: var(--s3) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin: var(--s3) 0 var(--s4);
+}
+
+.pf-stats b {
+  display: block;
+  font-size: var(--fs-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-stats i {
+  font-style: normal;
+  font-size: var(--fs-xs);
+  color: var(--dim);
+}
+
+.pf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-bottom: var(--s4);
+}
+
+/* 只有一个 tab 也保留条带：以后加「最近看过」不用改结构 */
+.pf-tabs {
+  display: flex;
+  gap: var(--s1);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--s4);
+}
+
+.pf-tabs .on {
+  height: 40px;
+  padding: 0 var(--s3);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
+}
+
+@media (max-width: 760px) {
+  .pf-id {
+    flex-direction: column;
+    align-items: center;
+    padding: 0;
+    text-align: center;
+  }
+  .pf-id h1 { white-space: normal; }
+  .pf-stats { justify-content: space-around; }
+  .pf-stats > div { flex: 1 1 0; text-align: center; }
+}
+
+/* 追番进度角标（左下；.rate 左上、.ep 右下） */
+.prg { position: absolute; z-index: 2; left: var(--s2); bottom: var(--s2); padding: 4px 6px;
+  border-radius: var(--r-sm); font-size: var(--fs-xs); font-weight: 600; line-height: 1;
+  color: #ececf1; background: rgba(6,6,10,.78); backdrop-filter: blur(6px); }
+

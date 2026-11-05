@@ -1,4 +1,4 @@
-/* ---------------- 首页：年 → 季度 → 周几（三级下钻）+ 榜单 ---------------- */
+/* ---------------- 首页：年 → 季度 → 周几（三级下钻） ---------------- */
 var HOME = { y: 0, q: 0, wd: 0 };
 var QS = [1, 2, 3, 4];
 
@@ -38,14 +38,11 @@ function renderLevels() {
     + WD.map(function (d, i) { return chip(d, HOME.wd === i + 1, 'data-wd', i + 1); }).join('')
     + '</div></div>';
 
-  /* 榜单单独成页：左侧给一个跳转入口，移动端会自动并进顶部横排 */
-  h += '<div class="lv"><div class="lv-h">榜单</div>'
-    + '<div class="chips chips--col"><a class="lv-link" href="rank">排行榜 ›</a></div></div>';
   return h + '</aside>';
 }
 
-/* 榜单默认不渲染：先放空壳，滚到附近才排序 + 填卡。
-   三块榜单要各排一遍 8,851 条再渲染 48 张卡，进站白算很不值。 */
+/* 排行块默认不渲染：先放空壳，滚到附近才排序 + 填卡。
+   三块排行要各排一遍 8,851 条再渲染 48 张卡，进站白算很不值。 */
 function rankBlock(id, title, sub, extra) {
   return '<section class="block rank-block" data-rank="' + id + '">'
     + '<div class="bhead"><h2>' + title + '</h2><span>' + (extra || sub) + '</span></div>'
@@ -130,8 +127,7 @@ function renderHome() {
     body = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
   }
 
-  /* 榜单已搬到独立页（rank.html）：首页只放本周分组网格。
-     左侧面板由 renderLevels() 给出「排行榜」入口。 */
+  /* 排行已搬到独立页（rank.html）：首页只放本周分组网格。 */
   main.innerHTML = '<div class="home-cols">' + renderLevels()
     + '<div class="home-main"><div class="home-head">' + head + '</div>' + body
     + '</div></div>';

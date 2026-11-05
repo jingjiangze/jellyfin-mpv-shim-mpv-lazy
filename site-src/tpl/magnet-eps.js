@@ -477,10 +477,13 @@
   }
 
   /* 一行 = <button class="mgrow" data-m>：集号 / 「合集」+ 完整标题 + 元信息 + 复制。
+     data-ep 只在分集行输出（数字集号）；合集行没有单集号，缺省不输出该属性 ——
+     点行上报追番进度（onChip → window.__prog）只认分集行。
      点击复制由 arm() 挂在 #modal 上的委托接管（认 .mgrow 与旧 .eps-chip）。 */
-  function rowOf(c, idx) {
+  function rowOf(c, idx, ep) {
     var t = String((c && c.t) || '').replace(/\s+/g, ' ').trim();
     return '<button class="mgrow" type="button" data-m="' + escAttr(c && c.m) + '"'
+      + (ep == null || ep === '' ? '' : ' data-ep="' + escAttr(ep) + '"')
       + (t ? ' title="' + escAttr(t) + '"' : '') + '>'
       + '<span class="mgidx">' + escText(idx) + '</span>'
       + '<span class="mgmain"><span class="mgt">' + escText(t) + '</span>'
@@ -613,7 +616,11 @@
     var open = defaultOpen(groups), h = '<div class="tgs">';
     for (var i = 0; i < groups.length; i++) {
       var g = groups[i], rows = '';
-      for (var j = 0; j < g.rows.length; j++) rows += rowOf(g.rows[j].it, g.rows[j].lab);
+      /* 第三参只传分集行：batch（合集包）的 lab 是「合集」，即便标题能解析出单集号
+         也不代表「看到第 N 集」，一律传 null 让 rowOf 不输出 data-ep。 */
+      for (var j = 0; j < g.rows.length; j++) {
+        rows += rowOf(g.rows[j].it, g.rows[j].lab, g.rows[j].lab === '合集' ? null : g.rows[j].ep);
+      }
       h += '<div class="mgteam" data-open="' + (open[g.name] ? '1' : '0') + '">'
         + '<button class="tg-h" type="button" data-tg="' + escAttr(g.name) + '">'
         + '<span class="tg-n">' + escText(g.name) + '</span>'
@@ -872,6 +879,12 @@
       copyText(mg).then(function (ok) {
         toast(ok ? '已复制磁力链接' : '复制失败，请长按链接手动复制');
       });
+      /* 复制成功与否都上报：点击本身就是「看到这集」的意图（列表只挂 #modal，
+         data-bgm 由 70-modal.js 在打开详情时写入）。合集行没有 data-ep，这里自然跳过。 */
+      var epAttr = c.getAttribute('data-ep');
+      if (epAttr && window.__prog) {
+        window.__prog.report(m.getAttribute('data-bgm'), Number(epAttr));
+      }
     }
     m.addEventListener('click', onChip);
     m.addEventListener('keydown', function (ev) {

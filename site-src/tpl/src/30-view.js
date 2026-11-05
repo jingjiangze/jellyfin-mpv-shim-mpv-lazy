@@ -39,6 +39,7 @@
       + '<img src="' + esc(src) + '"' + fbAttr(fb) + ' loading="lazy" decoding="async" alt="">'
       + (r[7] ? '<span class="rate">★ ' + Number(r[7]).toFixed(1) + '</span>' : '')
       + (r[8] ? '<span class="ep">' + r[8] + ' 集</span>' : '')
+      + (function () { var pr = progressOf(id); return pr && pr.ep ? '<span class="prg">看到 第 ' + pr.ep + ' 集</span>' : ''; })()
       + '</div><div class="t">' + titleHTML(name) + '</div><div class="sub2">'
       + [(opt && opt.showYear ? (r[4] || '') : ''), TYPE[r[3]] || r[3] || ''].filter(Boolean).join(' · ')
       + '</div></article>';
