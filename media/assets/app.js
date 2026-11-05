@@ -871,6 +871,7 @@ m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
 +     '</div>'
 +     '<div class="acts">'
 +       '<span class="btn pri" id="watch" role="button" tabindex="0">开始观看</span>'
++       '<span class="btn" id="qplay" role="button" tabindex="0">▶ 在线播放</span>'
 +       '<span class="btn" id="favbtn" type="button">☆ 追番</span>'
 +       (ex[2] ? '<span class="btn" id="play">▶ 预告</span>' : '')
 +       '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
@@ -900,6 +901,13 @@ var wb = m.querySelector('#watch');
 if (wb) wb.onkeydown = function (ev) {
 if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); wb.click(); }
 };
+var qp = m.querySelector('#qplay');
+if (qp) {
+qp.onclick = function () { openQuarkPlay(m, id, title); };
+qp.onkeydown = function (ev) {
+if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); qp.click(); }
+};
+}
 var fb = m.querySelector('#favbtn');
 if (fb) {
 var fk = String(id);
@@ -1049,6 +1057,109 @@ h += window.__epsApi.epsListHtml(entry);
 body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';
 }).catch(fail);
 }
+var QP_BASE = 'https://120.48.56.189';
+var QP_TIMER = 0;      // 挂起的转码轮询（模块级：新播放 / 关弹窗都要能掐掉）
+var QP_GEN = 0;        // 每次开播自增：异步回调据此判断自己是否已被后来的一次播放取代
+function qpJson(path, tk) {
+return fetch(QP_BASE + path, { headers: { authorization: 'Bearer ' + tk } }).then(function (res) {
+return res.text().then(function (t) {
+var j = null;
+try { j = JSON.parse(t); } catch (e) { j = null; }
+if (!j || typeof j !== 'object') j = {};
+if (!j.state) {
+if (res.status === 401) j.state = 'unauthorized';
+else if (res.status === 409) j.state = 'need_rebind';
+else if (res.status === 202) j.state = 'transcoding';
+else j.state = 'error';
+}
+return j;
+});
+}, function () { return { state: 'error' }; });
+}
+function openQuarkPlay(m, id, title) {
+if (!m) return;
+var tk = followToken();                       // 20-state.js：读 localStorage.gh_token
+if (!tk) { if (window.__openLogin) window.__openLogin('email'); return; }
+var gen = ++QP_GEN;                           // 换代：上一代在飞的请求与轮询全部作废
+if (QP_TIMER) { clearTimeout(QP_TIMER); QP_TIMER = 0; }
+var old = m.querySelector('.trailer');
+if (old && old.parentNode) {
+var ov = old.querySelector('video');
+if (ov) {
+try { ov.pause(); ov.removeAttribute('src'); if (ov.load) ov.load(); } catch (e) { /* 忽略 */ }
+}
+old.parentNode.removeChild(old);
+}
+var bar = document.createElement('div');
+bar.className = 'trailer qpmsg';
+bar.textContent = '正在查找网盘文件…';
+m.appendChild(bar);
+bar.scrollIntoView({ block: 'center' });
+function alive() { return gen === QP_GEN && bar.isConnected; }
+function say(text) { if (alive()) bar.textContent = text; }
+function needLogin() {
+if (!alive()) return;
+if (bar.parentNode) bar.parentNode.removeChild(bar);
+if (window.__openLogin) window.__openLogin('email');
+}
+function needRebind() {
+if (!alive()) return;
+bar.innerHTML = '夸克登录已失效，去 <a href="' + QP_BASE + '/qr/" target="_blank" '
++ 'rel="noopener">https://120.48.56.189/qr/</a> 重新扫码';
+}
+function play(url) {
+if (!alive()) return;
+var d = document.createElement('div');
+d.className = 'trailer';
+d.innerHTML = '<video controls autoplay playsinline preload="metadata"></video>';
+var v = d.querySelector('video');
+if (v) v.setAttribute('src', url);          // 直链带签名参数，用属性赋值不经 innerHTML 转义
+if (bar.parentNode) bar.parentNode.replaceChild(d, bar);   // 换上视频 = 同时移除状态条
+else m.appendChild(d);
+d.scrollIntoView({ block: 'center' });
+}
+function askUrl(fid, tries) {
+if (!alive()) return;
+if (tries > 10) { say('转码超时，稍后再试'); return; }
+qpJson('/tvplay/url?fid=' + encodeURIComponent(fid) + '&wait=45', tk).then(function (j) {
+if (!alive()) return;
+if (j.state === 'ready' && j.url) { play(String(j.url)); return; }
+if (j.state === 'transcoding') {
+say('转码中… 约 1 分钟');
+var wait = Number(j.retry_after);
+if (!(wait > 0)) wait = 5;
+QP_TIMER = setTimeout(function () {
+QP_TIMER = 0;
+if (!alive()) return;                 // 弹窗已关：不再排下一轮
+askUrl(fid, tries + 1);
+}, Math.min(wait, 60) * 1000);
+return;
+}
+if (j.state === 'need_rebind') { needRebind(); return; }
+if (j.state === 'unauthorized') { needLogin(); return; }
+say('播放服务暂时不可用');
+});
+}
+qpJson('/tvplay/find?q=' + encodeURIComponent(String(title || '')) + '&limit=5', tk).then(function (j) {
+if (!alive()) return;
+if (j.state === 'found') {
+var items = j.items || [];
+var best = j.best || items[0] || null;
+if (!best || best.fid == null || best.fid === '') { say('播放服务暂时不可用'); return; }
+say('找到 ' + items.length + ' 个文件，正在准备播放…');
+askUrl(String(best.fid), 0);
+return;
+}
+if (j.state === 'none') {
+say('你的夸克网盘里还没有这部；先点磁力行复制链接到夸克离线下载');
+return;
+}
+if (j.state === 'need_rebind') { needRebind(); return; }
+if (j.state === 'unauthorized') { needLogin(); return; }
+say('播放服务暂时不可用');
+});
+}
+window.__qp = openQuarkPlay;
 var BILI = {};          // id -> {bvid, aid, pages:[{page,cid,part}]}
 var BILI_P = {};        // id -> 在途的 resolve：同 id 并发共用一次请求
 var BILI_BASE = 'https://120.48.56.189/bili/';
