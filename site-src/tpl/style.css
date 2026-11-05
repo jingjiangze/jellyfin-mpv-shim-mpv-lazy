@@ -323,7 +323,7 @@ main {
   font-size: var(--fs-sm);
   color: var(--fg);
   background: var(--card2);
-  border: 1px solid transparent;
+  border: 1px solid var(--line-ctl);
   outline: none;
   transition: border-color .18s ease, background .18s ease;
 }
@@ -484,7 +484,7 @@ main {
   font-size: var(--fs-sm);
   color: var(--fg);
   background: var(--card2);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-ctl);
   transition: border-color .16s ease;
 }
 
@@ -935,7 +935,7 @@ main {
 .authfield > span { display: block; margin-bottom: 4px; color: var(--dim); font-size: var(--fs-xs); }
 .authfield input {
   width: 100%; box-sizing: border-box; height: 34px; padding: 0 10px;
-  border-radius: var(--r-sm); border: 1px solid var(--line);
+  border-radius: var(--r-sm); border: 1px solid var(--line-ctl);
   background: var(--bg2); color: var(--fg); font-size: 16px;
 }
 .authfield input:focus { outline: none; border-color: var(--accent-line); }
@@ -1265,8 +1265,8 @@ main {
 }
 
 .mtab.on {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: var(--accent-text);
+  border-bottom-color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -1976,8 +1976,10 @@ main {
 }
 
 @media (max-width: 900px) {
-  /* 季度胶囊在窄屏改横向换行（.levels 的列宽由 1100 断点统一处理） */
-  .chips.chips--col {
+  /* 季度/星期胶囊在窄屏改横向换行；与 0,3,0 的 nowrap 对齐特异性，靠源序取胜
+     （.levels 的列宽由 1100 断点统一处理） */
+  .levels .chips.chips--col,
+  .levels .chips.chips--wd {
     flex-direction: row;
     flex-wrap: wrap;
   }
@@ -2587,8 +2589,10 @@ main {
    ② 浏览页筛选：桌面 4 个下拉等宽（标签下拉原本是其它下拉的 2 倍宽），并与页头留出上边距。
    ③ 手机详情 hero：海报只占首行，标题/评分走右列，想看 + 操作按钮通栏，消掉海报下方整块空白。 */
 
-/* 组内胶囊不折行；列宽主规则在 6 节，这里只管 .chips 的行为 */
-.levels .chips {
+/* 组内胶囊不折行；列宽主规则在 6 节，这里只管 .chips 的行为。
+   选择器与 6 节 .chips.chips--col 同特异性（0,3,0），靠位置在后压过它的 wrap。 */
+.levels .chips.chips--col,
+.levels .chips.chips--wd {
   flex-wrap: nowrap;
 }
 
@@ -2603,7 +2607,10 @@ main {
   .levels .lv {
     flex: 1 1 100%;
   }
-  .levels .chips {
+  /* 特异性与上方 0,3,0 的 nowrap 对齐，同特异性下靠源序（本块在后）取胜 */
+  .levels .chips,
+  .levels .chips.chips--col,
+  .levels .chips.chips--wd {
     flex-wrap: wrap;
   }
   .levels .chips--col .lv-link {
