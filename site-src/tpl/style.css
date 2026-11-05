@@ -11,8 +11,8 @@
  *      .mgt 单行省略，宽 100% 绝不溢出）；首页/番剧/电影/排行共用同一套标题、
  *      栅格与卡片（.grid / .card / .mcard / .mgrid）。
  *   5. 结构契约（其它模块依赖，别改）：#modal 内 h3 文本 = 片名；.acts 是
- *      分集磁力的插入锚点；.relhead 是插入块自己的小标题；#epsbox 与 .relbox
- *      是同一个元素；#plot / #tags / #prt / #pdm / #prp / #watch / #favbtn /
+ *      分集磁力的插入锚点；#epsbox 与 .relbox 是同一个元素（magnet-eps.js 同时写
+ *      className 与 id）；#plot / #tags / #prt / #pdm / #prp / #watch / #favbtn /
  *      #play / #mvotes / #rdist 这些 id 都还在用。
  *   6. 兼容层：详情弹窗旧结构 .mhd / .mb / .mrate / .plot / .tags / .infobox /
  *      .staffrow，以及磁力胶囊 .eps-chip / .epsgrid / #epsbox 仍在产出，
@@ -34,7 +34,7 @@
   --line-hi: #D5D8DB;
   --fg: #18191C;
   --fg2: #61666D;
-  --dim: #9499A0;
+  --dim: #66707A;
   --dim2: #B0B5BC;
   --accent: #00AEEC;
   --accent-soft: rgba(0, 174, 236, .10);
@@ -69,6 +69,19 @@
   --header-h: 56px;
   --wrap: 1440px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* 2026-11 结构与布局重构新增：控件尺寸 / 行高 / 字距 / 圆角阴影与动效档位。
+     新规则一律引这里，不再写字号、阴影、动画时长的字面量。 */
+  --line-ctl:#8C9298; --accent-text:#0077A8; --accent-ink:#14141A;
+  --fs-xl:20px;
+  --lh-tight:1.25; --lh-snug:1.4; --lh-base:1.6; --lh-prose:1.8;
+  --ls-tight:-.01em; --ls-caps:.08em;
+  --s1-5:6px; --ctl-h:32px; --ctl-h-lg:36px; --tab-h:40px;
+  --r-xs:4px; --r-pill:999px; --r-ctl:var(--r-sm); --r-card:var(--r); --r-modal:var(--r-lg);
+  --sh-1:0 2px 8px rgba(0,0,0,.06); --sh-2:0 8px 24px rgba(0,0,0,.10);
+  --sh-3:0 24px 64px rgba(0,0,0,.28); --sh-focus:0 0 0 3px var(--accent-soft);
+  --dur-1:150ms; --dur-2:200ms; --dur-3:300ms;
+  --ease-out:cubic-bezier(.16,1,.3,1); --ease:cubic-bezier(.4,0,.2,1);
 }
 
 /* 深色（手动切换：主题脚本往 <html> 写 data-theme="light" | "dark"） */
@@ -82,20 +95,23 @@
   --fg: #e6e6ef;
   --fg2: #b9b9c6;
   --dim: #a8a8b4;
-  --dim2: #7d7d8a;
+  --dim2: #8E94A0;
   --accent: #00AEEC;
   --accent-soft: rgba(0, 174, 236, .18);
   --accent-line: rgba(0, 174, 236, .45);
   --danger: #d03050;
   --star: #f5c451;
   --overlay: rgba(0, 0, 0, .62);
+  /* 深色下控件边框要更亮一点才看得见；文字蓝与阴影同步加深 */
+  --line-ctl:#6B7178;
+  --accent-text:#4CC3EC;
+  --sh-1:0 2px 8px rgba(0,0,0,.45);
+  --sh-2:0 8px 24px rgba(0,0,0,.55);
+  --sh-3:0 24px 64px rgba(0,0,0,.70);
   color-scheme: dark;
 }
 
-[data-theme="dark"] .card:hover,
-[data-theme="dark"] .mcard:hover {
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
-}
+/* 深色卡片阴影由 --sh-2 承担，不再单独写死 rgba */
 
 /* 深色（未手动切换：跟随系统）——与上面同一组取值 */
 @media (prefers-color-scheme: dark) {
@@ -109,19 +125,20 @@
     --fg: #e6e6ef;
     --fg2: #b9b9c6;
     --dim: #a8a8b4;
-    --dim2: #7d7d8a;
+    --dim2: #8E94A0;
     --accent: #00AEEC;
     --accent-soft: rgba(0, 174, 236, .18);
     --accent-line: rgba(0, 174, 236, .45);
-  --danger: #d03050;
+    --danger: #d03050;
     --star: #f5c451;
     --overlay: rgba(0, 0, 0, .62);
+    /* 与手动深色同一组取值 */
+    --line-ctl:#6B7178;
+    --accent-text:#4CC3EC;
+    --sh-1:0 2px 8px rgba(0,0,0,.45);
+    --sh-2:0 8px 24px rgba(0,0,0,.55);
+    --sh-3:0 24px 64px rgba(0,0,0,.70);
     color-scheme: dark;
-  }
-
-  :root:not([data-theme="light"]) .card:hover,
-  :root:not([data-theme="light"]) .mcard:hover {
-    box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
   }
 }
 
@@ -140,7 +157,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
                "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   font-size: var(--fs-md);
-  line-height: 1.65;
+  line-height: var(--lh-base);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -182,7 +199,7 @@ button {
 
 main {
   display: block;
-  padding: var(--s5) 0 var(--s7);
+  padding: var(--s4) 0 var(--s7);
   min-height: 60vh;
 }
 
@@ -193,19 +210,21 @@ main {
   color: var(--dim);
 }
 
+/* 空态：给足上下留白，文字用次要前景色（原 --dim 太淡，等于「内容还没出来」） */
 .empty {
-  padding: var(--s6) var(--s4);
+  padding: var(--s7) var(--s4);
   text-align: center;
-  font-size: var(--fs-sm);
-  color: var(--dim);
+  font-size: var(--fs-md);
+  color: var(--fg2);
 }
 
 .block, .msect, .rank-block {
   margin: 0 0 var(--s6);
 }
 
+/* main 顶部已有 --s4，这里只补到 --s4 的间距，避免 40px 空洞 */
 .home-head {
-  margin: 0 0 var(--s5);
+  margin: var(--s4) 0 var(--s5);
 }
 
 .home-head > .bhead, .home-head > .sec-h {
@@ -260,13 +279,17 @@ main {
   gap: var(--s1);
 }
 
+/* 导航项与右侧控件同高（--ctl-h），圆角统一 --r-ctl；选中态是 tonal 胶囊，不是实心蓝块 */
 .mainnav a {
-  padding: 6px var(--s4);
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  height: var(--ctl-h);
+  padding: 0 var(--s3);
+  border-radius: var(--r-ctl);
   font-size: var(--fs-md);
   color: var(--dim);
   white-space: nowrap;
-  transition: color .16s ease, background .16s ease;
+  transition: color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
 }
 
 .mainnav a:hover {
@@ -275,8 +298,8 @@ main {
 }
 
 .mainnav a.is-on {
-  color: #14141a;
-  background: var(--accent);
+  color: var(--accent-text);
+  background: var(--accent-soft);
   font-weight: 600;
 }
 
@@ -294,9 +317,9 @@ main {
 
 .searchbox input {
   width: 100%;
-  height: 34px;
+  height: var(--ctl-h);
   padding: 0 var(--s4);
-  border-radius: 999px;
+  border-radius: var(--r-ctl);
   font-size: var(--fs-sm);
   color: var(--fg);
   background: var(--card2);
@@ -325,11 +348,11 @@ main {
   color: var(--dim2);
 }
 
-/* 顶栏登录态：未登录是链接，登录后是头像 + 用户名（点击退出） */
+/* 顶栏登录态：未登录是链接，登录后是头像 + 用户名（点击退出）。
+   尺寸 / 外框 / hover 全在 12 节「登录面板可用性」里统一，这里只留文字色。 */
 #cnt .login {
-  color: var(--accent); text-decoration: none; white-space: nowrap;
+  color: var(--accent-text); text-decoration: none; white-space: nowrap;
 }
-#cnt .login:hover { color: var(--fg); }
 #cnt .who { color: var(--dim); }
 #cnt img.av {
   width: 20px; height: 20px; border-radius: 50%; object-fit: cover;
@@ -339,17 +362,18 @@ main {
   display: inline-flex; align-items: center; justify-content: center;
   width: 20px; height: 20px; border-radius: 50%; margin-right: 6px;
   background: var(--card2); border: 1px solid var(--line);
-  font-size: 11px; font-weight: 600; color: var(--fg2);
+  font-size: var(--fs-xs); font-weight: 600; color: var(--fg2);
   vertical-align: -5px;
 }
 #cnt b { font-weight: 600; }
 #cnt.is-user { cursor: pointer; }
 
+/* 右侧三件套（.psz / .thm / #cnt .login）统一 --ctl-h 高，横向排一行 */
 .psz {
   flex: 0 0 auto;
-  height: 30px;
+  height: var(--ctl-h);
   padding: 0 var(--s3);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-size: var(--fs-sm);
   color: var(--dim);
   background: transparent;
@@ -365,7 +389,7 @@ main {
 }
 
 .psz[aria-pressed="true"] {
-  color: #14141a;
+  color: var(--accent-ink);
   background: var(--accent);
   border-color: transparent;
   font-weight: 600;
@@ -373,11 +397,11 @@ main {
 
 /* 主题切换按钮：与 #psz 同尺寸 */
 .thm {
-  flex: 0 0 auto; width: 30px; height: 30px; line-height: 1;
+  flex: 0 0 auto; width: var(--ctl-h); height: var(--ctl-h); line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: var(--r-sm); cursor: pointer;
+  border-radius: var(--r-ctl); cursor: pointer;
   border: 1px solid var(--line); background: var(--card2);
-  color: var(--fg2); font-size: 15px;
+  color: var(--fg2); font-size: var(--fs-md);
 }
 
 .thm:hover { border-color: var(--accent-line); color: var(--accent); }
@@ -394,10 +418,10 @@ main {
   position: relative;
   margin: 0;
   padding-left: 0;
-  font-size: 20px;
+  font-size: var(--fs-xl);
   font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: .01em;
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-tight);
 }
 
 .sec-h h2::before, .bhead h2::before, .mhead h2::before {
@@ -413,19 +437,21 @@ main {
 }
 
 .sec-sub .morelink, .bhead .morelink, .mhead .morelink {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .sec-sub .morelink:hover, .bhead .morelink:hover, .mhead .morelink:hover {
   text-decoration: underline;
 }
 
+/* 首页「每天更新」分组标题：降一档到正文大小，靠次要色区分层级 */
 .bhead.lv2 {
   margin: var(--s5) 0 var(--s3);
 }
 
 .bhead.lv2 h2 {
-  font-size: var(--fs-lg);
+  font-size: var(--fs-md);
+  color: var(--fg2);
 }
 
 .bhead.lv2 > span {
@@ -469,7 +495,7 @@ main {
 .f-hint {
   margin-left: auto;
   font-size: var(--fs-sm);
-  color: var(--dim2);
+  color: var(--dim);
 }
 
 .filters .chip {
@@ -486,21 +512,23 @@ main {
   min-width: 0;
 }
 
+/* 首页筛选条：不画成白卡面板，而是内容上方的一条工具条（只留底部分隔线） */
 .levels {
   position: static;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--s3) var(--s5);
-  padding: var(--s3) var(--s4);
+  padding: 0 0 var(--s3);
   margin: 0 0 var(--s4);
-  border-radius: var(--r);
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
 }
 
+/* 桌面：每组只占内容宽（不再均分 220px）；≤1100 整行铺开、≤760 竖排，见 19 节断点 */
 .levels .lv {
-  flex: 1 1 220px;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -520,8 +548,8 @@ main {
   margin: 0 0 var(--s3);
   font-size: var(--fs-xs);
   font-weight: 600;
-  letter-spacing: .12em;
-  color: var(--dim2);
+  letter-spacing: var(--ls-caps);
+  color: var(--fg2);
 }
 
 .lv-link {
@@ -576,7 +604,7 @@ main {
 }
 
 .chip.on {
-  color: var(--accent);
+  color: var(--accent-text);
   background: var(--accent-soft);
   border-color: var(--accent-line);
   font-weight: 600;
@@ -616,29 +644,82 @@ main {
 }
 
 /* ---------------------------------------------------------------- 7 栅格 / 卡片 */
+/* 显式列数：≥1360 七列 → 1200 六列 → 1000 五列 → 760 四列 → 手机两列（断点见 19 节）。
+ * 列数与 gap 解耦后，1440→1200 之间不再出现「8 列掉 7 列」的抖动。 */
 .grid, .mgrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--s4) var(--s3);
 }
 
+/* .card 去盒中盒：无底色无描边，只剩封面 + 文字；.mcard 是外链卡（JS 里 <a> 包着
+ * .pw/.t/.sub2），保留白底与描边。两者共用布局，外观分开写。 */
 .card, .mcard {
   position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
+  border-radius: var(--r-card);
   overflow: hidden;
   cursor: pointer;
-  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
 }
 
-.card:hover, .mcard:hover {
+.card {
+  padding-bottom: var(--s2);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.mcard {
+  background: var(--card);
+  border: 1px solid var(--line);
+  transition: transform var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease),
+              box-shadow var(--dur-2) var(--ease);
+}
+
+/* hover 只提阴影，不再整体位移（整格上移会让相邻行跟着视觉抖动） */
+.card:hover {
+  transform: none;
+  box-shadow: var(--sh-2);
+}
+
+.mcard:hover {
   transform: translateY(-2px);
   border-color: var(--accent-line);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .10);
+  box-shadow: var(--sh-2);
+}
+
+/* 封面悬停：缩放与遮罩都限定在 .card > .pw 的 img / ::after 上。
+ * 只认 .card > .pw —— .mcard 的 .pw 被 <a> 包着，动它会连 .rate/.ep/.prg 角标一起放大。 */
+.card > .pw {
+  position: relative;
+  overflow: hidden;
+}
+
+.card > .pw img {
+  transition: transform var(--dur-3) var(--ease-out);
+}
+
+.card:hover > .pw img,
+.card:focus-visible > .pw img {
+  transform: scale(1.04);
+}
+
+.card > .pw::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 55%;
+  opacity: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .55));
+  transition: opacity var(--dur-2) var(--ease);
+  pointer-events: none;
+}
+
+.card:hover > .pw::after {
+  opacity: 1;
 }
 
 .mcard a {
@@ -700,13 +781,14 @@ main {
 
 .t {
   margin: var(--s2) 0 2px;
-  padding: 0 var(--s3);
-  min-height: 44px;
-  font-size: 15px;
+  padding: 0;
+  min-height: calc(2 * var(--lh-snug) * 1em);
+  font-size: var(--fs-md);
   font-weight: 500;
-  line-height: 22px;
+  line-height: var(--lh-snug);
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: normal;
@@ -718,10 +800,16 @@ main {
 }
 
 .sub2 {
-  padding: 0 var(--s3) var(--s3);
-  font-size: 11.5px;
-  line-height: 1.5;
+  padding: 0 0 var(--s3);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
   color: var(--dim);
+}
+
+/* .mcard 还有外框，文字需要内缩；.card 的左右内边距已归零（文字对齐封面） */
+.mcard .t, .mcard .sub2 {
+  padding-left: var(--s3);
+  padding-right: var(--s3);
 }
 
 .morewrap {
@@ -775,10 +863,10 @@ main {
   max-height: 92vh;
   overflow-y: auto;
   overscroll-behavior: contain;
-  border-radius: var(--r-lg);
+  border-radius: var(--r-modal);
   border: 1px solid var(--line);
   background: var(--card);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, .6);
+  box-shadow: var(--sh-3);
   scrollbar-width: thin;
   scrollbar-color: var(--line-hi) transparent;
 }
@@ -839,7 +927,7 @@ main {
 .authx {
   position: absolute; top: 8px; right: 10px; width: 32px; height: 32px;
   border: 0; border-radius: 50%; background: transparent; color: var(--dim);
-  font-size: 18px; line-height: 1; cursor: pointer;
+  font-size: var(--fs-lg); line-height: 1; cursor: pointer;
 }
 .authx:hover { color: var(--fg); background: var(--card2); }
 .authbody { display: block; }
@@ -856,9 +944,11 @@ main {
 .authhint { margin: 0 0 var(--s4); color: var(--dim); font-size: var(--fs-sm); line-height: 1.6; }
 
 /* ---------------------------------------------------------------- 9 详情弹窗：hero */
+/* 封面列 184px：920px 弹窗减去左右 24px 与列间距后，信息列要放得下 28px 片名。
+   断点（168 / 120 / 96）在 19 节，只改列宽，不重复 padding。 */
 .mhero, .mhd {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: 184px minmax(0, 1fr);
   gap: var(--s5);
   padding: var(--s5) var(--s5) var(--s4);
 }
@@ -866,7 +956,7 @@ main {
 .mposter {
   display: block;
   width: 100%;
-  max-width: 200px;
+  max-width: 184px;
   aspect-ratio: 2 / 3;
   border-radius: var(--r);
   overflow: hidden;
@@ -888,10 +978,10 @@ main {
 .mhero h3, .mhd h3, .mb h3 {
   margin: 0 0 var(--s1);
   padding-right: var(--s7);
-  font-size: 26px;
+  font-size: var(--fs-h2);
   font-weight: 600;
   line-height: 1.35;
-  letter-spacing: -.01em;
+  letter-spacing: var(--ls-tight);
 }
 
 .orig {
@@ -927,11 +1017,12 @@ main {
   margin: 0 0 var(--s4);
 }
 
+/* 评分数字用深蓝文字色（--accent 只做底/描边，做大字会发飘且对比不足） */
 .mrate-line .score {
-  font-size: 32px;
+  font-size: var(--fs-h1);
   font-weight: 700;
   line-height: 1;
-  color: var(--accent);
+  color: var(--accent-text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -939,16 +1030,17 @@ main {
   position: relative;
   display: inline-block;
   font-style: normal;
-  font-size: 15px;
+  font-size: var(--fs-md);
   line-height: 1;
   letter-spacing: .1em;
   color: var(--star);
 }
 
-/* 空元素 + --p（0~100 百分数）双图层星条：底层灰星，上层按百分比裁切的金星 */
+/* 空元素 + --p（0~100 百分数）双图层星条：底层灰星，上层按百分比裁切的金星。
+   底色用 --line-hi（原 --dim2 是给文字用的，当星条底太淡）。 */
 .mrate-line .stars::before {
   content: "★★★★★★★★★★";
-  color: var(--dim2);
+  color: var(--line-hi);
 }
 
 .mrate-line .stars::after {
@@ -1018,12 +1110,14 @@ main {
   color: var(--dim);
 }
 
-/* 收藏统计：想看 / 在看 / 看过 */
+/* 收藏统计：想看 / 在看 / 看过。上接评分行、下接按钮组，用一道细线做出三级台阶 */
 .mcollect {
   display: flex;
   align-items: center;
   gap: var(--s5);
   margin: 0 0 var(--s4);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line);
 }
 
 .mcollect span {
@@ -1117,12 +1211,12 @@ main {
 .btn.pri {
   background: var(--accent);
   border-color: transparent;
-  color: #fff;
+  color: var(--accent-ink);
   font-weight: 600;
 }
 
 .btn.pri:hover {
-  color: #fff;
+  color: var(--accent-ink);
   filter: brightness(.94);
 }
 
@@ -1149,18 +1243,25 @@ main {
 }
 
 .mtab {
-  height: 40px;
+  height: var(--tab-h);
   padding: 0 var(--s3);
   background: none;
   border: 0;
   border-bottom: 2px solid transparent;
   font-size: var(--fs-sm);
   color: var(--dim);
-  transition: color .16s ease, border-color .16s ease;
+  transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
 }
 
 .mtab:hover {
   color: var(--fg);
+  border-bottom-color: var(--line-hi);
+}
+
+/* 键盘焦点：描边压在内侧，避免吸顶条高度跳动 */
+.mtab:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: -2px;
 }
 
 .mtab.on {
@@ -1194,10 +1295,12 @@ main {
   margin-bottom: 0;
 }
 
+/* 简介类长文：行高按正文档，宽度收在 68ch 以内（宽屏一行过长会丢行） */
 .sect p, .plot, #plot {
   margin: 0;
   font-size: var(--fs-md);
-  line-height: 1.85;
+  line-height: var(--lh-prose);
+  max-width: 68ch;
   color: var(--fg2);
   white-space: pre-wrap;
 }
@@ -1214,8 +1317,8 @@ main {
   display: inline-block;
   max-width: 220px;
   padding: 4px var(--s3);
-  border-radius: 999px;
-  font-size: 12px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm);
   color: var(--fg2);
   text-decoration: none;
   white-space: nowrap;
@@ -1307,8 +1410,9 @@ main {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  font-size: 13.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   line-height: 1.35;
   white-space: normal;
@@ -1319,7 +1423,7 @@ main {
 .chinfo em {
   display: block;
   font-style: normal;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   color: var(--dim);
   white-space: nowrap;
   overflow: hidden;
@@ -1349,7 +1453,7 @@ main {
 .staff em {
   display: block;
   font-style: normal;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   color: var(--dim);
   white-space: nowrap;
   overflow: hidden;
@@ -1436,9 +1540,9 @@ main {
 .mnote-btn {
   margin-left: 4px; padding: 2px 10px; border-radius: 999px; cursor: pointer;
   border: 1px solid var(--accent-line); background: var(--accent-soft);
-  color: var(--accent); font-size: var(--fs-xs);
+  color: var(--accent-text); font-size: var(--fs-xs);
 }
-.mnote-btn:hover { background: var(--accent); color: #fff; }
+.mnote-btn:hover { background: var(--accent); color: var(--accent-ink); }
 
 .pgsel {
   display: flex;
@@ -1539,7 +1643,7 @@ main {
 
 .rprow p {
   margin: var(--s1) 0 0;
-  font-size: 13.5px;
+  font-size: var(--fs-sm);
   line-height: 1.75;
   color: var(--fg2);
 }
@@ -1596,7 +1700,7 @@ main {
 
 .mgidx {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-xs);
   color: var(--dim);
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -1612,7 +1716,7 @@ main {
 .mgt {
   display: block;
   min-width: 0;
-  font-size: 13.5px;
+  font-size: var(--fs-sm);
   color: var(--fg);
   white-space: nowrap;
   overflow: hidden;
@@ -1622,7 +1726,7 @@ main {
 .mgmeta {
   display: block;
   min-width: 0;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--dim);
   white-space: nowrap;
   overflow: hidden;
@@ -1632,7 +1736,7 @@ main {
 .mgcopy {
   flex: 0 0 auto;
   font-size: var(--fs-xs);
-  color: var(--accent);
+  color: var(--accent-text);
   white-space: nowrap;
 }
 
@@ -1641,9 +1745,10 @@ main {
 }
 
 /* ---------------------------------------------------------------- 17 分集磁力胶囊（兼容层） */
+/* #epsbox 与 .relbox 是同一个元素（magnet-eps.js 同时写 className 与 id）。
+ * 这里只声明分隔线，间距统一交给下面的 #epsbox —— 否则 ID 规则把 margin/padding
+ * 归零，注入块会和上一区块贴死。 */
 .relbox {
-  margin: var(--s5) 0 0;
-  padding-top: var(--s3);
   border-top: 1px solid var(--line);
 }
 
@@ -1661,35 +1766,28 @@ main {
   }
 }
 
-.relhead {
-  margin: 0 0 var(--s2);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  letter-spacing: .02em;
-  color: var(--dim);
-}
-
 /* 弹窗内「磁力详情」视图容器（openMagView 渲染，里面是 .mgsect 行式列表） */
 #mgbody {
   padding: 0 var(--s5) var(--s5);
 }
 
+/* 注入块自己的间距：上边距 --s5 + 上内边距 --s4，与 .sect 的节奏一致 */
 #epsbox {
   display: block;
-  margin: 0;
-  padding: 0;
+  margin: var(--s5) 0 0;
+  padding-top: var(--s4);
   border-top: 1px solid var(--line);
 }
 
 /* 电影弹窗（openExtModal）里 #epsbox 是 #modal 的直接子节点（无 .mbody 可挂），
    自己补侧/底内边距；番剧详情的 #epsbox 挂在 .mbody[data-p="detail"] 末尾，
-   外边距与内边距都交给 .mbody，只保留上面那条 border-top 做分节。 */
+   侧边距交给 .mbody，这里只补上/下留白。 */
 .modal > #epsbox {
   margin: var(--s5) 0 0;
-  padding: 0 var(--s5) var(--s5);
+  padding: var(--s4) var(--s5) var(--s5);
 }
 
-#epsbox .relhead, #epsbox .eps-none {
+#epsbox .eps-none {
   grid-column: auto;
 }
 
@@ -1815,19 +1913,32 @@ main {
 }
 
 /* ---------------------------------------------------------------- 19 响应式 */
+/* 栅格列数只在这里改（主规则在 7 节：≥1360 七列）；gap 全站一套，不再随断点变 */
 @media (max-width: 1400px) {
   .wrap {
     padding: 0 var(--s5);
   }
+}
+
+@media (max-width: 1359px) {
   .grid, .mgrid {
-    gap: 18px var(--s4);
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1199px) {
+  .grid, .mgrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 999px) {
+  .grid, .mgrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1200px) {
-  .grid, .mgrid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  }
   .chgrid {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   }
@@ -1840,13 +1951,9 @@ main {
   .wrap {
     padding: 0 var(--s4);
   }
-  .levels {
-    padding: var(--s3);
-  }
   .mhero, .mhd {
     grid-template-columns: 168px minmax(0, 1fr);
     gap: var(--s4);
-    padding: var(--s4) var(--s4) var(--s3);
   }
   .mposter {
     max-width: 168px;
@@ -1861,7 +1968,7 @@ main {
     padding: 0 var(--s4) var(--s5);
   }
   .modal > #epsbox {
-    padding: 0 var(--s4) var(--s5);
+    padding: var(--s4) var(--s4) var(--s5);
   }
   .trailer {
     margin: 0 var(--s4) var(--s4);
@@ -1869,14 +1976,7 @@ main {
 }
 
 @media (max-width: 900px) {
-  /* 顶部筛选条：窄屏收窄组间距，并让每个 .lv 更早换行 */
-  .levels {
-    gap: var(--s3);
-    margin: 0 0 var(--s5);
-  }
-  .levels .lv {
-    flex: 1 1 140px;
-  }
+  /* 季度胶囊在窄屏改横向换行（.levels 的列宽由 1100 断点统一处理） */
   .chips.chips--col {
     flex-direction: row;
     flex-wrap: wrap;
@@ -1888,17 +1988,10 @@ main {
   .chgrid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
-  .mhero, .mhd {
-    grid-template-columns: 160px minmax(0, 1fr);
-  }
-  .mposter {
-    max-width: 160px;
-  }
 }
 
 @media (max-width: 760px) {
   :root {
-    --header-h: 96px;
     --fs-h3: 18px;
     --fs-h2: 24px;
   }
@@ -1939,7 +2032,7 @@ main {
 
   .mainnav a {
     flex: 0 0 auto;
-    padding: 8px 10px;
+    padding: 0 10px;
     font-size: var(--fs-sm);
   }
 
@@ -1954,7 +2047,7 @@ main {
   }
 
   .searchbox input {
-    height: 36px;
+    height: var(--ctl-h-lg);
     max-width: none;
   }
 
@@ -1964,10 +2057,7 @@ main {
 
   .thm {
     flex: 0 0 auto;
-    width: 32px;
-    height: 32px;
     margin-left: auto;
-    font-size: 15px;
   }
 
   .build {
@@ -1981,8 +2071,8 @@ main {
   }
 
   #cnt .login {
-    height: 32px;
-    padding: 0 12px;
+    height: var(--ctl-h);
+    padding: 0 var(--s3);
     display: inline-flex;
     align-items: center;
   }
@@ -1998,16 +2088,16 @@ main {
 
   .t {
     font-size: var(--fs-sm);
-    line-height: 20px;
-    min-height: 40px;
+    line-height: var(--lh-snug);
+    min-height: calc(2 * var(--lh-snug) * 1em);
   }
 
   .sub2 {
     font-size: var(--fs-xs);
   }
 
+  /* 满宽由末尾 .filters > .f-hint 的 grid-column 负责，这里只清掉右推 */
   .f-hint {
-    flex-basis: 100%;
     margin-left: 0;
   }
 
@@ -2022,14 +2112,15 @@ main {
   /* 手机端筛选条压缩：季度/星期各占一行横滑，避免 3 组×2 行把首屏吃掉 */
   .levels {
     flex-direction: column;
-    padding: var(--s2) var(--s3);
+    padding: 0 0 var(--s2);
     gap: var(--s2);
   }
 
+  /* 竖排下 flex-basis 是高度维度：必须 0 0 auto，否则会吃掉整屏 */
   .levels .lv {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     width: 100%;
-    gap: 6px;
+    gap: var(--s1-5);
   }
 
   .levels .chips.chips--col,
@@ -2062,11 +2153,9 @@ main {
     white-space: nowrap;
   }
 
-  /* 番剧页筛选：纵向一列，下拉统一满宽 */
+  /* 番剧页筛选：只做容器外壳，两列网格由文件末尾的 .filters grid 规则接管
+     （这里再写 flex-direction 会被 display:grid 直接忽略，属于死属性） */
   .filters {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--s2);
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: var(--r);
@@ -2088,14 +2177,14 @@ main {
   /* 原生 select 的箭头由浏览器绘制，padding-right 管不到它；去掉原生外观、用背景 SVG 自绘箭头 */
   .f-label select {
     width: 100%;
-    height: 36px;
+    height: var(--ctl-h-lg);
     flex: 1 1 auto;
     min-width: 0;
     padding-right: 34px;
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%239499A0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2366707A' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 12px center;
     background-size: 12px 8px;
@@ -2127,7 +2216,7 @@ main {
     right: var(--s2);
     width: 36px;
     height: 36px;
-    font-size: 22px;
+    font-size: var(--fs-h3);
     line-height: 1;
   }
 
@@ -2143,20 +2232,20 @@ main {
   }
 
   .mhero h3, .mhd h3, .mb h3 {
-    font-size: 20px;
+    font-size: var(--fs-xl);
     padding-right: var(--s7);
   }
 
   .orig {
-    font-size: 12px;
+    font-size: var(--fs-xs);
   }
 
   .mrate-line, .mrate {
-    gap: 6px var(--s3);
+    gap: var(--s1-5) var(--s3);
   }
 
   .mrate-line .score {
-    font-size: 26px;
+    font-size: var(--fs-h2);
   }
 
   .mrate .num {
@@ -2173,11 +2262,11 @@ main {
 
   /* 触控目标：胶囊 / 按钮 / 分页签（关闭钮见上） */
   .chip {
-    min-height: 36px;
+    min-height: var(--ctl-h-lg);
   }
 
   .btn {
-    height: 36px;
+    height: var(--ctl-h-lg);
     padding: 0 var(--s3);
   }
 
@@ -2194,7 +2283,7 @@ main {
   }
 
   .mtab {
-    min-height: 40px;
+    min-height: var(--tab-h);
     padding: 0 10px;
   }
 
@@ -2235,7 +2324,7 @@ main {
   }
 
   .modal > #epsbox {
-    padding: 0 var(--s4) var(--s5);
+    padding: var(--s4) var(--s4) var(--s5);
   }
 
   .mgrow {
@@ -2256,23 +2345,11 @@ main {
   }
 
   .mainnav a {
-    padding: 9px 7px;
+    padding: 0 7px;
     font-size: var(--fs-xs);
   }
 
-  .psz {
-    height: 26px;
-    padding: 0 var(--s2);
-    font-size: var(--fs-xs);
-  }
-
-  /* 与 760 块保持一致：32×32 触控尺寸（.psz 在 ≤760 已 display:none，不再有对齐目标） */
-  .thm {
-    width: 32px;
-    height: 32px;
-  }
-
-  /* 高度沿用 760 块的 32px，仅收紧左右内边距，给导航让出 4px */
+  /* .psz 在 ≤760 已 display:none；.thm 尺寸沿用 760 块。这里只收紧登录按钮左右内边距，给导航让出 4px */
   #cnt .login {
     padding: 0 10px;
   }
@@ -2492,8 +2569,8 @@ main {
   }
 
   .tg-c {
-    padding: 0 6px;
-    font-size: 10px;
+    padding: 0 var(--s1-5);
+    font-size: var(--fs-xs);
   }
 
   .staff .sph {
@@ -2503,35 +2580,35 @@ main {
   }
 }
 
-/* ---------------------------------------------------------------- 21 追番页（fav.html） */
-/* .favpage 是 main.wrap 里的整页容器：.wrap{padding:0 var(--s6)} 压掉 main 的纵向 padding，
- * 这里补顶部 24px，与首页 .home-head 对齐；标题 / 栅格 / 卡片 / 空态复用 5 节与 7 节，不另立一份。 */
-.favpage {
-  margin-top: var(--s5);
-}
-
-.favpage > .bhead {
-  margin-bottom: var(--s5);
-}
-
+/* ---------------------------------------------------------------- 21 首页筛选条 / 浏览页筛选 / 手机详情 hero */
 /* ── 2026-11-05 视觉验收修正 ─────────────────────────────────────────────
    ① 首页筛选条：组内不折行、组间按容器宽度整体换行（修「第4季度 / 周四–周日」被挤到第二行的问题）；
       榜单入口改内联宽度，消掉下拉下方 52px 空洞。
    ② 浏览页筛选：桌面 4 个下拉等宽（标签下拉原本是其它下拉的 2 倍宽），并与页头留出上边距。
    ③ 手机详情 hero：海报只占首行，标题/评分走右列，想看 + 操作按钮通栏，消掉海报下方整块空白。 */
 
-.levels { align-items: flex-start; }
+/* 组内胶囊不折行；列宽主规则在 6 节，这里只管 .chips 的行为 */
+.levels .chips {
+  flex-wrap: nowrap;
+}
 
-.levels .lv { flex: 0 1 auto; }
+.levels .chips--col .lv-link {
+  width: auto;
+  padding: 0 var(--s4);
+}
 
-.levels .chips { flex-wrap: nowrap; }
-
-.levels .chips--col .lv-link { width: auto; padding: 0 var(--s4); }
-
-@media (max-width: 1100px) {
-  .levels .lv { flex: 1 1 100%; }
-  .levels .chips { flex-wrap: wrap; }
-  .levels .chips--col .lv-link { width: 100%; }
+/* 761–1100：每组整行铺开，胶囊回到可换行。
+   ≤760 由 19 节的竖排规则接管（.lv 必须是 0 0 auto，flex-basis 在竖排下是高度） */
+@media (max-width: 1100px) and (min-width: 761px) {
+  .levels .lv {
+    flex: 1 1 100%;
+  }
+  .levels .chips {
+    flex-wrap: wrap;
+  }
+  .levels .chips--col .lv-link {
+    width: 100%;
+  }
 }
 
 @media (min-width: 761px) {
@@ -2547,7 +2624,8 @@ main {
 }
 
 @media (max-width: 560px) {
-  .mhero, .mhd { grid-template-columns: 96px minmax(0, 1fr); gap: var(--s2) var(--s3); }
+  /* 列宽 96px 已在 19 节声明，这里只管海报独占首行 + 按钮通栏 */
+  .mhero, .mhd { gap: var(--s2) var(--s3); }
   .mhero > .mposter, .mhd > .mposter { grid-column: 1; grid-row: 1; }
   .mhero > .mh-info, .mhd > .mh-info { display: contents; }
   .mhero > .mh-info > *, .mhd > .mh-info > * { grid-column: 2; }
@@ -2584,7 +2662,7 @@ main {
 }
 
 .f-label.on > select {
-  color: var(--accent);
+  color: var(--accent-text);
   border-color: var(--accent-line);
   background: var(--accent-soft, var(--card));
   font-weight: 600;
@@ -2604,12 +2682,13 @@ main {
    顶栏登录按钮原来只设了 color，桌面下仍是系统灰底原生按钮，跟站内 .psz/.thm 明显不是一套；
    这里补外框、hover 与键盘焦点态。id #loginbtn / 文案 / 点击逻辑都不动（90-boot.js 绑着 openAuthPanel）。 */
 #cnt .login {
-  height: 32px; padding: 0 16px; border: 1px solid var(--line); border-radius: 6px;
-  background: var(--card2); color: var(--fg); font-size: 13px; cursor: pointer;
-  transition: border-color .16s ease, color .16s ease;
+  height: var(--ctl-h); padding: 0 var(--s4); border: 1px solid var(--line); border-radius: var(--r-ctl);
+  background: var(--card2); color: var(--fg); font-size: var(--fs-sm); cursor: pointer;
+  display: inline-flex; align-items: center; white-space: nowrap;
+  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
-#cnt .login:hover { border-color: var(--accent); color: var(--accent); }
-#cnt .login:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#cnt .login:hover { border-color: var(--accent-line); color: var(--accent-text); }
+#cnt .login:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 
 /* 提交中：置灰 + 进度光标；文案由 90-boot.js 换成「登录中…/发送中…/确认中…/重发中…/保存中…」 */
 .btn:disabled, .btn[disabled] { opacity: .55; cursor: progress; }
@@ -2633,7 +2712,7 @@ main {
    只用现有令牌（--s* / --fs-* / --r / --card / --line），不新增字号与间距字面量。
    头像 80px 与 tab 的 40px/2px 沿用 #cnt .av 与 .mtab 的既有尺寸。 */
 .pf-hero {
-  height: 120px;
+  height: 140px;
   border-radius: var(--r);
   background: linear-gradient(135deg, var(--accent-soft), transparent 70%);
   margin-bottom: calc(-1 * var(--s6));
@@ -2654,10 +2733,10 @@ main {
   object-fit: cover;
   display: grid;
   place-items: center;
-  background: var(--card2);
+  background: var(--accent-soft);
   font-size: var(--fs-h2);
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .pf-id .pf-name { min-width: 0; }
@@ -2679,7 +2758,8 @@ main {
 }
 
 .pf-stats {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--s6);
   padding: var(--s3) 0;
   border-top: 1px solid var(--line);
@@ -2715,7 +2795,7 @@ main {
 }
 
 .pf-tabs .on {
-  height: 40px;
+  height: var(--tab-h);
   padding: 0 var(--s3);
   background: none;
   border: 0;
@@ -2733,8 +2813,8 @@ main {
     text-align: center;
   }
   .pf-id h1 { white-space: normal; }
-  .pf-stats { justify-content: space-around; }
-  .pf-stats > div { flex: 1 1 0; text-align: center; }
+  /* .pf-stats 已是三列等宽网格，这里只需居中文字 */
+  .pf-stats > div { text-align: center; }
 }
 
 /* 追番进度角标（左下；.rate 左上、.ep 右下） */
