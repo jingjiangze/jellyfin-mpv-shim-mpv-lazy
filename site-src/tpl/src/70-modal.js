@@ -69,6 +69,8 @@
       + '<div class="mbody" data-p="dm" hidden><div id="pdm"></div></div>'
       + '<div class="mbody" data-p="rp" hidden><div id="prp"></div></div>';
     $('#mask').classList.add('on');
+    /* 磁力查询/身份校验都以 bgm id 为准：标题会漂移、会重名，id 不会 */
+    if (m && m.setAttribute) m.setAttribute('data-bgm', String(id));
     m.querySelector('.x').onclick = close;
 
     /* 开始观看 = B 站弹幕播放：点击绑定在 bindBili（80-bili.js），这里只补键盘可达性 */

@@ -343,27 +343,38 @@
   /* 只查服务端 SQLite（db=1）：响应 no-store、不打上游、不写库，所以和静态分片
      并行发是安全的（无副作用）。命中/未命中都只想抢个先手：未命中、坏响应、
      SQLite 挂掉一律 null，**不置 LIVE_DOWN**（库挂了不该把整条透传关掉）。 */
-  function dbLive(name) {
+  function dbLive(name, bgm) {
     /* `&_=` 破缓存：服务端给了 cache-control: no-store，但 nginx 在同一个响应上
        **又**加了一条 `Cache-Control: public, max-age=600`（双头并存），CF 有可能按
        后者缓存 —— 那样「点进详情先读 SQLite」会读到 10 分钟前的库。URL 每次不同即
        绕开，代价只是这条请求不复用缓存（SQLite 命中本来就只有几毫秒）。 */
     var u = LIVE_URL + '?kw=' + encodeURIComponent(name) + '&db=1&_=' + Date.now();
+    /* bgm = Bangumi 条目 id，带上它后端就能按 id 直取，不再走
+       `LIKE '%kw%' ORDER BY length(n_norm) LIMIT 1`（那会取到「名字最短的包含者」，
+       实测「海贼王」查回「海贼王女」的 12 条）。没拿到 id 时保持原查询不变。 */
+    if (bgm) u += '&bgm=' + encodeURIComponent(bgm);
     return getJSON(u, 9000).then(function (d) {
       /* miss:true 是「库里没有」，ok:false 视作坏响应；两者都当空 */
       if (!d || d.miss || d.ok === false) return null;
       var eps = (d.eps && Object.keys(d.eps).length) ? d.eps : {};
       var batch = d.batch || [];
       if (!Object.keys(eps).length && !batch.length) return null;
-      return { n: name, eps: eps, batch: batch, db: 1 };
+      return { n: name, eps: eps, batch: batch, db: 1, key: d.key || '' };
     }).catch(function () { return null; });
   }
 
-  function resolveEntry(name) {
+  function resolveEntry(name, bgm) {
     if (!name) return Promise.resolve(null);
     var n = shardOf(name);
     return loadManifest().then(function () { return loadShard(n); })
-      .then(function (d) { return findByName(d, name); })
+      .then(function (d) {
+        /* 身份准绳是 bgm id：分片就是 { bgm id 字符串: 条目 }（70-modal.js 的磁力视图也按
+           String(id) 直取）。按 id 命中即用，片名重名/包含名不会串台；分片是按片名哈希
+           切的，id 可能落在别的分片，故未命中仍回落到 findByName。 */
+        var byId = bgm ? (d && d[String(bgm)]) : null;
+        if (byId) { byId.key = String(bgm); return byId; }
+        return findByName(d, name);
+      })
       .catch(function () { return null; });
   }
 
@@ -657,6 +668,22 @@
     return !!x && x === titleKey(b);
   }
 
+  /* 磁力结果的身份：名字必须「同一条目」才允许画。
+     放行三种：归一化后完全相同 / 只有季号章后缀差异 / 双方任一侧为空（拿不到名字时不拦）。
+     归一化复用本文件既有的身份键 titleKey（sameTitle 用的同一套，见上面的说明），不另造第二套；
+     不用 norm()：它会连 ! ？ 【 】 一起抹掉，《工作细胞》与《工作细胞!!》就成了同一个名字，
+     那正是这里要拦的错法。季号/章后缀差异由下面的 strip 单独放行。 */
+  function identityOk(a, b) {
+    var x = titleKey(a), y = titleKey(b);
+    if (!x || !y) return true;
+    if (x === y) return true;
+    var strip = function (s) {
+      return s.replace(/(第[一二三四五六七八九十0-9]{1,2}[季期部])|(season[0-9]{1,2})|(s[0-9]{1,2})|(part[0-9]{1,2})|([0-9]{1,2})|([ivx]{1,3})$/g, '');
+    };
+    var xs = strip(x), ys = strip(y);
+    return !!xs && !!ys && (xs === ys || (xs.length >= 4 && ys.indexOf(xs) === 0) || (ys.length >= 4 && xs.indexOf(ys) === 0));
+  }
+
   /* 把入口画进当前弹窗：详情页画 #epsbox；openMagView 那种整屏磁力视图画 #mgbody。
      画之前先核对身份：取 #modal 里 h3 的片名与本次请求的片名比对，不一致（或取不到）就直接
      返回不画 —— 刷新是 fire-and-forget、fetchLive 最长 15s，这期间用户完全可能已经打开另一部番，
@@ -884,11 +911,17 @@
       CUR_STATE = state;
       var origEl = m.querySelector('.orig');
       var origName = origEl ? origEl.textContent.trim() : '';
+      /* 本弹窗的 bgm 条目 id（openModal 写在 #modal 上）：查询与身份校验都以它为准 */
+      var bgm = m.getAttribute('data-bgm') || '';
       /* 弹窗已被换片 / #epsbox 被重插：这次响应作废，别画进别人的框 */
       function stale() { return !box.parentNode || m.querySelector('#epsbox') !== box; }
       function take(e) {
         if (my !== EPOCH) return false;          // 这几条是刷新前发出的旧响应
         if (stale() || !hasRows(e)) return false;
+        /* 按 bgm id 命中的结果是权威的：索引里的 n 可能是旧标题（如 975 写着「航海王」），
+           不能因为名字漂移把正确结果丢掉；只有「按名字查到」的才做身份校验。 */
+        var byId = !!(bgm && e && String(e.key || '') === String(bgm));
+        if (!byId && !identityOk(e.n, name)) return false;
         var c = epCount(e);
         if (c <= state.cnt) return false;
         state.e = e;
@@ -929,8 +962,8 @@
         if (take(e)) state.got = true;
         if (!state.got && state.settled >= 2) finish();
       }
-      resolveEntry(name).then(one, function () { one(null); });
-      dbLive(name).then(one, function () { one(null); });
+      resolveEntry(name, bgm).then(one, function () { one(null); });
+      dbLive(name, bgm).then(one, function () { one(null); });
     }).observe(m, { childList: true, subtree: false });
   }
 
