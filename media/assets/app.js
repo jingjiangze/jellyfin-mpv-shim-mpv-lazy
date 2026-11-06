@@ -21,8 +21,8 @@ return '<button class="chip' + (on ? ' on' : '') + '" type="button" ' + attr + '
 }
 var D_BASES = [
 'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/data/',
-'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/',
-'/data/'
+'/data/',
+'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/'
 ];
 function jd(name) {
 var i = 0;
@@ -169,11 +169,6 @@ fetch(PROG_API, { headers: { authorization: 'Bearer ' + tk } })
 .then(function (d) { if (d && d.ok && d.items) mergeProgress(d.items); })
 .catch(function () { /* 静默：进度是增值功能，拉不到不影响任何页面渲染 */ });
 }
-var PSZ = { mode: 'hd' };
-try {
-var _psz = localStorage.getItem('psz');
-if (_psz === 'hd' || _psz === 'sd') PSZ.mode = _psz;
-} catch (e) { /* 隐私模式 / file:// 下 localStorage 可能不可用，忽略 */ }
 pullFollow();
 pullProgress();
 window.__prog = {
@@ -190,9 +185,18 @@ if (!q.length) { img.onerror = null; img.style.visibility = 'hidden'; return; }
 img.src = q.shift();
 img.dataset.fb = q.join('|');
 };
+function posterBig(id) { return (ANI.poster || '') + id + '.jpg'; }
 function posterSrc(id) {
-var base = PSZ.mode === 'sd' ? (ANI.posterSd || ANI.poster) : ANI.poster;
+var base = ANI.posterSd || ANI.poster || '';
 return base + id + '.jpg';
+}
+function posterHd(id) { return posterBig(id); }
+function posterFb(id, ex) {
+return fbAttr([posterBig(id), (ex || [])[1]]);
+}
+function posterFbHd(id, ex) {
+var sd = posterSrc(id);
+return fbAttr([sd === posterBig(id) ? '' : sd, (ex || [])[1]]);
 }
 function avatarSrc(u) {
 if (!u || /^https?:/i.test(u)) return '';   // 未镜像的 lain.bgm.tv 图在国内不可达，直接出首字
@@ -204,11 +208,9 @@ return esc(s).replace(/-/g, '-⁠');
 function animeCard(r, opt) {
 var id = r[0], name = r[2] || r[1];
 var ex = ANI.extra[id] || [];
-var alCover = ex[1] || '';
 var src = posterSrc(id);
-var fb = PSZ.mode === 'sd' ? [alCover, ANI.poster + id + '.jpg'] : [alCover];
 var h = '<article class="card" data-id="' + id + '"><div class="pw">'
-+ '<img src="' + esc(src) + '"' + fbAttr(fb) + ' loading="lazy" decoding="async" alt="">'
++ '<img src="' + esc(src) + '"' + posterFb(id, ex) + ' loading="lazy" decoding="async" alt="">'
 + (opt && opt.rank ? '<span class="rnum' + (opt.rank <= 3 ? ' top' : '') + '">'
 + opt.rank + '</span>' : '')
 + (r[7] ? '<span class="rate">★ ' + Number(r[7]).toFixed(1) + '</span>' : '')
@@ -329,7 +331,8 @@ var sub = [r[4] || '', TYPE[r[3]] || r[3] || '',
 r[7] ? '★' + Number(r[7]).toFixed(1) : '', r[8] ? r[8] + ' 话' : '']
 .filter(Boolean).join(' · ');
 return '<a class="bigbanner' + (on ? ' is-on' : '') + '" href="/detail?id=' + id + '">'
-+ '<img class="bigbanner-bg" src="' + esc(posterSrc(id)) + '" alt="">'
++ '<img class="bigbanner-bg" data-src="' + esc(posterHd(id)) + '"'
++   posterFbHd(id, ANI.extra[id] || []) + ' alt="">'
 + '<div class="bigbanner-in">'
 + '<span class="bigbanner-tag">本季推荐</span>'
 + '<h2>' + titleHTML(name) + '</h2>'
@@ -369,7 +372,15 @@ var dots = [].slice.call(root.querySelectorAll('.bb-dots i'));
 var n = slides.length;
 if (!n) return;
 var at = 0;
+function loadBg(i) {
+var img = slides[i] && slides[i].querySelector('.bigbanner-bg');
+if (!img) return;
+if (!img.getAttribute('src') && img.getAttribute('data-src')) {
+img.src = img.getAttribute('data-src');
+}
+}
 function plot(i) {
+loadBg(i);
 var box = slides[i] && slides[i].querySelector('.bigbanner-plot');
 if (box && !box.textContent) fillBannerPlot(slides[i], rows[i], gen);
 }
@@ -418,7 +429,7 @@ var r = it.r, id = r[0], name = r[2] || r[1];
 var pc = it.dur > 0 && it.pos > 0 ? Math.min(100, Math.round(it.pos / it.dur * 100)) : 0;
 var left = it.dur > 0 && it.pos > 0 ? Math.round((it.dur - it.pos) / 60) : 0;
 return '<article class="card cont" data-id="' + id + '"><div class="pw">'
-+ '<img src="' + esc(posterSrc(id)) + '"' + fbAttr([(ANI.extra[id] || [])[1]])
++ '<img src="' + esc(posterSrc(id)) + '"' + posterFb(id, ANI.extra[id] || [])
 + ' loading="lazy" decoding="async" alt="">'
 + (r[8] ? '<span class="ep">' + r[8] + ' 集</span>' : '')
 + '<span class="cont-bar"><i style="width:' + (pc || 6) + '%"></i></span>'
@@ -552,7 +563,11 @@ throw new Error('资料格式不对，稍后重试');
 function userLoginHTML() {
 return '<div class="pf-hero"></div>'
 + '<div class="empty">登录后查看我的主页 —— 追番、观看进度和账号设置都在这里</div>'
-+ '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录</button></div>';
++ '<div class="pf-acts-note">'
++ '<p><b>B 站扫码绑定</b>：绑定结果记在你的账号下（每人对自己的绑定负责），登录后才会出现扫码按钮。</p>'
++ '<p><b>夸克网盘</b>：绑在站点服务器上，全站共用一份，绑定入口在播放源面板。</p>'
++ '</div>'
++ '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录 / 注册</button></div>';
 }
 var BILI_BIND_PATH = '/bili/bind';
 var BILI_QR_START = '/bili/qr/start';
@@ -1372,7 +1387,7 @@ return animeCard(r, { showYear: 1 });
 m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b>'
 + esc(title) + '</b></nav>'
 + '<section class="mhero">'
-+   '<img class="mposter" src="' + esc(posterSrc(id)) + '"' + fbAttr([ex[1]]) + ' alt="">'
++   '<img class="mposter" src="' + esc(posterSrc(id)) + '"' + posterFb(id, ex) + ' alt="">'
 +   '<div class="mh-info">'
 +     '<h3>' + esc(title) + '</h3>'
 +     (orig && orig !== title ? '<div class="orig">' + esc(orig) + '</div>' : '')
@@ -1400,7 +1415,7 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b
 +   '<div class="dp-main">'
 +     srcPanelHtml(id, title, curEp)
 +     '<div class="dp-watch">'
-+       '<div class="dp-player" id="dpPlayer" style="--cover:url(' + esc(posterSrc(id)) + ')"></div>'
++       '<div class="dp-player" id="dpPlayer" style="--cover:url(' + esc(posterHd(id)) + ')"></div>'
 +       '<div class="mbody dp-eps" data-p="detail"></div>'
 +     '</div>'
 +     '<nav class="mtabs dp-nav">'
@@ -3859,7 +3874,11 @@ if (!t || t === list) return;
 var act = t.getAttribute('data-act');
 if (act) {                                    // 绑定入口：只导航，不播放
 if (act === 'bind-quark') srcOpenUrl(SRC_QUARK_BIND);
-else if (act === 'bind-bili') srcOpenUrl(SRC_USER);
+else if (act === 'bind-bili') {
+if (typeof authToken === 'function' && authToken()) srcOpenUrl(SRC_USER);
+else if (typeof openAuthPanel === 'function') openAuthPanel('login');
+else srcOpenUrl(SRC_USER);
+}
 return;
 }
 var key = t.getAttribute('data-src');
