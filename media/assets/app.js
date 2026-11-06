@@ -310,30 +310,6 @@ io.unobserve(e.target);
 }, { rootMargin: '300px' });
 blocks.forEach(function (b) { io.observe(b); });
 }
-function heroBlock(rows) {
-if (!rows || rows.length < 2) return '';
-var best = null;
-rows.forEach(function (r) {
-if (r[7] && (!best || r[7] > best[7])) best = r;
-});
-if (!best) best = rows[0];
-var side = rows.filter(function (r) { return r !== best; })
-.sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); })
-.slice(0, 4);
-var id = best[0];
-var alCover = (ANI.extra[id] || [])[1] || '';
-var fb = PSZ.mode === 'sd' ? [alCover, ANI.poster + id + '.jpg'] : [alCover];
-var sub = [best[4] || '', TYPE[best[3]] || best[3] || '',
-best[7] ? '★' + Number(best[7]).toFixed(1) : ''].filter(Boolean).join(' · ');
-return '<section class="hero" aria-label="本季推荐">'
-+ '<a class="card hero-main" data-id="' + id + '"><div class="pw">'
-+ '<img src="' + esc(posterSrc(id)) + '"' + fbAttr(fb) + ' loading="eager" decoding="async" alt="">'
-+ '</div><div class="hero-txt"><h2 class="t">' + titleHTML(best[2] || best[1]) + '</h2>'
-+ '<p class="sub2">' + esc(sub) + '</p></div></a>'
-+ '<div class="hero-side">'
-+ side.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('')
-+ '</div></section>';
-}
 function topRows(n) {
 return ANI.rows.filter(function (r) { return r[7]; })
 .sort(function (a, b) { return b[7] - a[7]; })
@@ -347,16 +323,51 @@ return '<section class="block"><div class="sec-h"><h2>' + title + '</h2><span cl
 + list.map(function (r) { return animeCard(r, { showYear: 0 }); }).join('')
 + '</div></section>';
 }
+var BANNER_GEN = 0;
+function bannerPick(rows) {
+for (var i = 0; i < rows.length; i++) { if (rows[i] && rows[i][7]) return rows[i]; }
+return null;
+}
+function bannerHtml(r) {
+var id = r[0], name = r[2] || r[1];
+var sub = [r[4] || '', TYPE[r[3]] || r[3] || '',
+r[7] ? '★' + Number(r[7]).toFixed(1) : '', r[8] ? r[8] + ' 话' : '']
+.filter(Boolean).join(' · ');
+return '<a class="bigbanner" href="./detail?id=' + id + '">'
++ '<img class="bigbanner-bg" src="' + esc(posterSrc(id)) + '" alt="">'
++ '<div class="bigbanner-in">'
++ '<span class="bigbanner-tag">本季推荐</span>'
++ '<h2>' + titleHTML(name) + '</h2>'
++ '<p class="bigbanner-sub">' + esc(sub) + '</p>'
++ '<p class="bigbanner-plot"></p>'
++ '</div></a>';
+}
+function fillBannerPlot(main, r, gen) {
+detailShard(r[0]).then(function (list) {
+if (gen !== BANNER_GEN || !list) return;
+var box = main.querySelector('.bigbanner-plot');
+if (!box) return;
+var rec = null;
+for (var i = 0; i < list.length; i++) {
+if (list[i] && list[i].id === r[0]) { rec = list[i]; break; }
+}
+var txt = String((rec && rec.overview) || '').replace(/\s+/g, ' ').trim();
+if (txt) box.textContent = txt.slice(0, 80) + (txt.length > 80 ? '…' : '');
+}, function () { /* 分片拉不到：banner 其余部分照常，简介留空 */ });
+}
 function renderHome() {
 if (!HOME.y) homeDefaults();
 var rows = homeRows();
 var main = $('#main');
-var hero = heroBlock(rows);
 var today = block('今天更新', rows, '');
 if (!today) today = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
 var top = block('本季高分', topRows(8), '<a class="morelink" href="rank">排行榜 ›</a>', 'rankgrid');
-main.innerHTML = '<div class="home-cols">' + renderLevels()
-+ '<div class="home-main">' + hero + today + top + '</div></div>';
+var pick = bannerPick(rows);
+var gen = ++BANNER_GEN;
+main.innerHTML = (pick ? bannerHtml(pick) : '')
++ '<div class="home-cols">' + renderLevels()
++ '<div class="home-main">' + today + top + '</div></div>';
+if (pick) fillBannerPlot(main, pick, gen);
 main.querySelectorAll('[data-q]').forEach(function (b) {
 b.onclick = function () { HOME.q = Number(b.dataset.q); HOME.wd = 0; renderHome(); };
 });
@@ -1148,6 +1159,288 @@ if (!$('#mgrid')) return;
 paintMovieDb();
 applyMovie(reset === true);
 }
+var DETAIL_GEN = 0;            // 每次 renderDetail 自增：异步结果只落最后一代
+function detailId() {
+var m = /[?&]id=(\d+)/.exec(location.search || '');
+return m ? Number(m[1]) : 0;
+}
+function detailShard(id) {
+var sfx = id % 64;
+var pr = shardCache[sfx];
+if (!pr) {
+pr = jd('s' + sfx + '.json').then(function (d) { return d; }, function () {
+delete shardCache[sfx];
+return null;
+});
+shardCache[sfx] = pr;
+}
+return pr;
+}
+function detailEmpty(head, sub, retry, docTitle) {
+var m = $('#modal');
+if (!m) return;
+document.title = (docTitle || head) + ' · 番组计划';
+m.innerHTML = '<nav class="dp-crumb"><a href="./anime">番剧</a><span>/</span><b>'
++ esc(head) + '</b></nav>'
++ '<section class="sect"><div class="sec-h"><h2>' + esc(head) + '</h2></div>'
++ '<p class="plot">' + esc(sub) + '</p>'
++ '<p><a class="btn pri" href="./anime">回番剧页</a>'
++ (retry ? ' <button class="btn" id="dpRetry" type="button">重试</button>' : '')
++ '</p></section>';
+var rb = m.querySelector('#dpRetry');
+if (rb) rb.onclick = function () { renderDetail(); };
+}
+function detailRelated(rec, id) {
+var y = String(rec.air || '').slice(0, 4);
+var t = rec.format || '';
+var out = [], seen = {};
+function add(r) {
+if (!r || r[0] === id || seen[r[0]]) return;
+seen[r[0]] = 1;
+out.push(r);
+}
+function fill(fn) {
+for (var i = 0; i < ANI.rows.length && out.length < 6; i++) {
+if (fn(ANI.rows[i])) add(ANI.rows[i]);
+}
+}
+fill(function (r) { return !!y && String(r[4] || '') === y && (!t || r[3] === t); });
+fill(function (r) { return !!y && String(r[4] || '') === y; });
+fill(function (r) { return !!t && r[3] === t && !!r[7]; });
+return out.slice(0, 6);
+}
+function renderDetail() {
+var m = $('#modal');
+if (!m) return;                            // 非 detail 页 / 壳缺失：不做任何事
+var gen = ++DETAIL_GEN;
+var id = detailId();
+m.setAttribute('data-bgm', '');             // 先清掉上一代的 id：磁力层按它做身份校验
+if (!id) { detailEmpty('条目不存在', '地址里没有 id 参数，回番剧页挑一部吧。', false); return; }
+m.innerHTML = '<div class="loading">详情加载中…</div>';
+detailShard(id).then(function (list) {
+if (gen !== DETAIL_GEN) return;          // 期间又重画过（重试 / 换清晰度）：这一代作废
+if (list === null) {
+detailEmpty('详情加载失败', '详情分片没拉到，检查网络后重试。', true, '条目不存在');
+return;
+}
+var rec = null;
+for (var i = 0; i < (list || []).length; i++) {
+if (list[i] && list[i].id === id) { rec = list[i]; break; }
+}
+if (!rec) { detailEmpty('条目不存在', '这条记录不在详情分片里（可能已下架）。', false); return; }
+drawDetail(m, id, rec);
+});
+}
+function drawDetail(m, id, rec) {
+var row = null;
+for (var i = 0; i < ANI.rows.length; i++) { if (ANI.rows[i][0] === id) { row = ANI.rows[i]; break; } }
+var ex = ANI.extra[id] || [];
+var title = (row && (row[2] || row[1])) || rec.name_cn || rec.name || ('#' + id);
+var orig = (row && row[1]) || rec.name || '';
+var air = String(rec.air || '');            // 分片里是完整日期（2006-09-01），列表行只有年份
+var year = (row && row[4]) || Number(air.slice(0, 4)) || 0;
+var month = (row && row[5]) || Number(air.slice(5, 7)) || 0;
+var type = (row && row[3]) || rec.format || '';
+var epsN = (row && row[8]) || rec.episodes || 0;
+var rating = Number(rec.rating || (row && row[7]) || 0);
+var rank = Number(rec.rank || (row && row[12]) || 0);
+var votes = Number(rec.votes || 0);
+var co = rec.co && rec.co.length ? rec.co : [];
+var curEp = 1;
+var prog = progressOf(id);
+if (prog && Number(prog.ep) > 0) curEp = Math.floor(Number(prog.ep));
+var meta = [];
+if (votes) meta.push(votes + ' 人评分');
+if (rank) meta.push('排名 #' + rank);
+var collect = ['想看', '在看', '看过'].map(function (lb, k) {
+return '<span><b>' + (co[k] == null || co[k] === '' ? '—' : esc(String(co[k])))
++ '</b><i>' + lb + '</i></span>';
+}).join('');
+var info = [];
+if (air) info.push(['放送', air]);
+else if (year) info.push(['放送', year + ' 年']);
+if (epsN) info.push(['话数', epsN + ' 话']);
+if (type) info.push(['类型', TYPE[type] || type]);
+if (orig && orig !== title) info.push(['原名', orig]);
+info.push(['来源', 'Bangumi']);            // magnet-eps.js 的 episodeCount() 读这里的「话数」
+var infoRows = info.map(function (kv) {
+return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
+}).join('');
+var relHtml = detailRelated(rec, id).map(function (r) {
+return animeCard(r, { showYear: 1 });
+}).join('');
+m.innerHTML = '<nav class="dp-crumb"><a href="./anime">番剧</a><span>/</span><b>'
++ esc(title) + '</b></nav>'
++ '<section class="mhero">'
++   '<img class="mposter" src="' + esc(posterSrc(id)) + '"' + fbAttr([ex[1]]) + ' alt="">'
++   '<div class="mh-info">'
++     '<h3>' + esc(title) + '</h3>'
++     (orig && orig !== title ? '<div class="orig">' + esc(orig) + '</div>' : '')
++     '<div class="mbadges">'
++       (year ? '<span class="mbadge">' + year + (month ? ' 年 ' + month + ' 月' : ' 年') + '</span>' : '')
++       (type ? '<span class="mbadge">' + esc(TYPE[type] || type) + '</span>' : '')
++       (epsN ? '<span class="mbadge">' + epsN + ' 话</span>' : '')
++     '</div>'
++     '<div class="mrate-line">'
++       (rating
+? '<b class="score">' + rating.toFixed(1) + '</b>'
++ '<span class="stars" style="--p:'
++ Math.max(0, Math.min(100, Math.round(rating * 10))) + '"></span>'
+: '<b class="score dim">暂无评分</b>')
++       '<span class="votes">' + esc(meta.join(' · ')) + '</span>'
++     '</div>'
++     '<div class="mcollect">' + collect + '</div>'
++     '<div class="acts">'
++       '<button class="btn pri" id="watch" type="button">▶ 播放</button>'
++       '<button class="btn" id="favbtn" type="button">☆ 追番</button>'
++       '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
++     '</div>'
++   '</div>'
++ '</section>'
++ '<div class="dp-grid">'
++   '<div class="dp-main">'
++     srcPanelHtml(id, title, curEp)
++     '<div class="dp-watch">'
++       '<div class="dp-player" id="dpPlayer"></div>'
++       '<div class="mbody dp-eps" data-p="detail"></div>'
++     '</div>'
++     '<nav class="mtabs dp-nav">'
++       '<a class="mtab on" href="#dp-plot">简介</a>'
++       '<a class="mtab" href="#dp-chars">角色</a>'
++       '<a class="mtab" href="#dp-staff">制作</a>'
++       '<a class="mtab" href="#dp-rt">评价</a>'
++       '<a class="mtab" href="#dp-dm">弹幕</a>'
++       '<a class="mtab" href="#dp-rp">评论</a>'
++     '</nav>'
++     '<div class="mbody" data-p="detail">'
++       '<section class="sect" id="dp-plot"><div class="sec-h"><h2>简介</h2></div>'
++         '<p class="plot" id="plot"></p></section>'
++       '<section class="sect"><div class="sec-h"><h2>标签</h2></div>'
++         '<div class="tagpills" id="tags"></div></section>'
++       '<section class="sect" id="dp-chars"><div class="sec-h"><h2>角色</h2></div>'
++         '<div class="chgrid"></div></section>'
++       '<section class="sect" id="dp-staff"><div class="sec-h"><h2>制作人员</h2></div>'
++         '<div class="staffgrid"></div></section>'
++     '</div>'
++     '<div class="mbody" data-p="rt" id="dp-rt"><section class="sect">'
++       '<div class="sec-h"><h2>评分分布</h2></div><div id="prt"></div></section></div>'
++     '<div class="mbody" data-p="dm" id="dp-dm"><div id="pdm"></div></div>'
++     '<div class="mbody" data-p="rp" id="dp-rp"><div id="prp"></div></div>'
++   '</div>'
++   '<aside class="dp-side">'
++     '<section class="sect"><div class="sec-h"><h2>信息</h2></div>'
++       '<dl class="infobox">' + infoRows + '</dl></section>'
++     '<section class="sect"><div class="sec-h"><h2>相关推荐</h2>'
++       '<span class="sec-sub">同年份 · 同类型</span></div>'
++       '<div class="grid dp-rel">' + relHtml + '</div></section>'
++     '<section class="sect"><div class="sec-h"><h2>数据来源</h2></div>'
++       '<p class="dp-src">Bangumi · AniList · B 站</p></section>'
++   '</aside>'
++ '</div>';
+m.setAttribute('data-bgm', String(id));
+document.title = title + ' · 番组计划';
+srcPanelMount(m, id, title, curEp);
+var plot = m.querySelector('#plot');
+if (plot) plot.textContent = String(rec.overview || '暂无简介').replace(/\n{3,}/g, '\n\n');
+renderTags(rec, m.querySelector('#tags'));
+ensureTagCounts(function () { renderTags(rec, m.querySelector('#tags')); });
+var chgrid = m.querySelector('.chgrid');
+if (chgrid && rec.ch && rec.ch.length) {
+chgrid.innerHTML = rec.ch.map(function (c) {
+var av = avatarSrc(c[2]);
+return '<div class="chcard"><span class="ph">'
++ '<span class="chin">' + esc(Array.from(String(c[0] == null ? '' : c[0]))[0] || '?') + '</span>'
++ (av ? '<img class="chav" src="' + esc(av) + '" alt="" referrerpolicy="no-referrer"'
++ ' loading="lazy" decoding="async" onerror="this.remove()">' : '')
++ '</span><div class="chinfo"><b>' + esc(c[0]) + '</b><em>' + esc(c[1]) + '</em></div></div>';
+}).join('');
+} else {
+var sChars = m.querySelector('#dp-chars');
+if (sChars) sChars.hidden = true;
+}
+var staffgrid = m.querySelector('.staffgrid');
+if (staffgrid && rec.st && rec.st.length) {
+staffgrid.innerHTML = rec.st.map(function (p) {
+return '<div class="staff"><b>' + esc(p[0]) + '</b>'
++ (p[1] ? '<em>' + esc(p[1]) + '</em>' : '') + '</div>';
+}).join('');
+} else {
+var sStaff = m.querySelector('#dp-staff');
+if (sStaff) sStaff.hidden = true;
+}
+var prt = m.querySelector('#prt');
+if (prt) {
+if (rec.rc && rec.rc.length === 10) {
+var mx = Math.max.apply(null, rec.rc);
+var sum = rec.rc.reduce(function (a, b) { return a + b; }, 0);
+var bars = rec.rc.map(function (n, k) {
+var bh = mx ? Math.max(2, Math.round((n / mx) * 100)) : 2;
+return '<i style="height:' + bh + '%" title="' + (k + 1) + ' 分 · ' + n + ' 人">'
++ '<b>' + (k + 1) + '</b></i>';
+}).join('');
+prt.innerHTML = '<div class="rdist" id="rdist"><div class="rdhead">星级分布合计 <b>'
++ sum + '</b> 人'
++ (rank ? ' · 排名 <b>#' + rank + '</b>' : '')
++ (votes ? ' · Bangumi 共 ' + votes + ' 人评分' : '') + '</div>' + bars + '</div>';
+} else {
+prt.innerHTML = '<p class="plot">暂无评分分布</p>';
+}
+}
+var wb = m.querySelector('#watch');
+if (wb) wb.onclick = function () { openQuarkPlay(m.querySelector('#dpPlayer') || m, id, title); };
+var fb = m.querySelector('#favbtn');
+if (fb) {
+var fk = String(id);
+fb.textContent = isFollowed(fk) ? '★ 已追' : '☆ 追番';
+fb.classList.toggle('on', isFollowed(fk));
+fb.onclick = function () {
+var now = toggleFollow(fk);
+fb.textContent = now ? '★ 已追' : '☆ 追番';
+fb.classList.toggle('on', now);
+};
+}
+var nav = m.querySelector('.dp-nav');
+if (nav) {
+nav.onclick = function (ev) {
+var a = ev.target;
+while (a && a !== nav && !(a.tagName === 'A' && String(a.getAttribute('href') || '').charAt(0) === '#')) {
+a = a.parentNode;
+}
+if (!a || a === nav) return;
+var aid = String(a.getAttribute('href')).slice(1);
+var target = document.getElementById(aid);
+if (!target) return;                    // 该节没有内容（角色/制作被收起）就不动
+ev.preventDefault();
+nav.querySelectorAll('.mtab').forEach(function (x) { x.classList.toggle('on', x === a); });
+var off = 0;
+var head = document.querySelector('header.site-head');
+if (head && head.getBoundingClientRect) off += head.getBoundingClientRect().height || 0;
+if (nav.getBoundingClientRect && (window.innerWidth || 0) > 760) {
+off += nav.getBoundingClientRect().height || 0;
+}
+var y = target.getBoundingClientRect
+? target.getBoundingClientRect().top + (window.pageYOffset || 0) - off - 8
+: 0;
+if (window.scrollTo) {
+try { window.scrollTo({ top: y, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, y); }
+}
+try { history.replaceState(null, '', '#' + aid); } catch (e) { /* 隐私模式忽略 */ }
+};
+}
+var rel = m.querySelector('.dp-rel');
+if (rel) {
+rel.onclick = function (ev) {
+var c = ev.target;
+while (c && c !== rel && !(c.className && /(^|\s)card(\s|$)/.test(c.className))) c = c.parentNode;
+if (!c || c === rel) return;
+var rid = c.getAttribute('data-id');
+if (!rid) return;
+ev.preventDefault();
+location.href = './detail?id=' + rid;
+};
+}
+bindBili(id, title, (row && row[4]) || '');
+}
 var MODAL_GEN = 0;
 function urlWithId(id) {
 var parts = location.search.replace(/^\?/, '').split('&');
@@ -1178,6 +1471,9 @@ var ex = ANI.extra[id] || [];
 var title = r[2] || r[1];
 var m = $('#modal');
 if (!m) return;                              // 页面没有 #modal 壳时别抛引用错
+var curEp = 1;
+var prog = progressOf(id);
+if (prog && Number(prog.ep) > 0) curEp = Math.floor(Number(prog.ep));
 var host = m, gen = ++MODAL_GEN;             // 这一代弹窗的容器引用与代号
 m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
 + '<div class="mhero">'
@@ -1208,6 +1504,7 @@ m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
 +     '</div>'
 +   '</div>'
 + '</div>'
++ srcPanelHtml(id, title, curEp)
 + '<div class="mtabs">'
 +   '<button class="mtab on" data-p="detail" type="button">详情</button>'
 +   '<button class="mtab" data-p="rt" type="button">评价</button>'
@@ -1265,6 +1562,7 @@ if (gen !== MODAL_GEN || !rec) return;
 renderTags(rec, host.querySelector('#tags'));
 });
 bindBili(id, title, r[4] || '');
+srcPanelMount(m, id, title, curEp);
 var sfx = id % 64;
 var pr = shardCache[sfx];
 if (!pr) {
@@ -1346,6 +1644,7 @@ var mv = host.querySelector('#mvotes'); if (mv) mv.textContent = meta.join(' · 
 });
 }
 function close() {
+if (PAGE === 'detail') return;
 var m = $('#modal');
 if (m) {
 var tr = m.querySelectorAll('.trailer');
@@ -1398,6 +1697,7 @@ var QP_FID_KEY = 'qp_fid';             // {"<bgm id>:<ep>": {fid,name,size,ts}}
 var QP_FID_TTL = 60 * 60 * 1000;       // fid 缓存 1h：文件不会每分钟改名，地址才会过期
 var QP_TIMER = 0;                      // 挂起的转码 / 转存轮询（模块级：新播放 / 关播放器都要能掐掉）
 var QP_GEN = 0;                        // 每次开播自增：异步回调据此判断自己是否已被后来的一次播放取代
+window.__qpAbort = function () { QP_GEN += 1; };
 function qpReq(method, path, tk, body, keepalive) {
 var opt = { method: method, headers: { authorization: 'Bearer ' + tk } };
 if (body != null) {
@@ -3230,6 +3530,270 @@ area: dm.area, alpha: dm.alpha, cid: dm.cid
 };
 })();
 window.QPlayer = QPlayer;
+var SRC_BASE = 'https://120.48.56.189';
+var SRC_TTL = 60 * 1000;                       // 探测结果缓存时长
+var SRC_QUARK_BIND = 'https://120.48.56.189/qr/';
+var SRC_USER = './user';                       // B 站绑定在个人主页
+var SRC_KEYS = ['quark', 'bili', 'byo', 'magnet'];
+var SRC_NAME = { quark: '夸克网盘', bili: 'B 站', byo: '自备源', magnet: '磁力' };
+var SRC_MEM = {};                              // "<id>:<ep>" -> {ts, data, pend}
+var SRC_MGEN = 0;                              // 每 mount 一次自增：异步结果只落最新那一代
+function srcToken() {
+try { return localStorage.getItem('gh_token') || ''; } catch (e) { return ''; }
+}
+function srcGet(path, tk) {
+var headers = {};
+if (tk) headers.authorization = 'Bearer ' + tk;
+var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
+var opt = { method: 'GET', headers: headers };
+if (ctl) opt.signal = ctl.signal;
+return fetch(SRC_BASE + path, opt).then(function (r) {
+clearTimeout(timer);
+return r.text().then(function (t) {
+var j = null;
+try { j = JSON.parse(t); } catch (e) { j = null; }
+if (!j || typeof j !== 'object') j = {};
+return { status: Number(r.status) || 0, ok: !!r.ok, j: j };
+});
+}, function () {
+clearTimeout(timer);
+return { status: 0, ok: false, j: {} };
+});
+}
+function srcPickEp(items, title, ep) {
+if (typeof qpPickEp === 'function') return qpPickEp(items || [], title, ep);
+var list = items || [], re = null;
+try { re = new RegExp('第\\s*' + ep + '\\s*[话話集期]|\\[0?' + ep + '(?:v\\d)?\\]', 'i'); }
+catch (e) { return null; }
+for (var i = 0; i < list.length; i++) {
+if (list[i] && re.test(String(list[i].name || ''))) return list[i];
+}
+return null;
+}
+function srcProbeQuark(title, ep, tk) {
+return srcGet('/tvplay/find?q=' + encodeURIComponent(title) + '&limit=20', tk).then(function (r) {
+var j = r.j || {}, st = String(j.state || '');
+if (st === 'found') return { kind: 'found', hit: !!srcPickEp(j.items, title, ep) };
+if (st === 'none') return { kind: 'none' };
+if (st === 'need_rebind' || st === 'unauthorized') return { kind: 'bind' };
+if (r.status === 409 || r.status === 401) return { kind: 'bind' };
+return { kind: 'error' };
+});
+}
+function srcProbeBili(tk) {
+return srcGet('/bili/bind', tk).then(function (r) {
+var j = r.j || {};
+if (r.ok && j.ok && j.bound) {
+return { kind: 'bound', uname: String(j.uname || '已绑定'), vip: Number(j.vip_type) || 0 };
+}
+if (r.status === 404 || r.status === 401) return { kind: 'unbound' };
+if (j.bound === false || j.error === 'not_bound' || j.ok === false) return { kind: 'unbound' };
+return { kind: 'error' };
+});
+}
+function srcProbeMagnet(title, id, ep) {
+var api = window.__epsApi;
+if (!api || typeof api.resolveEntry !== 'function') return Promise.resolve({ kind: 'none' });
+return api.resolveEntry(title, id).then(function (entry) {
+var list = typeof qpEpList === 'function' ? qpEpList(entry) : [];
+for (var i = 0; i < list.length; i++) {
+if (Number(list[i].ep) === Number(ep) && list[i].magnet) return { kind: 'has' };
+}
+return { kind: 'none' };
+}, function () { return { kind: 'error' }; });
+}
+function srcByoCount(id) {
+var qp = window.QPlayer;
+if (!qp || !qp._lines || typeof qp._lines.of !== 'function') return 0;
+try {
+var arr = qp._lines.of(id);
+return Object.prototype.toString.call(arr) === '[object Array]' ? arr.length : 0;
+} catch (e) { return 0; }
+}
+function srcProbe(id, title, ep, force) {
+var key = String(id) + ':' + String(ep);
+var now = Date.now(), mem = SRC_MEM[key];
+if (!force && mem && now - mem.ts < SRC_TTL) return mem.pend || Promise.resolve(mem.data);
+var rec = { ts: now, data: null, pend: null };
+SRC_MEM[key] = rec;
+var tk = srcToken();
+rec.pend = Promise.all([
+srcProbeQuark(title, ep, tk),
+srcProbeBili(tk),
+srcProbeMagnet(title, id, ep)
+]).then(function (arr) {
+var data = { quark: arr[0], bili: arr[1], magnet: arr[2] };
+if (SRC_MEM[key] === rec) { rec.data = data; rec.ts = Date.now(); }   // 代次没被重探顶掉才落缓存
+return data;
+});
+return rec.pend;
+}
+function srcPanelHtml(id, title, ep) {
+var rows = SRC_KEYS.map(function (k) {
+return '<span class="qp-line-row" data-row="' + k + '">'
++ '<button class="qp-line" type="button" data-src="' + k + '">'
++ esc(SRC_NAME[k]) + ' · 检测中…</button>'
++ '<button class="btn" type="button" data-act="bind-' + k + '" hidden>绑定</button>'
++ '</span>';
+}).join('');
+return '<section class="dp-srcs" data-open="1" data-bgm="' + esc(id) + '">'
++ '<div class="sec-h"><h2>播放源</h2>'
++ '<span class="sec-sub" id="srcHint">按可用性排序</span></div>'
++ '<div class="qp-line-list" id="srcList">' + rows + '</div>'
++ '</section>';
+}
+function srcCls(el, cls, on) {
+if (!el) return;
+var parts = String(el.className || '').split(/\s+/), has = false, out = [];
+for (var i = 0; i < parts.length; i++) {
+if (!parts[i]) continue;
+if (parts[i] === cls) { has = true; if (!on) continue; }
+out.push(parts[i]);
+}
+if (on && !has) out.push(cls);
+el.className = out.join(' ');
+}
+function srcRowOf(list, key) {
+var rows = list ? list.querySelectorAll('.qp-line-row') : [];
+for (var i = 0; i < rows.length; i++) {
+if (String(rows[i].getAttribute('data-row') || '') === key) return rows[i];
+}
+return null;
+}
+function srcSetRow(list, key, text, opt) {
+var row = srcRowOf(list, key);
+if (!row) return;
+opt = opt || {};
+var btn = row.querySelector('.qp-line');
+if (btn) {
+btn.textContent = text;
+srcCls(btn, 'on', !!opt.on);
+srcCls(btn, 'is-bad', !!opt.bad);
+}
+row.setAttribute('data-fail', opt.retry ? '1' : '0');
+var bind = row.querySelector('.btn');
+if (bind) bind.hidden = !opt.bind;
+}
+function srcPaint(panel, id, ep, data) {
+var list = panel ? panel.querySelector('.qp-line-list') : null;
+if (!list) return;
+var epNo = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
+var q = data && data.quark;
+if (!data) srcSetRow(list, 'quark', '夸克网盘 · 检测中…');
+else if (q.kind === 'found') {
+if (q.hit) srcSetRow(list, 'quark', '夸克网盘 · 第 ' + epNo + ' 集已转存', { on: true });
+else srcSetRow(list, 'quark', '夸克网盘 · 本集未转存');
+}
+else if (q.kind === 'bind') srcSetRow(list, 'quark', '夸克网盘 · 需绑定', { bind: true });
+else if (q.kind === 'none') srcSetRow(list, 'quark', '夸克网盘 · 无此片');
+else srcSetRow(list, 'quark', '夸克网盘 · 检测失败 · 点此重试', { bad: true, retry: true });
+var b = data && data.bili;
+if (!data) srcSetRow(list, 'bili', 'B 站 · 检测中…');
+else if (b.kind === 'bound') {
+srcSetRow(list, 'bili', 'B 站 · ' + b.uname + '（VIP' + b.vip + '）', { on: true });
+}
+else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 需绑定', { bind: true });
+else srcSetRow(list, 'bili', 'B 站 · 检测失败 · 点此重试', { bad: true, retry: true });
+var n = srcByoCount(id);
+if (n > 0) srcSetRow(list, 'byo', '自备源 · ' + n + ' 条', { on: true });
+else srcSetRow(list, 'byo', '自备源 · 未添加');
+var mg = data && data.magnet;
+if (!data) srcSetRow(list, 'magnet', '磁力 · 检测中…');
+else if (mg.kind === 'has') srcSetRow(list, 'magnet', '磁力 · 第 ' + epNo + ' 集可转存', { on: true });
+else if (mg.kind === 'none') srcSetRow(list, 'magnet', '磁力 · 本集无资源');
+else srcSetRow(list, 'magnet', '磁力 · 检测失败 · 点此重试', { bad: true, retry: true });
+}
+function srcHint(host, text) {
+var panel = host && host.querySelector ? host.querySelector('.dp-srcs') : null;
+var h = panel ? panel.querySelector('.sec-sub') : null;
+if (h) h.textContent = text;
+}
+function srcMount(host, id, title, ep, force) {
+if (!host || !host.querySelector) return;
+var panel = host.querySelector('.dp-srcs');
+if (!panel) return;
+var list = panel.querySelector('.qp-line-list');
+if (!list) return;
+var epNo = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
+var gen = ++SRC_MGEN;
+panel.setAttribute('data-mgen', String(gen));
+list.onclick = function (ev) { srcClick(host, list, ev, id, title, epNo); };
+srcHint(host, '按可用性排序');
+if (!force) {
+var key = String(id) + ':' + String(epNo), mem = SRC_MEM[key];
+if (mem && mem.data && Date.now() - mem.ts < SRC_TTL) {
+srcPaint(panel, id, epNo, mem.data);       // 60s 内二次 mount：不重探、立刻有文案
+return;
+}
+}
+srcPaint(panel, id, epNo, null);
+srcProbe(id, title, epNo, force).then(function (data) {
+if (panel.getAttribute('data-mgen') !== String(gen)) return;   // 已被重探/重画取代
+srcPaint(panel, id, epNo, data);
+});
+}
+function srcPanelMount(host, id, title, ep) { srcMount(host, id, title, ep, false); }
+function srcOpenUrl(url) {
+try {
+if (typeof window.open === 'function') {
+var w = window.open(url, '_blank', 'noopener');
+if (w) return;
+}
+} catch (e) { /* 被拦截：退化成同页跳转 */ }
+try { window.location.href = url; } catch (e2) { /* 忽略 */ }
+}
+function srcClick(host, list, ev, id, title, ep) {
+var t = ev && ev.target ? ev.target : null;
+while (t && t !== list) {
+if (t.getAttribute && (t.getAttribute('data-src') || t.getAttribute('data-act'))) break;
+t = t.parentNode;
+}
+if (!t || t === list) return;
+var act = t.getAttribute('data-act');
+if (act) {                                    // 绑定入口：只导航，不播放
+if (act === 'bind-quark') srcOpenUrl(SRC_QUARK_BIND);
+else if (act === 'bind-bili') srcOpenUrl(SRC_USER);
+return;
+}
+var key = t.getAttribute('data-src');
+if (!key) return;
+var row = t.parentNode;
+if (row && String(row.getAttribute('data-fail') || '') === '1') {
+srcMount(host, id, title, ep, true);        // 失败行：点一下重探
+return;
+}
+srcPlay(key, host, id, title, ep);
+}
+function srcPlay(key, m, id, title, ep) {
+var epNo = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
+var box = m && m.querySelector ? m : (typeof $ === 'function' ? $('#modal') : null);
+if (!box) return;
+if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
+if (typeof window.__qpAbort === 'function') window.__qpAbort();
+if (typeof window.__biliAbort === 'function') window.__biliAbort();
+if (key === 'bili') {
+if (typeof biliPlayEp === 'function') biliPlayEp(box, id, title, epNo);
+return;
+}
+if (key === 'byo') {
+var slot = box.querySelector('#dpPlayer') || box;
+if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+if (!srcOpenLines()) srcHint(box, '在播放器里展开「线路」');
+return;
+}
+if (key === 'quark' || key === 'magnet') {     // 磁力同夸克：none 态由 75 自己给转存动作
+var q = box.querySelector('#dpPlayer') || box;
+if (typeof openQuarkPlay === 'function') openQuarkPlay(q, id, title);
+}
+}
+function srcOpenLines() {
+var qp = window.QPlayer;
+if (!qp) return false;
+var fn = qp.openLines || qp.showLines || qp.expandLines;
+if (typeof fn !== 'function') return false;
+try { fn(); return true; } catch (e) { return false; }
+}
 var BILI = {};          // id -> {bvid, aid, pages:[{page,cid,part}]}
 var BILI_P = {};        // id -> 在途的 resolve：同 id 并发共用一次请求
 var BILI_BASE = 'https://120.48.56.189/bili/';
@@ -3312,22 +3876,28 @@ return '<div class="rprow' + (it.re === 1 ? ' re' : '') + '">'
 + '<p>' + esc(it.m) + '</p></div></div>';
 }).join('');
 }
-function bindBili(id, title, year) {
-var m = $('#modal');
-if (!m) return;
-m.querySelectorAll('.mtab').forEach(function (b) {
-b.onclick = function () {
-var p = b.getAttribute('data-p');
-m.querySelectorAll('.mtab').forEach(function (x) { x.classList.toggle('on', x === b); });
-m.querySelectorAll('.mbody').forEach(function (x) {
-x.hidden = x.getAttribute('data-p') !== p;
-});
-if (p === 'dm' && !m.querySelector('#pdm').dataset.done) {
-m.querySelector('#pdm').dataset.done = '1';
-m.querySelector('#pdm').innerHTML = '<div class="mnote">弹幕加载中…</div>';
+function biliWhenVisible(box, load) {
+if (!box) return;
+if (!window.IntersectionObserver) { load(box); return; }
+var io = new window.IntersectionObserver(function (es) {
+for (var i = 0; i < es.length; i++) {
+if (!es[i].isIntersecting) continue;
+io.disconnect();
+load(box);
+return;
+}
+}, { rootMargin: '200px' });
+io.observe(box);
+}
+function biliLoadDm(box, id, title, year) {
+if (!box || box.getAttribute('data-done')) return;
+box.setAttribute('data-done', '1');
+box.innerHTML = '<div class="mnote">弹幕加载中…</div>';
 biliResolve(id, title, year).then(function (v) {
-var box = m.querySelector('#pdm');
-if (!v || !v.pages || !v.pages.length) { box.innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; return; }
+if (!v || !v.pages || !v.pages.length) {
+box.innerHTML = '<div class="mnote">未匹配到 B 站源</div>';
+return;
+}
 var pg = v.pages[0];
 return biliGet('dm', { cid: pg.cid }).then(function (d) {
 renderDm(box, d, v.pages, pg.page);
@@ -3341,21 +3911,40 @@ renderDm(box, dd, v.pages, Number(c.getAttribute('data-pg')));
 };
 });
 });
-}).catch(function () { m.querySelector('#pdm').innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; });
+}).catch(function () { box.innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; });
 }
-if (p === 'rp' && !m.querySelector('#prp').dataset.done) {
-m.querySelector('#prp').dataset.done = '1';
-m.querySelector('#prp').innerHTML = '<div class="mnote">评论加载中…</div>';
+function biliLoadRp(box, id, title, year) {
+if (!box || box.getAttribute('data-done')) return;
+box.setAttribute('data-done', '1');
+box.innerHTML = '<div class="mnote">评论加载中…</div>';
 biliResolve(id, title, year).then(function (v) {
-if (!v || !v.aid) { m.querySelector('#prp').innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; return; }
-return biliGet('reply', { aid: v.aid, ps: 20 }).then(function (d) { renderRp(m.querySelector('#prp'), d); });
-}).catch(function () { m.querySelector('#prp').innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; });
+if (!v || !v.aid) { box.innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; return; }
+return biliGet('reply', { aid: v.aid, ps: 20 }).then(function (d) { renderRp(box, d); });
+}).catch(function () { box.innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; });
 }
+function bindBili(id, title, year) {
+var m = $('#modal');
+if (!m) return;
+if (PAGE === 'detail') {
+biliWhenVisible(m.querySelector('#pdm'), function (box) { biliLoadDm(box, id, title, year); });
+biliWhenVisible(m.querySelector('#prp'), function (box) { biliLoadRp(box, id, title, year); });
+return;
+}
+m.querySelectorAll('.mtab').forEach(function (b) {
+b.onclick = function () {
+var p = b.getAttribute('data-p');
+m.querySelectorAll('.mtab').forEach(function (x) { x.classList.toggle('on', x === b); });
+m.querySelectorAll('.mbody').forEach(function (x) {
+x.hidden = x.getAttribute('data-p') !== p;
+});
+if (p === 'dm') biliLoadDm(m.querySelector('#pdm'), id, title, year);
+if (p === 'rp') biliLoadRp(m.querySelector('#prp'), id, title, year);
 };
 });
 biliEntry(m, id, title);
 }
 var BILI_PLAY_GEN = 0;      // 连点两次：只让最后一次的异步结果落地
+window.__biliAbort = function () { BILI_PLAY_GEN += 1; };
 var BILI_EP_RE = /第\s*(\d+)\s*[话集]|\[(\d{1,3})\]|E(\d{1,3})|S\d+E(\d{1,3})|_(\d{1,3})/;
 function biliEpNo(part) {
 var m = BILI_EP_RE.exec(String(part == null ? '' : part));
@@ -3392,16 +3981,39 @@ if (ctl && ctl.signal && ctl.signal.aborted) throw new Error('网络慢，请重
 throw new Error('网络异常，请检查连接');
 });
 }
-function biliOpenPlayer(m, id, title, ep, cid, url) {
+function biliOpenPlayer(m, id, title, ep, cid, url, eps) {
+var list = eps || [];
 var ctx = {
 m: m,
 id: String(id),
 title: String(title || ''),
 ep: ep,
-sources: url ? [{ label: 'B 站（弹幕版）', url: String(url), type: 'mp4' }] : []
+sources: url ? [{ label: 'B 站（弹幕版）', url: String(url), type: 'mp4' }] : [],
+onProgress: function (p) {
+if (!p) return;
+var prev = null;
+try { prev = window.__prog && window.__prog.get ? window.__prog.get(id) : null; } catch (e) { prev = null; }
+var extra = prev && Number(prev.ep) === Number(p.ep)
+? { fid: prev.fid || '', pos: p.pos || 0, dur: p.dur || 0 }
+: { fid: '', pos: p.pos || 0, dur: p.dur || 0 };
+if (window.__prog && typeof window.__prog.report === 'function') {
+try { window.__prog.report(id, p.ep, extra); } catch (e) { /* 上报失败不影响播放 */ }
+}
+},
+onNext: function () {
+var curEp = Number(ep);
+if (!list.length) return;
+var i = -1;
+for (var k = 0; k < list.length; k++) { if (Number(list[k].ep) === curEp) { i = k; break; } }
+if (i >= 0 && i + 1 < list.length) biliPlayEp(m, id, title, Number(list[i + 1].ep));
+},
+onPickEp: function (ep) { biliPlayEp(m, id, title, Number(ep) || 1); }
 };
 if (cid) ctx.dm = { cid: String(cid) };
-return window.QPlayer.open(ctx);
+var tok = window.QPlayer.open(ctx);
+if (list.length) window.QPlayer.setEpisodes(list, ep, '');
+else window.QPlayer.setEpisodes([], ep);
+return tok;
 }
 function biliPlayEp(m, id, title, ep) {
 var tk = '';
@@ -3410,22 +4022,27 @@ if (!tk) { if (window.__openLogin) window.__openLogin('email'); return; }
 if (!m || !window.QPlayer) return;
 var want = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
 var gen = ++BILI_PLAY_GEN;
+var eps = [];             // 分P 列表：resolve 回来才填，失败/超时路径保持空数组
 function fail(msg, state) {
-biliOpenPlayer(m, id, title, want, 0, '');
+biliOpenPlayer(m, id, title, want, 0, '', eps);
 window.QPlayer.state(state || 'error', { msg: msg });
 }
 biliResolve(id, title).then(function (v) {
 if (gen !== BILI_PLAY_GEN) return;
 if (!v || !v.bvid || !v.pages || !v.pages.length) { fail('没找到这部番的 B 站源，换夸克源试试'); return; }
+eps = (v.pages || []).map(function (p) {
+var n = biliEpNo(p.part);
+return { ep: n || (p.page || 0), label: p.part || ('第 ' + (p.page || '') + ' 集') };
+}).filter(function (x) { return x.ep > 0; });
 var pg = biliPickPage(v.pages, want);
 if (!pg || !pg.cid) { fail('这一集没有可用的 B 站分P'); return; }
 return biliAuth('playurl', 'POST', { bvid: v.bvid, cid: pg.cid, qn: 80 }, 20000).then(function (r) {
 if (gen !== BILI_PLAY_GEN) return;
 var j = r.j || {};
-if (r.ok && j.ok && j.url) { biliOpenPlayer(m, id, title, want, pg.cid, j.url); return; }
+if (r.ok && j.ok && j.url) { biliOpenPlayer(m, id, title, want, pg.cid, j.url, eps); return; }
 if (r.status === 401) { fail('站点登录已失效，请重新登录', 'login'); return; }
 if (j.error === 'need_rebind' || j.error === 'not_bound') {
-biliOpenPlayer(m, id, title, want, 0, '');
+biliOpenPlayer(m, id, title, want, 0, '', eps);
 window.QPlayer.state('rebind', {
 msg: 'B 站登录已失效，去个人主页重新粘贴 SESSDATA',
 actions: [{ label: '去个人主页', href: 'user' }]
@@ -3545,6 +4162,7 @@ if (PAGE === 'anime') applyBrowse(true);
 else if (PAGE === 'movie') refreshMovie(true);
 else if (PAGE === 'rank') renderRank();
 else if (PAGE === 'user') renderUser();
+else if (PAGE === 'detail') renderDetail();
 else renderHome();
 }
 function syncPsz(btn) {
@@ -3904,8 +4522,8 @@ paintLoginEntry(el);
 function bootHeader() {
 var P = PAGE;
 var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
-var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'],
-['movie', 'movie', '电影'], ['rank', 'rank', '排行榜']]
+var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
+['rank', 'rank', '排行榜'], ['user', 'user', '我的']]
 .map(function (x) {
 return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
 }).join('');
@@ -3925,13 +4543,14 @@ return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x
 }).join('');
 var host = document.getElementById('topbar');
 if (!host) return;
-host.innerHTML = '<div class="wrap"><a class="brand" href="./"><i></i>番组<b>计划</b></a>'
-+ '<nav class="mainnav">' + nav + '</nav><div class="head-spacer"></div>'
+host.innerHTML = '<div class="sky"><div class="hd-wrap">'
++ '<a class="brand" href="./"><i></i>番组<b>计划</b></a>'
 + '<div class="searchbox"><input id="q" type="search" placeholder="' + ph + '" autocomplete="off"></div>'
-+ '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
-+ '<button class="thm" id="thm" type="button" aria-label="切换主题">☀</button>'
 + '<span class="cnt" id="cnt"></span>'
-+ '<span class="build" id="build">' + (document.body.dataset.build || '') + '</span></div>';
++ '<button class="thm" id="thm" type="button" aria-label="切换主题">☀</button>'
++ '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
++ '</div></div>'
++ '<nav class="mainmenu mainnav"><div class="hd-wrap">' + nav + '</div></nav>';
 paintAuth();
 applyTheme(currentTheme());
 var thm = $('#thm');
@@ -3950,6 +4569,7 @@ function deepLinkId() {
 var m = /[?&]id=(\d+)/.exec(location.search || '');
 return m ? Number(m[1]) : 0;
 }
+var DEEP_REDIRECT = false;
 function bootAnime() {
 return jd('anime.json').then(function (d) {
 ANI.poster = d.poster || ''; ANI.posterSd = d.posterSd || '';
@@ -3967,6 +4587,7 @@ return;
 }
 var c = e.target.closest && e.target.closest('.card');
 if (!c) return;
+if (PAGE === 'detail') return;
 openModal(Number(c.dataset.id));
 });
 $('#mask') && $('#mask').addEventListener('click', function (e) { if (e.target.id === 'mask') close(); });
@@ -3985,7 +4606,10 @@ clearTimeout(qt);
 qt = setTimeout(applyBrowse, 220);
 });
 var deep = deepLinkId();
-if (deep) openModal(deep);
+if (deep && !DEEP_REDIRECT) {
+DEEP_REDIRECT = true;
+location.replace('./detail?id=' + deep);
+}
 } else if (PAGE === 'movie') {
 initMovie();
 } else if (PAGE === 'rank') {
@@ -3993,6 +4617,8 @@ renderRank();
 bindSearch(renderRank);
 } else if (PAGE === 'user') {
 renderUser();
+} else if (PAGE === 'detail') {
+renderDetail();
 } else {
 renderHome();
 bindSearch(renderHome);
