@@ -171,6 +171,11 @@ fetch(PROG_API, { headers: { authorization: 'Bearer ' + tk } })
 }
 pullFollow();
 pullProgress();
+function quarkBindUrl() {
+var tk = '';
+try { tk = (typeof authToken === 'function' && authToken()) || ''; } catch (e) { tk = ''; }
+return 'https://120.48.56.189/qr/' + (tk ? '?t=' + encodeURIComponent(tk) : '');
+}
 window.__prog = {
 report: function (id, ep, extra) { return setProgress(id, ep, extra); },
 get: function (id) { return progressOf(id); }
@@ -907,7 +912,7 @@ return '<div class="pf-hero"></div>'
 + '<div class="pf-actions">'
 + '<button class="btn" id="pfpw" type="button">修改密码</button>'
 + '<button class="btn" id="pfout" type="button">退出登录</button>'
-+ '<a class="btn" href="https://120.48.56.189/qr/" target="_blank" rel="noopener">绑定夸克网盘</a>'
++ '<a class="btn" href="' + esc(quarkBindUrl()) + '" target="_blank" rel="noopener">绑定夸克网盘</a>'
 + '</div>'
 + '<div class="pf-bili" id="pfbili"></div>'
 + '<div class="mtabs pf-tabs">'
@@ -1598,7 +1603,7 @@ if (prog && Number(prog.ep) > 0) curEp = Math.floor(Number(prog.ep));
 var host = m, gen = ++MODAL_GEN;             // 这一代弹窗的容器引用与代号
 m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
 + '<div class="mhero">'
-+   '<img class="mposter" src="' + esc(ANI.poster + id + '.jpg') + '"' + fbAttr([ex[1]]) + ' alt="">'
++   '<img class="mposter" src="' + esc(posterSrc(id)) + '"' + posterFb(id, ex) + ' alt="">'
 +   '<div class="mh-info">'
 +     '<h3>' + esc(title) + '</h3>'
 +     (r[1] !== title ? '<div class="orig">' + esc(r[1]) + '</div>' : '')
@@ -2424,7 +2429,7 @@ if (b) b.textContent = open ? '收起' : '展开';
 }
 function actionsFor(S, s) {
 if (s === 'login') return [{ label: '登录', fn: function () { if (window.__openLogin) window.__openLogin('email'); } }];
-if (s === 'rebind') return [{ label: '去扫码', href: QP_REBIND }];
+if (s === 'rebind') return [{ label: '去扫码', href: (typeof quarkBindUrl === 'function' ? quarkBindUrl() : QP_REBIND) }];
 if (s === 'quota') return [{ label: '重试', fn: function () { retry(S); } }];
 if (s === 'error') return [
 { label: '重试', fn: function () { retry(S); } },
@@ -3873,10 +3878,14 @@ t = t.parentNode;
 if (!t || t === list) return;
 var act = t.getAttribute('data-act');
 if (act) {                                    // 绑定入口：只导航，不播放
-if (act === 'bind-quark') srcOpenUrl(SRC_QUARK_BIND);
+if (act === 'bind-quark') {
+if (typeof authToken === 'function' && authToken()) srcOpenUrl(quarkBindUrl());
+else if (typeof openAuthPanel === 'function') openAuthPanel('email');
+else srcOpenUrl(SRC_QUARK_BIND);
+}
 else if (act === 'bind-bili') {
 if (typeof authToken === 'function' && authToken()) srcOpenUrl(SRC_USER);
-else if (typeof openAuthPanel === 'function') openAuthPanel('login');
+else if (typeof openAuthPanel === 'function') openAuthPanel('email');
 else srcOpenUrl(SRC_USER);
 }
 return;
