@@ -26,19 +26,21 @@
  * 与 prefers-color-scheme: dark 两处覆盖同一组变量名；html 未设 data-theme 时跟随系统。
  * 规则里一律用 token，不再写死色值（含 mask / 占位块 / 空星条这些灰阶）。 */
 :root {
-  --bg: #F1F2F3;
-  --bg2: #FFFFFF;
+  /* 2026-11 改版：色板换成 bgm.tv 口径（白底页 + 细灰线 + 蓝色主色 #02A3FB）。
+     变量名不变，只换取值；组件规则继续只吃 token。 */
+  --bg: #FFFFFF;
+  --bg2: #FCFCFC;
   --card: #FFFFFF;
-  --card2: #F6F7F8;
-  --line: #E3E5E7;
-  --line-hi: #D5D8DB;
-  --fg: #18191C;
-  --fg2: #61666D;
-  --dim: #66707A;
-  --dim2: #B0B5BC;
-  --accent: #00AEEC;
-  --accent-soft: rgba(0, 174, 236, .10);
-  --accent-line: rgba(0, 174, 236, .38);
+  --card2: #F9F9F5;
+  --line: #EEEEEE;
+  --line-hi: #DDDDDD;
+  --fg: #000000;
+  --fg2: #555555;
+  --dim: #888888;
+  --dim2: #AAAAAA;
+  --accent: #02A3FB;
+  --accent-soft: rgba(2, 163, 251, .10);
+  --accent-line: rgba(2, 163, 251, .38);
   --danger: #d03050;
   --star: #FFB027;
   --overlay: rgba(0, 0, 0, .46);
@@ -67,12 +69,12 @@
   --r-lg: 20px;
 
   --header-h: 56px;
-  --wrap: 1440px;
+  --wrap: 1600px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   /* 2026-11 结构与布局重构新增：控件尺寸 / 行高 / 字距 / 圆角阴影与动效档位。
      新规则一律引这里，不再写字号、阴影、动画时长的字面量。 */
-  --line-ctl:#8C9298; --accent-text:#0077A8; --accent-ink:#14141A;
+  --line-ctl:#8C9298; --accent-text:#0187C5; --accent-ink:#14141A;
   --fs-xl:20px;
   --lh-tight:1.25; --lh-snug:1.4; --lh-base:1.6; --lh-prose:1.8;
   --ls-tight:-.01em; --ls-caps:.08em;
@@ -86,19 +88,19 @@
 
 /* 深色（手动切换：主题脚本往 <html> 写 data-theme="light" | "dark"） */
 [data-theme="dark"] {
-  --bg: #0b0b10;
-  --bg2: #12121a;
-  --card: #16161e;
-  --card2: #1c1c26;
-  --line: #2a2a35;
-  --line-hi: #34343f;
-  --fg: #e6e6ef;
-  --fg2: #b9b9c6;
-  --dim: #a8a8b4;
-  --dim2: #8E94A0;
-  --accent: #00AEEC;
-  --accent-soft: rgba(0, 174, 236, .18);
-  --accent-line: rgba(0, 174, 236, .45);
+  --bg: #2D2E2F;
+  --bg2: #37393B;
+  --card: #37393B;
+  --card2: #3A3C3E;
+  --line: #3A3C3E;
+  --line-hi: #4A4C4F;
+  --fg: #FFFFFF;
+  --fg2: #EBEBF5;
+  --dim: #B0B0B8;
+  --dim2: #8A8A92;
+  --accent: #02A3FB;
+  --accent-soft: rgba(2, 163, 251, .18);
+  --accent-line: rgba(2, 163, 251, .45);
   --danger: #d03050;
   --star: #f5c451;
   --overlay: rgba(0, 0, 0, .62);
@@ -116,19 +118,19 @@
 /* 深色（未手动切换：跟随系统）——与上面同一组取值 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0b0b10;
-    --bg2: #12121a;
-    --card: #16161e;
-    --card2: #1c1c26;
-    --line: #2a2a35;
-    --line-hi: #34343f;
-    --fg: #e6e6ef;
-    --fg2: #b9b9c6;
-    --dim: #a8a8b4;
-    --dim2: #8E94A0;
-    --accent: #00AEEC;
-    --accent-soft: rgba(0, 174, 236, .18);
-    --accent-line: rgba(0, 174, 236, .45);
+    --bg: #2D2E2F;
+    --bg2: #37393B;
+    --card: #37393B;
+    --card2: #3A3C3E;
+    --line: #3A3C3E;
+    --line-hi: #4A4C4F;
+    --fg: #FFFFFF;
+    --fg2: #EBEBF5;
+    --dim: #B0B0B8;
+    --dim2: #8A8A92;
+    --accent: #02A3FB;
+    --accent-soft: rgba(2, 163, 251, .18);
+    --accent-line: rgba(2, 163, 251, .45);
     --danger: #d03050;
     --star: #f5c451;
     --overlay: rgba(0, 0, 0, .62);
@@ -238,9 +240,9 @@ main {
   z-index: 30;
   height: var(--header-h);
   background: var(--bg2);
-  border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-bottom: 1px solid #DDDDDD;
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
 }
 
 .site-head .wrap {
@@ -265,7 +267,7 @@ main {
   height: 18px;
   border-radius: 2px;
   background: var(--accent);
-  box-shadow: 0 0 12px rgba(0, 174, 236, .45);
+  box-shadow: 0 0 12px rgba(2, 163, 251, .45);
 }
 
 .brand b {
@@ -279,13 +281,14 @@ main {
   gap: var(--s1);
 }
 
-/* 导航项与右侧控件同高（--ctl-h），圆角统一 --r-ctl；选中态是 tonal 胶囊，不是实心蓝块 */
+/* 导航项改成 bgm 式胶囊（100px 圆角 = 药丸），字号/行高按 5px 12px 内边距配平到 35px 高；
+   选中态是主色填充 + 白字（对应 bgm 的 .chl.focus） */
 .mainnav a {
   display: inline-flex;
   align-items: center;
-  height: var(--ctl-h);
-  padding: 0 var(--s3);
-  border-radius: var(--r-ctl);
+  padding: 5px 12px;
+  line-height: 25px;
+  border-radius: 100px;
   font-size: var(--fs-md);
   color: var(--dim);
   white-space: nowrap;
@@ -298,8 +301,8 @@ main {
 }
 
 .mainnav a.is-on {
-  color: var(--accent-text);
-  background: var(--accent-soft);
+  color: var(--accent-ink);
+  background: var(--accent);
   font-weight: 600;
 }
 
@@ -407,21 +410,27 @@ main {
 .thm:hover { border-color: var(--accent-line); color: var(--accent); }
 
 /* ---------------------------------------------------------------- 5 区块标题（全站统一） */
+/* 结构抄 gamer：标题在左、看更多在右两端对齐，整块上方 32px / 下方 12px，
+   底边一条通栏细线（bgm 的 1px #eee，不用主色粗线） */
 .sec-h, .bhead, .mhead {
   display: flex;
   align-items: baseline;
   gap: var(--s3);
+  padding: var(--s6) 0 var(--s3);
+  border-bottom: 1px solid #eee;
   margin: 0 0 var(--s4);
 }
 
+/* 字与色抄 bgm：18px / 400 细体 / #555 */
 .sec-h h2, .bhead h2, .mhead h2 {
   position: relative;
   margin: 0;
   padding-left: 0;
-  font-size: var(--fs-xl);
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 400;
   line-height: var(--lh-tight);
   letter-spacing: var(--ls-tight);
+  color: #555;
 }
 
 .sec-h h2::before, .bhead h2::before, .mhead h2::before {
@@ -436,17 +445,23 @@ main {
   white-space: nowrap;
 }
 
+/* 「看更多」：bgm 的正文内链口径 —— 默认 #444，hover 主色蓝 */
 .sec-sub .morelink, .bhead .morelink, .mhead .morelink {
-  color: var(--accent-text);
+  color: #444;
+  font-size: 14px;
 }
 
 .sec-sub .morelink:hover, .bhead .morelink:hover, .mhead .morelink:hover {
+  color: var(--accent);
   text-decoration: underline;
 }
 
-/* 首页「每天更新」分组标题：降一档到正文大小，靠次要色区分层级 */
+/* 首页「每天更新」分组标题：降一档到正文大小，靠次要色区分层级；
+   它是区块内的子标题，不吃 5 节的分块留白与通栏线 */
 .bhead.lv2 {
   margin: var(--s5) 0 var(--s3);
+  padding: 0;
+  border-bottom: 0;
 }
 
 .bhead.lv2 h2 {
@@ -606,7 +621,7 @@ main {
   align-items: center;
   gap: 6px;
   padding: 5px var(--s3);
-  border-radius: 999px;
+  border-radius: 100px;
   font-size: var(--fs-sm);
   color: var(--dim);
   font-variant-numeric: tabular-nums;
@@ -662,13 +677,13 @@ main {
 }
 
 /* ---------------------------------------------------------------- 7 栅格 / 卡片 */
-/* 列数交给容器宽度：卡片最小 168px，由 auto-fill 自己决定一行放几张，
- * 一套规则取代原来的「≥1360 七列 / ≥1200 六列 / ≥1000 五列 / 桌面四列」四段断点，
- * 窗口缩放时不再整档跳列。只有 ≤420 窄屏落回固定两列（见 19 节），避免 1fr 把卡片压成一条。 */
+/* 列数交给容器宽度（gamer 口径）：卡片最小 200px、间距 16px，auto-fill 自己算列数 ——
+ * 1600 容器内宽 1536px，7 列时每张 (1536 - 6*16) / 7 ≈ 205px；8 列会掉到 178px 所以停在第 7 列。
+ * 实测这套取值在 1360 / 1200 / 1000 / 768 自然落到 6 / 5 / 4 / 3 列，只有末两档写死兜底（见 19 节）。 */
 .grid, .mgrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: var(--s4) var(--s3);
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--s4) var(--s4);
 }
 
 /* 排行榜入口格：固定 6 列（≤760 三列，见 22 节），不跟 .grid 的 auto-fill 走 */
@@ -695,7 +710,8 @@ main {
   padding-bottom: var(--s2);
   background: transparent;
   border: 0;
-  box-shadow: none;
+  border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .1), 0 4px 8px rgba(0, 0, 0, .03);
 }
 
 .mcard {
@@ -708,7 +724,7 @@ main {
 /* hover 只提阴影，不再整体位移（整格上移会让相邻行跟着视觉抖动） */
 .card:hover {
   transform: none;
-  box-shadow: var(--sh-2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .1), 0 6px 12px rgba(0, 0, 0, .08);
 }
 
 .mcard:hover {
@@ -753,9 +769,10 @@ main {
   color: inherit;
 }
 
+/* 海报比例 7:10（gamer 口径，比 2:3 略扁，1600 下每行 7 列时高度与 205px 宽相称） */
 .pw {
   position: relative;
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 7 / 10;
   overflow: hidden;
   background: var(--bg2);
 }
@@ -778,15 +795,16 @@ main {
 }
 
 .card > .ph, .mcard .ph {
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 7 / 10;
 }
 
+/* 左上/右下角标（评分 / 集数）：gamer 口径 12px、2px 8px 内边距、5px 圆角、深色半透明底 */
 .rate, .ep {
   position: absolute;
   z-index: 2;
-  padding: 4px 6px;
-  border-radius: var(--r-sm);
-  font-size: var(--fs-xs);
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1;
   color: #ececf1;
@@ -823,6 +841,21 @@ main {
 
 .mcard:hover .t {
   color: var(--accent);
+}
+
+/* 番组卡标题（gamer 口径）：一行 14px，行高固定 20px，超出省略；
+   .mcard 仍是原来的两行 15px（外链卡多一行信息，且自有白底描边） */
+.card .t {
+  min-height: 20px;
+  font-size: 14px;
+  line-height: 20px;
+  display: block;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
 }
 
 .sub2 {
@@ -1213,13 +1246,14 @@ main {
   padding: 0 var(--s5) var(--s5);
 }
 
+/* 按钮改 bgm 胶囊口径（50px 圆角，足够大半高即视觉成药丸），高度仍 34px */
 .btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 34px;
   padding: 0 var(--s4);
-  border-radius: var(--r-sm);
+  border-radius: 50px;
   font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--fg);
@@ -1527,12 +1561,12 @@ main {
   min-height: 4px;
   border-radius: 4px 4px 0 0;
   border-top: 1px solid var(--accent-line);
-  background: linear-gradient(180deg, var(--accent), rgba(0, 174, 236, .45));
+  background: linear-gradient(180deg, var(--accent), rgba(2, 163, 251, .45));
   transition: background .15s ease;
 }
 
 .rdist i:hover {
-  background: linear-gradient(180deg, #45c8f2, rgba(0, 174, 236, .30));
+  background: linear-gradient(180deg, #45c8f2, rgba(2, 163, 251, .30));
 }
 
 .rdist i b {
@@ -1939,16 +1973,26 @@ main {
 }
 
 /* ---------------------------------------------------------------- 19 响应式 */
-/* 栅格列数由 7 节的 auto-fill 自适应，不再逐档改列数；这里只兜最窄一档 */
-@media (max-width: 1400px) {
-  .wrap {
-    padding: 0 var(--s5);
+/* 版心留白按 gamer 三档走：桌面 32px（--s6，见 3 节）→ ≤1000 收到 16px（--s4）→ ≤780 收到 12px。
+   原来 1400 档的 24px 中间档已取消（参考值只有 32 / 16 / 12 三档）。 */
+
+/* 栅格列数仍由 7 节的 auto-fill 自适应，这里只固定末两档：≤768 三列、≤480 两列，
+   与 gamer 的 7/6/5/4/3 收尾对齐 */
+@media (max-width: 768px) {
+  .grid, .mgrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-/* ≤420：auto-fill 会把卡片压成一条，落回固定两列 */
-@media (max-width: 420px) {
+@media (max-width: 480px) {
   .grid, .mgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ≤420：auto-fill 会把卡片压成窄条，.mgrid 落回紧凑两列（.grid 已由 480 档接管） */
+@media (max-width: 420px) {
+  .mgrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--s3) var(--s2);
   }
@@ -1988,6 +2032,13 @@ main {
   }
   .trailer {
     margin: 0 var(--s4) var(--s4);
+  }
+}
+
+/* ≤780：版心左右收到 12px（参考值就是 12px 字面量，不套 --s* 档；须排在 1000 档之后才压得住） */
+@media (max-width: 780px) {
+  .wrap {
+    padding: 0 12px;
   }
 }
 
