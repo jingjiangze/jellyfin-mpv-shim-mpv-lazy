@@ -3041,56 +3041,15 @@ main {
   .qp-dmset { left: calc(-1 * var(--s4)); right: calc(-1 * var(--s4)); width: auto; max-height: 62vh; }
 }
 
-/* ---------------------------------------------------------------- 22 首页三段 / 移动底栏（2026-11 布局重构）
-   .hero 对应 JS 侧新结构：左 .hero-main（本周推荐，海报 200px + 文案，1.55fr）、
-   右 .hero-side（榜单入口 .rankgrid，1fr）。≤1199 上下堆叠、side 改 4 列；
-   ≤760 side 整块隐藏（榜单入口交给页面内区块），底栏改由 .tabbar 承担。 */
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-  gap: var(--s3);
-  margin: 0 0 var(--s5);
-}
-
-.hero-main {
-  display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  gap: var(--s5);
-  padding: var(--s5);
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-}
-
-.hero-main .pw {
-  aspect-ratio: 2 / 3;
-}
-
-.hero-side {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s3);
-}
-
-@media (max-width: 1199px) {
-  .hero {
-    grid-template-columns: 1fr;
-  }
-  .hero-side {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-/* 移动底栏：桌面完全不占位；≤760 固定贴底（z 40 压在顶栏 30 之上、遮罩 60 之下），
+/* ---------------------------------------------------------------- 22 移动底栏（2026-11 布局重构）
+   首页回归标准栅格（.grid），不再有推荐位大卡；底栏由 .tabbar 承担。
+   桌面完全不占位；≤760 固定贴底（z 40 压在顶栏 30 之上、遮罩 60 之下），
    主内容底部让出 52px 导航高 + --s7，滚到底不被遮挡 */
 .tabbar {
   display: none;
 }
 
 @media (max-width: 760px) {
-  .hero-side {
-    display: none;
-  }
   .rankgrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
