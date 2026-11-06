@@ -451,6 +451,131 @@ return '<div class="pf-hero"></div>'
 + '<div class="empty">登录后查看我的主页 —— 追番、观看进度和账号设置都在这里</div>'
 + '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录</button></div>';
 }
+var BILI_BIND_PATH = '/bili/bind';
+var BILI_ST = null;          // 上次读到的绑定状态：null=没问过；{bound:true,uname,vip_type} / {bound:false}
+function pfNode(id) { return document.getElementById(id); }
+function pfBiliCard(st) {
+var head = '<div class="mnote" id="pfbili-msg" role="status" aria-live="polite"></div>';
+if (st && st.bound) {
+return head
++ '<p class="authhint">B 站：<b>' + esc(st.uname || '未知昵称') + '</b>'
++ '（会员 VIP' + (Number(st.vip_type) || 0) + '）</p>'
++ '<div class="pf-actions"><button class="btn" id="pfunbind" type="button">解绑</button></div>';
+}
+return head
++ '<label class="authfield"><span>B 站 SESSDATA</span>'
++ '<input type="password" id="pfsess" placeholder="粘贴 SESSDATA" autocomplete="off" spellcheck="false"></label>'
++ '<div class="pf-actions"><button class="btn pri" id="pfbind" type="button">绑定</button></div>'
++ '<p class="authhint">只用于读取你账号的播放地址与弹幕；只收 SESSDATA，不收 bili_jct。'
++ 'SESSDATA 等于你 B 站账号的登录凭证，绑定后如不放心可随时解绑。</p>';
+}
+function pfBiliPaint(st, msg) {
+var box = pfNode('pfbili');
+if (!box) return;
+box.innerHTML = pfBiliCard(st);
+pfBiliWire();
+if (msg) pfBiliMsg(msg);
+}
+function pfBiliMsg(msg) {
+var el = pfNode('pfbili-msg');
+if (el) el.textContent = msg || '';     // textContent：后端文案不解析成 HTML
+}
+function pfBiliFail(msg) {
+var box = pfNode('pfbili');
+if (!box) return;
+box.innerHTML = '<div class="mnote">' + esc(msg)
++ ' <button class="mnote-btn" id="pfbili-re" type="button">重试</button></div>';
+pfBiliWire();
+}
+function pfBiliWire() {
+var b = pfNode('pfbind');
+if (b) b.onclick = function () { pfBiliDoBind(b); };
+var u = pfNode('pfunbind');
+if (u) u.onclick = function () { pfBiliDoUnbind(u); };
+var r = pfNode('pfbili-re');
+if (r) r.onclick = function () { loadPfBili(true); };
+}
+function loadPfBili(force) {
+var box = pfNode('pfbili');
+if (!box) return;
+if (!authToken()) { box.innerHTML = ''; return; }   // 未登录：不画这块
+if (BILI_ST && !force) { pfBiliPaint(BILI_ST); return; }
+box.innerHTML = '<div class="mnote">B 站账号读取中…</div>';
+authFetch(BILI_BIND_PATH, null, 12000, { authorization: 'Bearer ' + authToken() }, { method: 'GET' })
+.then(function (r) {
+var j = r.j || {};
+if (j.ok && j.bound) {
+BILI_ST = { bound: true, uname: j.uname, vip_type: j.vip_type };
+pfBiliPaint(BILI_ST);
+return;
+}
+if (j.error === 'not_bound' || r.status === 404) {
+BILI_ST = { bound: false };
+pfBiliPaint(BILI_ST);
+return;
+}
+if (r.status === 401) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
+pfBiliFail('B 站账号状态读取失败（HTTP ' + r.status + '）');
+}, function (e) {
+pfBiliFail((e && e.message) || 'B 站账号状态读取失败');
+});
+}
+function pfBiliSess(raw) {
+var s = String(raw == null ? '' : raw).trim();
+var m = /(?:^|[;\s])SESSDATA\s*=\s*([^;\s"']+)/i.exec(s);
+if (m) return m[1];
+return s.replace(/^SESSDATA\s*=\s*/i, '').replace(/[;,"'\s]+$/, '');
+}
+function pfBiliBindMsg(r) {
+var j = r.j || {};
+if (r.status === 401) return '登录已失效，请重新登录后再试';
+if (j.error === 'expired') return '这段 SESSDATA 已失效（或没复制全），请到 B 站重新复制';
+if (j.error) return '绑定失败：' + j.error;
+return '绑定失败（HTTP ' + r.status + '）';
+}
+function pfBiliDoBind(btn) {
+var inp = pfNode('pfsess');
+var sess = pfBiliSess(inp ? inp.value : '');
+if (inp) inp.value = '';                        // 提交即清空：DOM 里不留凭证
+if (!sess) { pfBiliMsg('请先粘贴 SESSDATA'); return; }
+var tk = authToken();
+if (!tk) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
+var done = setBusy(btn, '绑定中…');
+authFetch(BILI_BIND_PATH, { sess: sess }, 20000, { authorization: 'Bearer ' + tk }, { method: 'POST' })
+.then(function (r) {
+var j = r.j || {};
+if (r.ok && j.ok) {
+BILI_ST = { bound: true, uname: j.uname, vip_type: j.vip_type };
+pfBiliPaint(BILI_ST, '绑定成功');
+return;
+}
+done();
+pfBiliMsg(pfBiliBindMsg(r));
+}, function (e) {
+done();
+pfBiliMsg((e && e.message) || '绑定失败，请重试');
+});
+}
+function pfBiliDoUnbind(btn) {
+var tk = authToken();
+if (!tk) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
+var done = setBusy(btn, '解绑中…');
+authFetch(BILI_BIND_PATH, null, 15000, { authorization: 'Bearer ' + tk }, { method: 'DELETE' })
+.then(function (r) {
+var j = r.j || {};
+if (r.ok && j.ok) {
+BILI_ST = { bound: false };
+pfBiliPaint(BILI_ST, '已解绑，可随时重新绑定');
+return;
+}
+done();
+pfBiliMsg(r.status === 401 ? '登录已失效，请重新登录后再试'
+: '解绑失败（HTTP ' + r.status + '），稍后重试');
+}, function (e) {
+done();
+pfBiliMsg((e && e.message) || '解绑失败，请重试');
+});
+}
 function userHTML(u) {
 var name = userName(u) || '未登录用户';
 var mail = maskEmail(u.email || (String(u.login || '').indexOf('@') >= 0 ? u.login : ''));
@@ -483,6 +608,7 @@ return '<div class="pf-hero"></div>'
 + '<button class="btn" id="pfout" type="button">退出登录</button>'
 + '<a class="btn" href="https://120.48.56.189/qr/" target="_blank" rel="noopener">绑定夸克网盘</a>'
 + '</div>'
++ '<div class="pf-bili" id="pfbili"></div>'
 + '<div class="pf-tabs"><button class="on" type="button">我的追番</button></div>'
 + '<div class="pf-body">' + body + '</div>';
 }
@@ -516,6 +642,7 @@ var out = document.getElementById('pfout');
 if (out) out.onclick = function () {
 logoutAccount();
 USER = null;
+BILI_ST = null;                 // 换账号后 B 站绑定状态要重新问一次
 var m = $('#main');
 if (m) { m.innerHTML = userLoginHTML(); bindUserLogin(); }
 };
@@ -531,6 +658,7 @@ return;
 if (USER) {
 main.innerHTML = userHTML(USER);
 bindUserActions();
+loadPfBili();
 return;
 }
 if (!main.querySelector('.pf-hero')) main.innerHTML = '<div class="loading">加载中…</div>';
@@ -538,6 +666,7 @@ loadProfile().then(function (u) {
 USER = u;
 main.innerHTML = userHTML(u);
 bindUserActions();
+loadPfBili();
 }).catch(function (e) {
 main.innerHTML = '<div class="empty">' + esc((e && e.message) || '资料加载失败')
 + '</div><div class="pf-actions"><a class="btn" href="user">重试</a></div>';
@@ -1427,10 +1556,20 @@ var QP_LINES_KEY = 'qp_lines';
 var QP_LINE_MAX = 20;                       // 单番最多存 20 条自备线路，防 localStorage 膨胀
 var QP_RATES = [2, 1.5, 1.25, 1, 0.75];     // 倍速循环（初始 1.0×，按钮按数组顺序轮转）
 var QP_REBIND = 'https://120.48.56.189/qr/';
+var DM_BASE = 'https://120.48.56.189';
+var QP_DM_KEY = 'qp_dm_on';                    // 弹幕开关偏好：'1' / '0'
+var DM_SPEED = 144;                            // 滚动弹幕速度 px/s（B 站量级；舞台变窄也不会挤成一团）
+var DM_FIX_S = 4;                              // 顶部 / 底部固定弹幕停留秒数
+var DM_LATE = 1;                               // 晚于这个秒数的弹幕直接丢（切后台 / 卡顿后不补投）
+var DM_MAX_ITEMS = 20000;                      // 单集最多装 2 万条，防脏数据把内存撑爆
+var DM_TEXT_MAX = 120;                         // 单条文本上限（B 站单条 100 字）
+var DM_FONT = 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
 var QPlayer = (function () {
 var TPL = '<div class="qp-head"><b class="qp-title"></b><span class="qp-sub"></span>'
++ '<button class="qp-btn qp-dm-toggle" type="button" aria-label="弹幕开关">弹幕 开</button>'
 + '<button class="qp-btn qp-close" type="button" aria-label="关闭播放器">×</button></div>'
 + '<div class="qp-stage"><video class="qp-video" playsinline preload="metadata"></video>'
++ '<canvas class="qp-dm" aria-hidden="true"></canvas>'
 + '<button class="qp-bigplay" type="button" hidden>▶</button>'
 + '<div class="qp-overlay"><div class="qp-spinner"></div><p class="qp-msg"></p>'
 + '<div class="qp-actions" hidden></div></div></div>'
@@ -1898,6 +2037,322 @@ if (document.pictureInPictureElement) { document.exitPictureInPicture(); return;
 if (v.requestPictureInPicture) v.requestPictureInPicture();
 } catch (e) { /* 忽略 */ }
 }
+function dmRaf(cb) {
+var f = window.requestAnimationFrame;
+if (f) return { id: f(cb), raf: true };
+return { id: setTimeout(function () { cb(Date.now()); }, 16), raf: false };
+}
+function dmCaf(h) {
+if (!h) return;
+try {
+if (h.raf) window.cancelAnimationFrame(h.id);
+else clearTimeout(h.id);
+} catch (e) { /* 忽略 */ }
+}
+function dmPref() {
+try { return localStorage.getItem(QP_DM_KEY) !== '0'; } catch (e) { return true; }
+}
+function dmSavePref(on) {
+try { localStorage.setItem(QP_DM_KEY, on ? '1' : '0'); } catch (e) { /* 隐私模式：静默 */ }
+}
+function dmColor(n) {
+var v = Number(n);
+if (!isFinite(v) || v < 0) return '#ffffff';
+var hex = Math.floor(v % 16777216).toString(16);
+while (hex.length < 6) hex = '0' + hex;
+return '#' + hex;
+}
+function dmFontPx(dm, size) {
+var px = Math.round((Number(size) || 25) * dm.W / 1280);
+return Math.max(12, Math.min(20, px));
+}
+function dmSprite(dm, it, px) {
+if (it._sp && it._px === px) return it._sp;
+var dpr = dm.dpr || 1;
+var font = '600 ' + px + 'px ' + DM_FONT;
+if (!dm.meas) {
+var mc = document.createElement('canvas');
+try { dm.meas = mc.getContext('2d'); } catch (e) { dm.meas = null; }
+if (!dm.meas) return null;
+}
+dm.meas.font = font;
+var tw = 0;
+try { tw = dm.meas.measureText(it.m).width || 0; } catch (e) { tw = 0; }
+if (!(tw > 0)) tw = it.m.length * px * 0.6;       // 无字体信息时的兜底宽度
+var pad = 2;                                     // 描边留白，防边缘被裁
+var w = Math.ceil(tw) + pad * 2;
+var h = Math.ceil(px * 1.22) + pad * 2;
+var c = document.createElement('canvas');
+c.width = Math.max(1, Math.round(w * dpr));
+c.height = Math.max(1, Math.round(h * dpr));
+var g = null;
+try { g = c.getContext('2d'); } catch (e) { g = null; }
+if (!g) return null;
+g.scale(dpr, dpr);                               // dpr 只在这里缩放一次
+g.font = font;
+g.textAlign = 'left';
+g.textBaseline = 'middle';
+g.lineJoin = 'round';
+g.strokeStyle = 'rgba(0, 0, 0, .82)';            // 1px 黑描边：浅色画面里也读得清
+g.lineWidth = 2;
+g.strokeText(it.m, pad, h / 2);
+g.fillStyle = dmColor(it.color);
+g.fillText(it.m, pad, h / 2);
+var sp = { c: c, w: w, h: h };
+it._sp = sp;
+it._px = px;
+return sp;
+}
+function dmLower(items, x) {
+var lo = 0, hi = items.length;
+while (lo < hi) {
+var mid = (lo + hi) >> 1;
+if (items[mid].t < x) lo = mid + 1;
+else hi = mid;
+}
+return lo;
+}
+function dmResize(S) {
+var dm = S && S.dm, cv = dm && dm.cv;
+if (!cv) return false;
+var W = cv.clientWidth, H = cv.clientHeight;
+if (!(W > 0) || !(H > 0)) return false;          // 隐藏 / 还没布局：这一帧不画
+var dpr = Math.min(2, Number(window.devicePixelRatio) || 1);
+if (dm.g && W === dm.W && H === dm.H && dpr === dm.dpr) return true;
+dm.W = W;
+dm.H = H;
+dm.dpr = dpr;
+cv.width = Math.max(1, Math.round(W * dpr));
+cv.height = Math.max(1, Math.round(H * dpr));
+var g = null;
+try { g = cv.getContext('2d'); } catch (e) { g = null; }
+dm.g = g;
+if (g) g.setTransform(dpr, 0, 0, dpr, 0, 0);     // dpr 缩放只做这一次
+dmLayout(S);
+return !!g;
+}
+function dmLayout(S) {
+var dm = S.dm;
+dm.lineH = Math.max(18, Math.min(26, Math.round(dm.H / 8)));
+dm.pad = 4;
+dm.rows = Math.max(1, Math.floor((dm.H - dm.pad * 2) / dm.lineH));
+dm.cap = window.innerWidth <= 760 ? 20 : 30;     // 同屏上限：移动端 20，桌面 30
+dm.roll = [];
+dm.top = [];
+dm.bot = [];
+for (var i = 0; i < dm.rows; i++) {
+dm.roll.push(null);                            // null | {t, w, v}
+dm.top.push(0);                                // 该轨被占用到的媒体时间
+dm.bot.push(0);
+}
+dm.live = [];
+dm.next = dmLower(dm.items, (Number(S.v.currentTime) || 0) - DM_LATE);
+dm.lastCt = -1;                                  // 逼下一帧走「重定位」分支
+}
+function dmFits(rec, t0, w, v, W) {
+if (!rec) return true;                           // 空轨
+var dt = t0 - rec.t;
+if (!(dt >= 0)) return false;
+var left = W - rec.v * dt;                       // 前一条当前左边界
+var right = left + rec.w;                        // 前一条当前右边界
+if (right > W - 6) return false;                 // 尾巴还压在右边界上（留 6px 余量）
+var vNew = Math.max(1, v), vPrev = Math.max(1, rec.v);
+if (vNew <= vPrev) return true;                  // 不会追上
+var exit = (left + rec.w) / vPrev;               // 前一条完全离场还需多久
+return (W - right) / (vNew - vPrev) >= exit;     // 追上前它已经飞出画面
+}
+function dmSpawn(S, it) {
+var dm = S.dm, W = dm.W, t0 = it.t;
+var px = dmFontPx(dm, it.size);
+var sp = dmSprite(dm, it, px);
+if (!sp) return;
+if (it.c === 4 || it.c === 5) {                  // 4 底部固定 / 5 顶部固定：停留 4s，顶上往下、底上往上
+var isTop = it.c === 5, pool = isTop ? dm.top : dm.bot, row = -1;
+for (var i = 0; i < dm.rows; i++) {
+if (!pool[i] || t0 >= pool[i]) { row = i; break; }
+}
+if (row < 0) return;                           // 固定位全满：丢
+pool[row] = t0 + DM_FIX_S;
+var off = Math.round((dm.lineH - sp.h) / 2);
+var y = isTop
+? dm.pad + row * dm.lineH + off
+: dm.H - dm.pad - (row + 1) * dm.lineH + off;
+dm.live.push({ mode: isTop ? 'top' : 'bot', t0: t0, w: sp.w, y: y, sp: sp });
+return;
+}
+var v = DM_SPEED, row2 = -1, best = null;
+for (var k = 0; k < dm.rows; k++) {
+var rec = dm.roll[k];
+if (!dmFits(rec, t0, sp.w, v, W)) continue;
+if (!rec) { row2 = k; break; }                 // 空轨优先
+if (!best || rec.t < best.t) { best = rec; row2 = k; }   // 都占着就选最久没用的那轨
+}
+if (row2 < 0) return;                            // 轨道全满：丢弃
+dm.roll[row2] = { t: t0, w: sp.w, v: v };
+dm.live.push({
+mode: 'roll', t0: t0, v: v, w: sp.w,
+y: dm.pad + row2 * dm.lineH + Math.round((dm.lineH - sp.h) / 2),
+sp: sp
+});
+}
+function dmAdvance(S, ct) {
+var dm = S.dm, items = dm.items;
+while (dm.next < items.length && items[dm.next].t <= ct) {
+var it = items[dm.next];
+dm.next += 1;
+if (ct - it.t > DM_LATE) continue;             // 追不上的旧弹幕：丢，不补投
+if (dm.live.length >= dm.cap) continue;        // 同屏满：丢
+dmSpawn(S, it);
+}
+}
+function dmDraw(S, ct) {
+var dm = S.dm, g = dm.g;
+if (!g) return;
+g.clearRect(0, 0, dm.W, dm.H);                   // 每帧只清一次
+var live = dm.live, keep = [];
+for (var i = 0; i < live.length; i++) {
+var e = live[i], x;
+if (e.mode === 'roll') {
+x = dm.W - e.v * (ct - e.t0);
+if (x + e.w <= 0) continue;                  // 已经完全飞出左边
+} else {
+if (ct >= e.t0 + DM_FIX_S) continue;         // 固定弹幕到期
+x = Math.round((dm.W - e.w) / 2);
+}
+g.drawImage(e.sp.c, x, e.y, e.sp.w, e.sp.h);
+keep.push(e);
+}
+dm.live = keep;
+}
+function dmJump(S, ct) {
+var dm = S.dm;
+if (!dm) return;
+dm.live = [];
+for (var i = 0; i < dm.rows; i++) { dm.roll[i] = null; dm.top[i] = 0; dm.bot[i] = 0; }
+dm.next = dmLower(dm.items, ct - DM_LATE);
+dm.lastCt = ct;
+if (dm.g) { try { dm.g.clearRect(0, 0, dm.W, dm.H); } catch (e) { /* 忽略 */ } }
+}
+function dmTick(S) {
+var dm = S && S.dm;
+if (!dm || !dm.on || !dm.items.length) return;
+if (!dmResize(S)) return;
+var ct = Number(S.v.currentTime) || 0;
+dm.lastCt = ct;
+dmAdvance(S, ct);
+dmDraw(S, ct);
+}
+function dmFrame(S) {
+var dm = S && S.dm;
+if (!dm) return;
+dm.raf = null;
+if (!alive(S) || !dm.on) return;                 // 关掉 / 已销毁：不再排下一帧，循环自然停
+dm.raf = dmRaf(function () { dmFrame(S); });
+if (!dmResize(S)) return;
+var ct = Number(S.v.currentTime) || 0;
+if (dm.lastCt >= 0 && ct === dm.lastCt) return;  // 暂停：不推进、不重绘
+if (dm.lastCt < 0 || Math.abs(ct - dm.lastCt) > DM_LATE) dmJump(S, ct);
+dmTick(S);
+}
+function dmStart(S) {
+var dm = S && S.dm;
+if (!alive(S) || !dm || !dm.on || dm.raf || !dm.items.length || !dm.cv) return;
+dm.lastCt = -1;
+dm.raf = dmRaf(function () { dmFrame(S); });
+}
+function dmStop(S) {
+var dm = S && S.dm;
+if (!dm) return;
+if (dm.raf) { dmCaf(dm.raf); dm.raf = null; }
+dm.live = [];
+dm.lastCt = -1;
+if (dm.g) { try { dm.g.clearRect(0, 0, dm.W || 0, dm.H || 0); } catch (e) { /* 忽略 */ } }
+}
+function dmPaintBtn(S) {
+var b = S && S.root && S.root.querySelector('.qp-dm-toggle');
+if (b) b.textContent = S && S.dm && S.dm.on ? '弹幕 开' : '弹幕 关';
+}
+function dmSet(S, list) {
+var dm = S && S.dm;
+if (!dm) return 0;
+dmStop(S);
+var out = [], arr = Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+for (var i = 0; i < arr.length && out.length < DM_MAX_ITEMS; i++) {
+var x = arr[i];
+if (!x) continue;
+var t = Number(x.t);
+var m = String(x.m == null ? '' : x.m).replace(/\s+/g, ' ').trim();
+if (!isFinite(t) || t < 0 || !m) continue;
+var c = Math.round(Number(x.c) || 1);
+if (!(c >= 1 && c <= 5)) c = 1;
+out.push({
+t: t,
+m: m.slice(0, DM_TEXT_MAX),
+c: c,
+size: Math.max(12, Math.min(64, Number(x.size) || 25)),
+color: Number(x.color)
+});
+}
+out.sort(function (a, b) { return a.t - b.t; });
+dm.items = out;
+dm.next = 0;
+dm.live = [];
+dm.lastCt = -1;
+if (out.length) dmStart(S);                      // 空数组 = 关闭：停循环，层上不留东西
+dmPaintBtn(S);
+return out.length;
+}
+function dmFetch(S, cid) {
+var dm = S && S.dm;
+if (!dm || !cid || typeof fetch !== 'function') return;
+var key = String(cid), tok = S.tok;
+dm.cid = key;
+fetch(DM_BASE + '/bili/dm?cid=' + encodeURIComponent(key), { credentials: 'omit' })
+.then(function (r) { return r && r.ok ? r.json() : null; })
+.then(function (j) {
+if (!alive(S) || S.tok !== tok || !cur || cur.tok !== tok || dm.cid !== key) return;
+if (!j || Object.prototype.toString.call(j.items) !== '[object Array]') return;
+dmSet(S, j.items);
+})
+.catch(function () { /* 静默：没弹幕不影响播放 */ });
+}
+function dmToggle(S, on) {
+var dm = S && S.dm;
+if (!dm) return false;
+dm.on = !!on;
+dmSavePref(dm.on);
+if (S.root) S.root.setAttribute('data-dm', dm.on ? '1' : '0');
+dmPaintBtn(S);
+if (dm.on) dmStart(S); else dmStop(S);
+return dm.on;
+}
+function dmClear(S) {
+var dm = S && S.dm;
+if (!dm) return;
+dmStop(S);
+dm.items = [];
+dm.next = 0;
+dm.live = [];
+dm.cid = '';
+}
+function dmInit(S, ctx) {
+var dm = {
+on: dmPref(),
+cv: S.root.querySelector('.qp-dm'),
+g: null,
+W: 0, H: 0, dpr: 1,
+lineH: 22, pad: 4, rows: 1, cap: 30,
+roll: [], top: [], bot: [],
+items: [], next: 0, live: [],
+raf: null, lastCt: -1, meas: null, cid: ''
+};
+S.dm = dm;
+if (S.root) S.root.setAttribute('data-dm', dm.on ? '1' : '0');
+dmPaintBtn(S);
+var opt = (ctx && ctx.dm) || null;
+if (opt && opt.items) dmSet(S, opt.items);       // 调用方带数据：直接用
+else if (opt && opt.cid) dmFetch(S, opt.cid);    // 只给 cid：播放器自己拉
+}
 function bind(S) {
 var v = S.v, root = S.root;
 function q(sel) { return root.querySelector(sel); }
@@ -1933,6 +2388,7 @@ report(S, false);
 v.addEventListener('play', function () { schedule(S); });
 v.addEventListener('seeked', function () {
 if (!alive(S)) return;
+if (S.dm && S.dm.on) { dmJump(S, Number(v.currentTime) || 0); dmTick(S); }
 if (S.seekTimer) clearTimeout(S.seekTimer);
 S.seekTimer = setTimeout(function () {
 S.seekTimer = 0;
@@ -1970,6 +2426,8 @@ if (p && p.then) p.then(null, function () { showBigPlay(S); });
 };
 var closeBtn = q('.qp-close');
 if (closeBtn) closeBtn.onclick = function () { close(); };
+var dmBtn = q('.qp-dm-toggle');
+if (dmBtn) dmBtn.onclick = function () { if (alive(S) && S.dm) dmToggle(S, !S.dm.on); };
 var playBtn = q('.qp-play');
 if (playBtn) playBtn.onclick = function () { togglePlay(S); };
 var muteBtn = q('.qp-mute');
@@ -2191,6 +2649,7 @@ updateSub(S);
 renderLines(S);
 m.appendChild(root);
 try { root.scrollIntoView({ block: 'center' }); } catch (e) { /* 忽略 */ }
+dmInit(S, ctx);
 if (S.lines.length) startLine(S, 0);
 else setState(S, 'loading', { msg: '正在准备播放…' });
 return S.tok;
@@ -2203,6 +2662,7 @@ S.dead = true;
 if (S.nextTimer) { clearInterval(S.nextTimer); S.nextTimer = 0; }
 clearStall(S);
 if (S.seekTimer) { clearTimeout(S.seekTimer); S.seekTimer = 0; }
+dmClear(S);                                 // 弹幕：停 rAF + 清引用，防泄漏
 try { document.removeEventListener('visibilitychange', S.onVis); } catch (e) { /* 忽略 */ }
 try { window.removeEventListener('pagehide', S.onPageHide); } catch (e) { /* 忽略 */ }
 try {
@@ -2218,6 +2678,13 @@ function isCurrent(tok) {
 return !!cur && !!tok && cur.tok === tok && isConn(cur.root);
 }
 function isConn(node) { return !!(node && node.isConnected); }
+function setDanmaku(items) { return cur && cur.dm ? dmSet(cur, items) : 0; }
+function toggleDanmaku(on) {
+if (!cur || !cur.dm) return false;
+return dmToggle(cur, on === undefined ? !cur.dm.on : !!on);
+}
+function danmakuOn() { return !!(cur && cur.dm && cur.dm.on); }
+function clearDanmaku() { if (cur && cur.dm) dmClear(cur); }
 return {
 open: open,
 close: close,
@@ -2228,6 +2695,10 @@ setEpisodes: setEpisodes,
 setFid: setFid,
 pause: pause,
 isCurrent: isCurrent,
+setDanmaku: setDanmaku,
+toggleDanmaku: toggleDanmaku,
+danmakuOn: danmakuOn,
+clearDanmaku: clearDanmaku,
 _gate: gate,                                 // 离线自检：进度节流是纯函数
 _lines: { of: byoOf, save: saveByo, del: delByo }
 };
@@ -2356,7 +2827,115 @@ return biliGet('reply', { aid: v.aid, ps: 20 }).then(function (d) { renderRp(m.q
 }
 };
 });
+biliEntry(m, id, title);
 }
+var BILI_PLAY_GEN = 0;      // 连点两次：只让最后一次的异步结果落地
+var BILI_EP_RE = /第\s*(\d+)\s*[话集]|\[(\d{1,3})\]|E(\d{1,3})|S\d+E(\d{1,3})|_(\d{1,3})/;
+function biliEpNo(part) {
+var m = BILI_EP_RE.exec(String(part == null ? '' : part));
+if (!m) return 0;
+for (var i = 1; i < m.length; i++) { if (m[i]) return Number(m[i]); }
+return 0;
+}
+function biliPickPage(pages, ep) {
+var want = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
+for (var i = 0; i < pages.length; i++) {
+if (pages[i] && biliEpNo(pages[i].part) === want) return pages[i];
+}
+return pages[want - 1] || pages[0] || null;
+}
+function biliAuth(path, method, body, ms) {
+var tk = '';
+try { tk = localStorage.getItem('gh_token') || ''; } catch (e) { tk = ''; }
+var opt = { method: method || 'GET', headers: { authorization: 'Bearer ' + tk } };
+if (body != null) {
+opt.headers['content-type'] = 'application/json';
+opt.body = JSON.stringify(body);
+}
+var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+var timer = setTimeout(function () { if (ctl) ctl.abort(); }, ms || 15000);
+if (ctl) opt.signal = ctl.signal;
+return fetch(BILI_BASE + path, opt).then(function (r) {
+clearTimeout(timer);
+return r.json().catch(function () { return null; }).then(function (j) {
+return { status: r.status, ok: r.ok, j: j };
+});
+}, function (e) {
+clearTimeout(timer);
+if (ctl && ctl.signal && ctl.signal.aborted) throw new Error('网络慢，请重试');
+throw new Error('网络异常，请检查连接');
+});
+}
+function biliOpenPlayer(m, id, title, ep, cid, url) {
+var ctx = {
+m: m,
+id: String(id),
+title: String(title || ''),
+ep: ep,
+sources: url ? [{ label: 'B 站（弹幕版）', url: String(url), type: 'mp4' }] : []
+};
+if (cid) ctx.dm = { cid: String(cid) };
+return window.QPlayer.open(ctx);
+}
+function biliPlayEp(m, id, title, ep) {
+var tk = '';
+try { tk = localStorage.getItem('gh_token') || ''; } catch (e) { tk = ''; }
+if (!tk) { if (window.__openLogin) window.__openLogin('email'); return; }
+if (!m || !window.QPlayer) return;
+var want = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
+var gen = ++BILI_PLAY_GEN;
+function fail(msg, state) {
+biliOpenPlayer(m, id, title, want, 0, '');
+window.QPlayer.state(state || 'error', { msg: msg });
+}
+biliResolve(id, title).then(function (v) {
+if (gen !== BILI_PLAY_GEN) return;
+if (!v || !v.bvid || !v.pages || !v.pages.length) { fail('没找到这部番的 B 站源，换夸克源试试'); return; }
+var pg = biliPickPage(v.pages, want);
+if (!pg || !pg.cid) { fail('这一集没有可用的 B 站分P'); return; }
+return biliAuth('playurl', 'POST', { bvid: v.bvid, cid: pg.cid, qn: 80 }, 20000).then(function (r) {
+if (gen !== BILI_PLAY_GEN) return;
+var j = r.j || {};
+if (r.ok && j.ok && j.url) { biliOpenPlayer(m, id, title, want, pg.cid, j.url); return; }
+if (r.status === 401) { fail('站点登录已失效，请重新登录', 'login'); return; }
+if (j.error === 'need_rebind' || j.error === 'not_bound') {
+biliOpenPlayer(m, id, title, want, 0, '');
+window.QPlayer.state('rebind', {
+msg: 'B 站登录已失效，去个人主页重新粘贴 SESSDATA',
+actions: [{ label: '去个人主页', href: 'user' }]
+});
+return;
+}
+fail('B 站播放地址取不到，稍后再试');
+});
+}).catch(function () {
+if (gen !== BILI_PLAY_GEN) return;
+if (window.QPlayer && m) fail('B 站播放失败，稍后再试');
+});
+}
+function biliSavedEp(id) {
+try {
+var p = window.__prog && typeof window.__prog.get === 'function' ? window.__prog.get(id) : null;
+if (p && Number(p.ep) > 0) return Math.floor(Number(p.ep));
+} catch (e) { /* 进度坏了就从头播 */ }
+return 1;
+}
+function biliEntry(m, id, title) {
+var acts = m && m.querySelector ? m.querySelector('.acts') : null;
+if (!acts || acts.querySelector('#biliplay')) return;
+var b = document.createElement('span');
+b.className = 'btn';
+b.id = 'biliplay';
+b.setAttribute('role', 'button');
+b.setAttribute('tabindex', '0');
+b.textContent = '▶ B 站（弹幕版）';
+b.onclick = function () { biliPlayEp(m, id, title, biliSavedEp(id)); };
+b.onkeydown = function (ev) {
+if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); b.click(); }
+};
+acts.appendChild(b);
+}
+window.__biliPlay = biliPlayEp;
 var THEME_KEY = 'theme';
 function currentTheme() {
 try {
