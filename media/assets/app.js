@@ -4290,23 +4290,6 @@ else if (PAGE === 'user') renderUser();
 else if (PAGE === 'detail') renderDetail();
 else renderHome();
 }
-function syncPsz(btn) {
-var hd = PSZ.mode === 'hd';
-btn.textContent = hd ? '高清' : '标准';
-btn.setAttribute('aria-pressed', hd ? 'false' : 'true');
-}
-function initPsz() {
-var btn = document.getElementById('psz');
-if (!btn) return;
-syncPsz(btn);
-btn.onclick = function () {
-PSZ.mode = PSZ.mode === 'hd' ? 'sd' : 'hd';
-try { localStorage.setItem('psz', PSZ.mode); } catch (e) { /* 忽略 */ }
-syncPsz(btn);
-if ($('#mask')) close();
-repaint();
-};
-}
 function loginBtnHtml() {
 return '<button class="login" id="loginbtn" type="button">登录</button>';
 }
@@ -4673,7 +4656,6 @@ host.innerHTML = '<div class="sky"><div class="hd-wrap">'
 + '<div class="searchbox"><input id="q" type="search" placeholder="' + ph + '" autocomplete="off"></div>'
 + '<span class="cnt" id="cnt"></span>'
 + '<button class="thm" id="thm" type="button" aria-label="切换主题">☀</button>'
-+ '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
 + '</div></div>'
 + '<nav class="mainmenu mainnav"><div class="hd-wrap">' + nav + '</div></nav>';
 paintAuth();
@@ -4748,7 +4730,6 @@ renderDetail();
 renderHome();
 bindSearch(renderHome);
 }
-initPsz();
 }).catch(function (e) {
 $('#main').innerHTML = '<div class="loading">数据加载失败：' + esc(e.message || e) + '</div>';
 });
