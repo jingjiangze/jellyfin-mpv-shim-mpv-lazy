@@ -37,6 +37,9 @@
     var fb = PSZ.mode === 'sd' ? [alCover, ANI.poster + id + '.jpg'] : [alCover];
     var h = '<article class="card" data-id="' + id + '"><div class="pw">'
       + '<img src="' + esc(src) + '"' + fbAttr(fb) + ' loading="lazy" decoding="async" alt="">'
+      /* 名次件（只有排行块传 opt.rank）：gamer 排行榜的角标是左上角一块深色方块 */
+      + (opt && opt.rank ? '<span class="rnum' + (opt.rank <= 3 ? ' top' : '') + '">'
+          + opt.rank + '</span>' : '')
       + (r[7] ? '<span class="rate">★ ' + Number(r[7]).toFixed(1) + '</span>' : '')
       + (r[8] ? '<span class="ep">' + r[8] + ' 集</span>' : '')
       + (function () { var pr = progressOf(id); return pr && pr.ep ? '<span class="prg">看到 第 ' + pr.ep + ' 集</span>' : ''; })()

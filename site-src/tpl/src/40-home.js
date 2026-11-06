@@ -63,7 +63,9 @@ function mountRanks() {
     done[id] = 1;
     var box = el.querySelector('.grid');
     var rows = rankPool(id);
-    if (box) box.innerHTML = rows.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('');
+    if (box) box.innerHTML = rows.map(function (r, i) {
+      return animeCard(r, { showYear: 1, rank: i + 1 });
+    }).join('');
   }
   if (!window.IntersectionObserver) { blocks.forEach(fill); return; }
   var io = new IntersectionObserver(function (es) {
@@ -85,13 +87,16 @@ function topRows(n) {
 }
 
 /* 首页区块：标题 + 计数（+ 可选的「更多」链接）+ 卡片网格。
-   list 为空时整块返回空串，由调用方决定是否补空态。 */
-function block(title, list, moreHtml, gridClass) {
+   list 为空时整块返回空串，由调用方决定是否补空态。
+   ranked=true 时卡片带名次件（热门排行用；其余区块用普通卡）。 */
+function block(title, list, moreHtml, gridClass, ranked) {
   if (!list || !list.length) return '';
   return '<section class="block"><div class="sec-h"><h2>' + title + '</h2><span class="sec-sub">'
     + list.length + ' 部 ' + (moreHtml || '') + '</span></div>'
     + '<div class="grid' + (gridClass ? ' ' + gridClass : '') + '">'
-    + list.map(function (r) { return animeCard(r, { showYear: 0 }); }).join('')
+    + list.map(function (r, i) {
+      return animeCard(r, ranked ? { showYear: 0, rank: i + 1 } : { showYear: 0 });
+    }).join('')
     + '</div></section>';
 }
 
@@ -251,7 +256,8 @@ function renderHome() {
   var season = block('本季新番 · ' + (HOME.q ? '第' + HOME.q + '季度' : HOME.y), seasonPool.slice(0, 7),
     '<a class="morelink" href="./anime">更多 ›</a>');
   var top = block('本季高分', topRows(7), '<a class="morelink" href="./rank">排行榜 ›</a>');
-  var hot = block('热门排行', rankPool('rank-all').slice(0, 7), '<a class="morelink" href="./rank">全部排行 ›</a>');
+  var hot = block('热门排行', rankPool('rank-all').slice(0, 7),
+    '<a class="morelink" href="./rank">全部排行 ›</a>', '', true);
 
   /* banner 全宽，放在内容之前；一张可用的都没有就不出 banner */
   var picks = bannerPick(seasonPool.length ? seasonPool : ANI.rows, BB_N);
