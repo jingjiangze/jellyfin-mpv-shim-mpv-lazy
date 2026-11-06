@@ -310,39 +310,53 @@ io.unobserve(e.target);
 }, { rootMargin: '300px' });
 blocks.forEach(function (b) { io.observe(b); });
 }
+function heroBlock(rows) {
+if (!rows || rows.length < 2) return '';
+var best = null;
+rows.forEach(function (r) {
+if (r[7] && (!best || r[7] > best[7])) best = r;
+});
+if (!best) best = rows[0];
+var side = rows.filter(function (r) { return r !== best; })
+.sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); })
+.slice(0, 4);
+var id = best[0];
+var alCover = (ANI.extra[id] || [])[1] || '';
+var fb = PSZ.mode === 'sd' ? [alCover, ANI.poster + id + '.jpg'] : [alCover];
+var sub = [best[4] || '', TYPE[best[3]] || best[3] || '',
+best[7] ? '★' + Number(best[7]).toFixed(1) : ''].filter(Boolean).join(' · ');
+return '<section class="hero" aria-label="本季推荐">'
++ '<a class="card hero-main" data-id="' + id + '"><div class="pw">'
++ '<img src="' + esc(posterSrc(id)) + '"' + fbAttr(fb) + ' loading="eager" decoding="async" alt="">'
++ '</div><div class="hero-txt"><h2 class="t">' + titleHTML(best[2] || best[1]) + '</h2>'
++ '<p class="sub2">' + esc(sub) + '</p></div></a>'
++ '<div class="hero-side">'
++ side.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('')
++ '</div></section>';
+}
+function topRows(n) {
+return ANI.rows.filter(function (r) { return r[7]; })
+.sort(function (a, b) { return b[7] - a[7]; })
+.slice(0, n || 8);
+}
+function block(title, list, moreHtml, gridClass) {
+if (!list || !list.length) return '';
+return '<section class="block"><div class="sec-h"><h2>' + title + '</h2><span class="sec-sub">'
++ list.length + ' 部 ' + (moreHtml || '') + '</span></div>'
++ '<div class="grid' + (gridClass ? ' ' + gridClass : '') + '">'
++ list.map(function (r) { return animeCard(r, { showYear: 0 }); }).join('')
++ '</div></section>';
+}
 function renderHome() {
 if (!HOME.y) homeDefaults();
 var rows = homeRows();
 var main = $('#main');
-var head = '<div class="bhead"><h2>'
-+ (HOME.q ? '第' + HOME.q + '季度' : '全部季度')
-+ (HOME.wd ? ' · ' + WD[HOME.wd - 1] : '')
-+ '</h2><span>' + rows.length + ' 部</span></div>';
-var body = '';
-if (rows.length && !HOME.wd) {
-for (var w = 1; w <= 7; w++) {
-var g = rows.filter(function (r) { return r[6] === w; });
-if (!g.length) continue;
-body += '<section class="block"><div class="bhead lv2"><h2>' + WD[w - 1] + '</h2><span>'
-+ g.length + ' 部</span></div><div class="grid">'
-+ g.map(function (r) { return animeCard(r, { showYear: 0 }); }).join('') + '</div></section>';
-}
-var unknown = rows.filter(function (r) { return !r[6]; });
-if (unknown.length) {
-body += '<section class="block"><div class="bhead lv2"><h2>放送日未知</h2><span>'
-+ unknown.length + ' 部</span></div><div class="grid">'
-+ unknown.map(function (r) { return animeCard(r); }).join('') + '</div></section>';
-}
-} else if (rows.length) {
-body = '<div class="grid">' + rows.map(function (r) {
-return animeCard(r, { showYear: 0 });
-}).join('') + '</div>';
-} else {
-body = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
-}
+var hero = heroBlock(rows);
+var today = block('今天更新', rows, '');
+if (!today) today = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
+var top = block('本季高分', topRows(8), '<a class="morelink" href="rank">排行榜 ›</a>', 'rankgrid');
 main.innerHTML = '<div class="home-cols">' + renderLevels()
-+ '<div class="home-main"><div class="home-head">' + head + '</div>' + body
-+ '</div></div>';
++ '<div class="home-main">' + hero + today + top + '</div></div>';
 main.querySelectorAll('[data-q]').forEach(function (b) {
 b.onclick = function () { HOME.q = Number(b.dataset.q); HOME.wd = 0; renderHome(); };
 });
@@ -589,7 +603,7 @@ if (!ANI.rows || !ANI.rows.length) {
 body = '<div class="empty">番剧数据还没加载好 —— 稍后刷新看看</div>';
 } else if (!rows.length) {
 body = '<div class="empty">还没有追番 —— 打开一部番剧，点详情里的「☆ 追番」</div>'
-+ '<div class="pf-actions"><a class="btn" href="anime">去番剧页</a></div>';
++ '<div class="pf-actions is-empty"><a class="btn" href="anime">去番剧页</a></div>';
 } else {
 body = '<div class="grid">' + rows.map(function (r) {
 return animeCard(r, { showYear: 1 });
@@ -609,7 +623,7 @@ return '<div class="pf-hero"></div>'
 + '<a class="btn" href="https://120.48.56.189/qr/" target="_blank" rel="noopener">绑定夸克网盘</a>'
 + '</div>'
 + '<div class="pf-bili" id="pfbili"></div>'
-+ '<div class="pf-tabs"><button class="on" type="button">我的追番</button></div>'
++ '<div class="mtabs"><button class="mtab on" type="button">我的追番</button></div>'
 + '<div class="pf-body">' + body + '</div>';
 }
 function watchLogin() {
@@ -672,11 +686,11 @@ main.innerHTML = '<div class="empty">' + esc((e && e.message) || '资料加载�
 + '</div><div class="pf-actions"><a class="btn" href="user">重试</a></div>';
 });
 }
-var BROWSE = { view: [], shown: 0, page: 120 };
+var BROWSE = { view: [], shown: 0, page: 120, busy: false };
 var FAV_ONLY = /[?&]fav=1\b/.test(location.search);
 function renderBrowse(mode) {
 var grid = $('#grid');
-if (!grid) return;
+if (!grid) { BROWSE.busy = false; return; }
 var want;
 if (mode === 'more') {
 want = Math.min(BROWSE.shown + BROWSE.page, BROWSE.view.length);
@@ -699,9 +713,13 @@ BROWSE.shown = want;
 var left = BROWSE.view.length - BROWSE.shown;
 $('#morewrap').hidden = left <= 0;
 if (left > 0) $('#morebtn').textContent = '加载更多 · 还剩 ' + left + ' 部';
-$('#hint').textContent = FAV_ONLY
+var hintText = FAV_ONLY
 ? '我的追番 · ' + BROWSE.view.length + ' 部'
 : '筛出 ' + BROWSE.view.length + ' 部，已显示 ' + BROWSE.shown;
+$('#hint').textContent = hintText;
+var hint2 = $('#hint2');
+if (hint2) hint2.textContent = hintText;
+BROWSE.busy = false;
 }
 function applyBrowse(reset) {
 var q = nrm(($('#q').value || '').trim());
@@ -800,7 +818,8 @@ function initBrowse() {
 var years = {};
 ANI.rows.forEach(function (r) { if (r[4]) years[r[4]] = (years[r[4]] || 0) + 1; });
 var ys = Object.keys(years).map(Number).sort(function (a, b) { return b - a; });
-$('#main').innerHTML = '<div class="filters">'
+$('#main').innerHTML = '<div class="sec-h"><h2>番剧</h2><span class="sec-sub" id="hint2"></span></div>'
++ '<div class="filters-bar"><div class="filters">'
 + '<label class="f-label">年份 <select id="f-year"><option value="">全部</option>'
 + ys.map(function (v) { return '<option value="' + v + '">' + v + '（' + years[v] + '）</option>'; }).join('')
 + '</select></label>'
@@ -812,7 +831,7 @@ $('#main').innerHTML = '<div class="filters">'
 + '<option value="rank">排名（前→后）</option>'
 + '<option value="name">标题</option></select></label>'
 + '<label class="f-label">标签 <select id="f-tag"><option value="">全部</option></select></label>'
-+ '<span class="f-hint" id="hint"></span></div>'
++ '<span class="f-hint" id="hint"></span></div></div>'
 + '<div class="grid" id="grid"></div>'
 + '<div class="morewrap" id="morewrap" hidden><button class="morebtn" id="morebtn" type="button"></button></div>';
 $('#f-year').value = ys[0] ? String(ys[0]) : '';
@@ -832,6 +851,19 @@ if (wasOpen && !open) applyBrowse();
 wasOpen = open;
 }).observe(maskEl, { attributes: true, attributeFilter: ['class'] });
 }
+}
+var wrap = $('#morewrap');
+if (wrap && window.IntersectionObserver) {
+var io = new IntersectionObserver(function (es) {
+for (var i = 0; i < es.length; i++) {
+if (!es[i].isIntersecting) continue;
+if (wrap.hidden || BROWSE.busy) return;
+BROWSE.busy = true;
+renderBrowse('more');
+return;
+}
+}, { rootMargin: '600px' });
+io.observe(wrap);
 }
 }
 var MOVIE = { all: [], view: [], shown: 0, page: 120, db: [], tm: [] };
@@ -965,6 +997,20 @@ paintMovieDb();
 applyMovie(reset === true);
 }
 var MODAL_GEN = 0;
+function urlWithId(id) {
+var parts = location.search.replace(/^\?/, '').split('&');
+var out = [], put = false;
+for (var i = 0; i < parts.length; i++) {
+if (!parts[i]) continue;
+if (/^id=/.test(parts[i])) {
+if (put) continue;
+out.push('id=' + encodeURIComponent(id));
+put = true;
+} else out.push(parts[i]);
+}
+if (!put) out.push('id=' + encodeURIComponent(id));
+return location.pathname + '?' + out.join('&');
+}
 function renderTags(rec, el) {
 if (!el) return;
 el.innerHTML = (rec.tags || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; }).slice(0, 12).map(function (t) {
@@ -1056,6 +1102,11 @@ d.innerHTML = '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent
 m.appendChild(d);
 };
 }
+try {
+if (history.pushState && !new RegExp('[?&]id=' + id + '(?:&|$)').test(location.search)) {
+history.pushState({ id: String(id) }, '', urlWithId(id));
+}
+} catch (e) { /* 沙箱/隐私模式里 pushState 受限：深链只是增强，不影响弹窗本身 */ }
 var rec = null;
 ensureTagCounts(function () {
 if (gen !== MODAL_GEN || !rec) return;
@@ -1150,6 +1201,12 @@ for (var i = 0; i < tr.length; i++) { if (tr[i].parentNode) tr[i].parentNode.rem
 m.innerHTML = '';
 }
 $('#mask').classList.remove('on');
+try {
+if (/[?&]id=/.test(location.search)) {
+var rest = location.search.replace(/([?&])id=[^&]*&?/, '$1').replace(/[?&]$/, '');
+history.replaceState(null, '', location.pathname + rest);
+}
+} catch (e) { /* 同上：地址栏清理失败不影响关闭 */ }
 }
 function openMagView(id, name, epsN) {
 var m = $('#modal');
@@ -1557,17 +1614,69 @@ var QP_LINE_MAX = 20;                       // 单番最多存 20 条自备线�
 var QP_RATES = [2, 1.5, 1.25, 1, 0.75];     // 倍速循环（初始 1.0×，按钮按数组顺序轮转）
 var QP_REBIND = 'https://120.48.56.189/qr/';
 var DM_BASE = 'https://120.48.56.189';
-var QP_DM_KEY = 'qp_dm_on';                    // 弹幕开关偏好：'1' / '0'
+var QP_DM_KEY = 'qp_dm_on';                    // 弹幕开关偏好：'1' / '0'（旧键，仍写，兼容老数据）
+var QP_DM_CFG = 'qp_dm_cfg';                   // 弹幕设置（JSON；缺省值见 DM_CFG_DEF）
 var DM_SPEED = 144;                            // 滚动弹幕速度 px/s（B 站量级；舞台变窄也不会挤成一团）
 var DM_FIX_S = 4;                              // 顶部 / 底部固定弹幕停留秒数
 var DM_LATE = 1;                               // 晚于这个秒数的弹幕直接丢（切后台 / 卡顿后不补投）
 var DM_MAX_ITEMS = 20000;                      // 单集最多装 2 万条，防脏数据把内存撑爆
 var DM_TEXT_MAX = 120;                         // 单条文本上限（B 站单条 100 字）
 var DM_FONT = 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+var DM_AREAS = [25, 50, 75, 100];              // 显示区域档位（占可用行数的百分比）
+var DM_BLOCK_MAX = 200;                        // 屏蔽词 / 屏蔽用户各最多 200 条，防 localStorage 被刷爆
+var DM_CFG_DEF = {
+on: true, opacity: 0.9, speedplus: 1, fontsize: 1, dmarea: 100,
+blockscroll: false, blocktop: false, blockbottom: false,
+blockcolor: false, blockspecial: false,
+aiLevel: 0, blockWords: [], blockUsers: []
+};
 var QPlayer = (function () {
 var TPL = '<div class="qp-head"><b class="qp-title"></b><span class="qp-sub"></span>'
 + '<button class="qp-btn qp-dm-toggle" type="button" aria-label="弹幕开关">弹幕 开</button>'
++ '<button class="qp-btn qp-dmset-btn" type="button" aria-label="弹幕设置" aria-expanded="false"'
++ ' title="弹幕设置">⚙</button>'
 + '<button class="qp-btn qp-close" type="button" aria-label="关闭播放器">×</button></div>'
++ '<section class="qp-dmset" hidden aria-label="弹幕设置">'
++ '<div class="qp-dmset-h"><b>弹幕设置</b>'
++ '<button class="qp-btn qp-dmset-done" type="button">完成</button></div>'
++ '<div class="qp-dmset-sec"><div class="qp-dmset-t">显示类型</div>'
++ '<div class="qp-dmset-chips">'
++ '<label class="qp-dmset-chip"><input type="checkbox" data-k="scroll"><span>滚动</span></label>'
++ '<label class="qp-dmset-chip"><input type="checkbox" data-k="top"><span>顶部</span></label>'
++ '<label class="qp-dmset-chip"><input type="checkbox" data-k="bottom"><span>底部</span></label>'
++ '<label class="qp-dmset-chip"><input type="checkbox" data-k="color"><span>彩色</span></label>'
++ '<label class="qp-dmset-chip"><input type="checkbox" data-k="special"><span>特殊</span></label>'
++ '</div></div>'
++ '<div class="qp-dmset-sec"><div class="qp-dmset-t"><span>不透明度</span>'
++ '<i class="qp-dmset-v" data-for="opacity"></i></div>'
++ '<input class="qp-dmset-range" type="range" data-k="opacity" min="0.2" max="1" step="0.05"'
++ ' aria-label="弹幕不透明度"></div>'
++ '<div class="qp-dmset-sec"><div class="qp-dmset-t"><span>速度</span>'
++ '<i class="qp-dmset-v" data-for="speedplus"></i></div>'
++ '<input class="qp-dmset-range" type="range" data-k="speedplus" min="0.5" max="2" step="0.1"'
++ ' aria-label="弹幕速度"></div>'
++ '<div class="qp-dmset-sec"><div class="qp-dmset-t"><span>字号</span>'
++ '<i class="qp-dmset-v" data-for="fontsize"></i></div>'
++ '<input class="qp-dmset-range" type="range" data-k="fontsize" min="0.6" max="1.6" step="0.1"'
++ ' aria-label="弹幕字号"></div>'
++ '<div class="qp-dmset-sec"><div class="qp-dmset-t"><span>显示区域</span></div>'
++ '<div class="qp-dmset-seg" data-k="dmarea">'
++ '<button type="button" data-v="25">25%</button>'
++ '<button type="button" data-v="50">50%</button>'
++ '<button type="button" data-v="75">75%</button>'
++ '<button type="button" data-v="100">100%</button></div></div>'
++ '<div class="qp-dmset-sec"><div class="qp-dmset-t"><span>屏蔽等级</span>'
++ '<i class="qp-dmset-v" data-for="aiLevel"></i></div>'
++ '<input class="qp-dmset-range" type="range" data-k="aiLevel" min="0" max="10" step="1"'
++ ' aria-label="屏蔽等级"></div>'
++ '<div class="qp-dmset-sec"><div class="qp-dmset-t">屏蔽词（每行一个，或逗号分隔）</div>'
++ '<textarea class="qp-dmset-ta" data-k="blockWords" rows="3"'
++ ' placeholder="命中即隐藏，不区分大小写"></textarea></div>'
++ '<div class="qp-dmset-sec"><div class="qp-dmset-t">屏蔽用户（uid 前 8 位，逗号分隔）</div>'
++ '<input class="qp-dmset-in" type="text" data-k="blockUsers" placeholder="如 a1b2c3d4"></div>'
++ '<div class="qp-dmset-foot">'
++ '<button class="qp-btn qp-dmset-reset" type="button">恢复默认</button></div>'
++ '</section>'
 + '<div class="qp-stage"><video class="qp-video" playsinline preload="metadata"></video>'
 + '<canvas class="qp-dm" aria-hidden="true"></canvas>'
 + '<button class="qp-bigplay" type="button" hidden>▶</button>'
@@ -2049,11 +2158,110 @@ if (h.raf) window.cancelAnimationFrame(h.id);
 else clearTimeout(h.id);
 } catch (e) { /* 忽略 */ }
 }
-function dmPref() {
+function dmLegacyOn() {
 try { return localStorage.getItem(QP_DM_KEY) !== '0'; } catch (e) { return true; }
 }
 function dmSavePref(on) {
 try { localStorage.setItem(QP_DM_KEY, on ? '1' : '0'); } catch (e) { /* 隐私模式：静默 */ }
+}
+function dmNum(v, lo, hi, dv) {
+var n = Number(v);
+if (!isFinite(n)) return dv;
+return Math.max(lo, Math.min(hi, n));
+}
+function dmCfgList(v, max) {
+var arr = Object.prototype.toString.call(v) === '[object Array]' ? v
+: (typeof v === 'string' ? v.split(/[\n,，;；]/) : []);
+var out = [], seen = {}, i, s, low;
+for (i = 0; i < arr.length && out.length < max; i++) {
+s = String(arr[i] == null ? '' : arr[i]).replace(/\s+/g, ' ').trim().slice(0, 64);
+if (!s) continue;
+low = s.toLowerCase();
+if (seen[low]) continue;
+seen[low] = 1;
+out.push(s);
+}
+return out;
+}
+function dmCfgNorm(raw) {
+var r = raw && typeof raw === 'object' && Object.prototype.toString.call(raw) !== '[object Array]' ? raw : {};
+var area = Number(r.dmarea), dmarea = DM_CFG_DEF.dmarea, i;
+for (i = 0; i < DM_AREAS.length; i++) { if (area === DM_AREAS[i]) dmarea = area; }
+return {
+on: typeof r.on === 'boolean' ? r.on : dmLegacyOn(),
+opacity: Math.round(dmNum(r.opacity, 0.2, 1, DM_CFG_DEF.opacity) * 100) / 100,
+speedplus: Math.round(dmNum(r.speedplus, 0.5, 2, DM_CFG_DEF.speedplus) * 10) / 10,
+fontsize: Math.round(dmNum(r.fontsize, 0.6, 1.6, DM_CFG_DEF.fontsize) * 10) / 10,
+dmarea: dmarea,
+blockscroll: !!r.blockscroll,
+blocktop: !!r.blocktop,
+blockbottom: !!r.blockbottom,
+blockcolor: !!r.blockcolor,
+blockspecial: !!r.blockspecial,
+aiLevel: Math.round(dmNum(r.aiLevel, 0, 10, DM_CFG_DEF.aiLevel)),
+blockWords: dmCfgList(r.blockWords, DM_BLOCK_MAX),
+blockUsers: dmCfgList(r.blockUsers, DM_BLOCK_MAX).map(function (s) { return s.slice(0, 8); })
+};
+}
+function dmCfg() {
+var raw = null;
+try { raw = JSON.parse(localStorage.getItem(QP_DM_CFG) || 'null'); } catch (e) { raw = null; }
+return dmCfgNorm(raw);
+}
+function dmCfgSave(cfg) {
+try { localStorage.setItem(QP_DM_CFG, JSON.stringify(cfg)); } catch (e) { /* 配额满 / 隐私模式：静默 */ }
+dmSavePref(!!cfg.on);                          // 旧键同步，老版本读到的开关不会回弹
+}
+function dmFilter(list, cfg) {
+var arr = Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+var c0 = cfg || dmCfgNorm(null);
+var ai = Number(c0.aiLevel) || 0;
+var lowWords = [], lowUsers = [], i;
+var words = c0.blockWords || [], users = c0.blockUsers || [];
+for (i = 0; i < words.length; i++) lowWords.push(String(words[i]).toLowerCase());
+for (i = 0; i < users.length; i++) lowUsers.push(String(users[i]).toLowerCase());
+var out = [];
+for (i = 0; i < arr.length && out.length < DM_MAX_ITEMS; i++) {
+var x = arr[i];
+if (!x) continue;
+var t = Number(x.t);
+var m = String(x.m == null ? '' : x.m).replace(/\s+/g, ' ').trim();
+if (!isFinite(t) || t < 0 || !m) continue;
+var c = Math.round(Number(x.c) || 1);
+if (!(c >= 1 && c <= 5)) c = 1;
+if (c0.blockscroll && c !== 4 && c !== 5) continue;        // 只留固定弹幕
+if (c0.blocktop && c === 5) continue;
+if (c0.blockbottom && c === 4) continue;
+if (c0.blockspecial && (c === 4 || c === 5)) continue;
+var w = Number(x.w);
+var wv = isFinite(w) ? w : 0;                              // 缺权重按最低档
+if (ai > 0 && wv < ai) continue;
+var col = Number(x.color);
+if (c0.blockcolor && isFinite(col) && col !== 16777215) continue;   // 非白色 = 彩色
+if (lowWords.length) {
+var low = m.toLowerCase(), hitWord = false;
+for (var a = 0; a < lowWords.length; a++) {
+if (lowWords[a] && low.indexOf(lowWords[a]) >= 0) { hitWord = true; break; }
+}
+if (hitWord) continue;
+}
+var uid = String(x.uid == null ? '' : x.uid).trim().toLowerCase().slice(0, 8);
+if (uid && lowUsers.length) {
+var hitUser = false;
+for (var b = 0; b < lowUsers.length; b++) { if (lowUsers[b] === uid) { hitUser = true; break; } }
+if (hitUser) continue;
+}
+out.push({
+t: t,
+m: m.slice(0, DM_TEXT_MAX),
+c: c,
+size: Math.max(12, Math.min(64, Number(x.size) || 25)),
+color: col,
+w: wv,
+uid: uid
+});
+}
+return out;
 }
 function dmColor(n) {
 var v = Number(n);
@@ -2063,7 +2271,8 @@ while (hex.length < 6) hex = '0' + hex;
 return '#' + hex;
 }
 function dmFontPx(dm, size) {
-var px = Math.round((Number(size) || 25) * dm.W / 1280);
+var k = Number(dm && dm.fs) || 1;
+var px = Math.round((Number(size) || 25) * k * dm.W / 1280);
 return Math.max(12, Math.min(20, px));
 }
 function dmSprite(dm, it, px) {
@@ -2135,7 +2344,10 @@ function dmLayout(S) {
 var dm = S.dm;
 dm.lineH = Math.max(18, Math.min(26, Math.round(dm.H / 8)));
 dm.pad = 4;
-dm.rows = Math.max(1, Math.floor((dm.H - dm.pad * 2) / dm.lineH));
+var rowsAll = Math.max(1, Math.floor((dm.H - dm.pad * 2) / dm.lineH));
+var pct = Number(dm.area) > 0 ? Number(dm.area) : 100;
+dm.rows = Math.max(1, Math.floor(rowsAll * pct / 100));
+dm.rowsAll = rowsAll;
 dm.cap = window.innerWidth <= 760 ? 20 : 30;     // 同屏上限：移动端 20，桌面 30
 dm.roll = [];
 dm.top = [];
@@ -2180,7 +2392,7 @@ var y = isTop
 dm.live.push({ mode: isTop ? 'top' : 'bot', t0: t0, w: sp.w, y: y, sp: sp });
 return;
 }
-var v = DM_SPEED, row2 = -1, best = null;
+var v = Math.max(1, Number(dm.speed) || DM_SPEED), row2 = -1, best = null;
 for (var k = 0; k < dm.rows; k++) {
 var rec = dm.roll[k];
 if (!dmFits(rec, t0, sp.w, v, W)) continue;
@@ -2276,29 +2488,18 @@ function dmSet(S, list) {
 var dm = S && S.dm;
 if (!dm) return 0;
 dmStop(S);
-var out = [], arr = Object.prototype.toString.call(list) === '[object Array]' ? list : [];
-for (var i = 0; i < arr.length && out.length < DM_MAX_ITEMS; i++) {
-var x = arr[i];
-if (!x) continue;
-var t = Number(x.t);
-var m = String(x.m == null ? '' : x.m).replace(/\s+/g, ' ').trim();
-if (!isFinite(t) || t < 0 || !m) continue;
-var c = Math.round(Number(x.c) || 1);
-if (!(c >= 1 && c <= 5)) c = 1;
-out.push({
-t: t,
-m: m.slice(0, DM_TEXT_MAX),
-c: c,
-size: Math.max(12, Math.min(64, Number(x.size) || 25)),
-color: Number(x.color)
-});
-}
-out.sort(function (a, b) { return a.t - b.t; });
+var arr = Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+var cfg = dm.cfg || dmCfg();
+dm.cfg = cfg;
+var out = dmFilter(arr, cfg);
+out.sort(function (a, b) { return a.t - b.t; });   // dmLower 二分 / dmAdvance 指针都要求按时间有序
+dm.raw = arr;
 dm.items = out;
 dm.next = 0;
 dm.live = [];
 dm.lastCt = -1;
-if (out.length) dmStart(S);                      // 空数组 = 关闭：停循环，层上不留东西
+dm.W = 0;                                        // 迫使下一帧重跑 dmResize → dmLayout（字号 / 显示区域 / 轨道全重置）
+if (out.length) dmStart(S);
 dmPaintBtn(S);
 return out.length;
 }
@@ -2320,7 +2521,10 @@ function dmToggle(S, on) {
 var dm = S && S.dm;
 if (!dm) return false;
 dm.on = !!on;
-dmSavePref(dm.on);
+var cfg = dmCfg();                               // 现读一次，别拿可能过期的 dm.cfg 覆盖别的设置
+cfg.on = dm.on;
+dm.cfg = cfg;
+dmCfgSave(cfg);                                  // 开关也进设置：面板与开关永远是同一份配置
 if (S.root) S.root.setAttribute('data-dm', dm.on ? '1' : '0');
 dmPaintBtn(S);
 if (dm.on) dmStart(S); else dmStop(S);
@@ -2329,29 +2533,181 @@ return dm.on;
 function dmClear(S) {
 var dm = S && S.dm;
 if (!dm) return;
+if (dm.cfgTimer) { clearTimeout(dm.cfgTimer); dm.cfgTimer = 0; }
 dmStop(S);
 dm.items = [];
+dm.raw = [];
 dm.next = 0;
 dm.live = [];
 dm.cid = '';
 }
 function dmInit(S, ctx) {
+var cfg = dmCfg();
 var dm = {
-on: dmPref(),
+on: !!cfg.on,
 cv: S.root.querySelector('.qp-dm'),
 g: null,
 W: 0, H: 0, dpr: 1,
-lineH: 22, pad: 4, rows: 1, cap: 30,
+lineH: 22, pad: 4, rows: 1, rowsAll: 1, cap: 30,
 roll: [], top: [], bot: [],
-items: [], next: 0, live: [],
-raf: null, lastCt: -1, meas: null, cid: ''
+items: [], raw: [], next: 0, live: [],
+raf: null, lastCt: -1, meas: null, cid: '',
+cfg: cfg,
+alpha: cfg.opacity,                         // canvas 的 CSS opacity（见 dmApply）
+speed: Math.max(1, Math.round(DM_SPEED * cfg.speedplus)),
+fs: cfg.fontsize,
+area: cfg.dmarea,
+cfgTimer: 0
 };
 S.dm = dm;
+if (dm.cv && dm.cv.style) dm.cv.style.opacity = String(dm.alpha);
 if (S.root) S.root.setAttribute('data-dm', dm.on ? '1' : '0');
 dmPaintBtn(S);
 var opt = (ctx && ctx.dm) || null;
 if (opt && opt.items) dmSet(S, opt.items);       // 调用方带数据：直接用
 else if (opt && opt.cid) dmFetch(S, opt.cid);    // 只给 cid：播放器自己拉
+}
+function dmApply(S) {
+var dm = S && S.dm;
+if (!dm) return 0;
+var cfg = dmCfg();
+dm.cfg = cfg;
+dm.alpha = cfg.opacity;
+dm.speed = Math.max(1, Math.round(DM_SPEED * cfg.speedplus));
+dm.fs = cfg.fontsize;
+dm.area = cfg.dmarea;
+if (dm.cv && dm.cv.style) dm.cv.style.opacity = String(cfg.opacity);
+return dmSet(S, dm.raw || []);
+}
+function dmApplySoon(S, soft) {
+var dm = S && S.dm;
+if (!dm) return;
+if (dm.cfgTimer) { clearTimeout(dm.cfgTimer); dm.cfgTimer = 0; }
+dm.cfgTimer = setTimeout(function () {
+dm.cfgTimer = 0;
+if (alive(S)) dmApply(S);
+}, soft ? 150 : 60);
+}
+function dmPanelEl(S) { return S && S.root ? S.root.querySelector('.qp-dmset') : null; }
+function dmPanelSync(S) {
+var box = dmPanelEl(S), dm = S && S.dm;
+if (!box) return;
+var cfg = dmCfg();
+if (dm) dm.cfg = cfg;
+var chips = {
+scroll: !cfg.blockscroll, top: !cfg.blocktop, bottom: !cfg.blockbottom,
+color: !cfg.blockcolor, special: !cfg.blockspecial
+};
+for (var k in chips) {
+if (!Object.prototype.hasOwnProperty.call(chips, k)) continue;
+var cb = box.querySelector('input[data-k="' + k + '"]');
+if (cb) cb.checked = !!chips[k];
+}
+var rk = ['opacity', 'speedplus', 'fontsize', 'aiLevel'], i;
+for (i = 0; i < rk.length; i++) {
+var r = box.querySelector('input[data-k="' + rk[i] + '"]');
+if (r) r.value = String(cfg[rk[i]]);
+}
+var ta = box.querySelector('[data-k="blockWords"]');
+if (ta && document.activeElement !== ta) ta.value = cfg.blockWords.join('\n');
+var ui = box.querySelector('[data-k="blockUsers"]');
+if (ui && document.activeElement !== ui) ui.value = cfg.blockUsers.join(', ');
+dmPanelPaint(box, cfg);
+}
+function dmPanelPaint(box, cfg) {
+if (!box) return;
+var vals = {
+opacity: Math.round(cfg.opacity * 100) + '%',
+speedplus: cfg.speedplus.toFixed(1) + '×',
+fontsize: cfg.fontsize.toFixed(1) + '×',
+aiLevel: cfg.aiLevel > 0 ? String(cfg.aiLevel) : '关'
+};
+for (var k in vals) {
+if (!Object.prototype.hasOwnProperty.call(vals, k)) continue;
+var v = box.querySelector('.qp-dmset-v[data-for="' + k + '"]');
+if (v) v.textContent = vals[k];
+}
+var seg = box.querySelector('[data-k="dmarea"]');
+if (!seg) return;
+var bs = seg.querySelectorAll('button[data-v]');
+for (var i = 0; i < bs.length; i++) {
+var on = Number(bs[i].getAttribute('data-v')) === cfg.dmarea;
+if (on) bs[i].classList.add('on'); else bs[i].classList.remove('on');
+}
+}
+var DM_CHIP_KEY = {
+scroll: 'blockscroll', top: 'blocktop', bottom: 'blockbottom',
+color: 'blockcolor', special: 'blockspecial'
+};
+var DM_RANGE = { opacity: [0.2, 1], speedplus: [0.5, 2], fontsize: [0.6, 1.6], aiLevel: [0, 10] };
+function dmPanelChange(S, k, val) {
+var dm = S && S.dm, box = dmPanelEl(S);
+if (!dm || !box) return;
+var cfg = dmCfg();
+if (Object.prototype.hasOwnProperty.call(DM_CHIP_KEY, k)) cfg[DM_CHIP_KEY[k]] = !val;
+else if (Object.prototype.hasOwnProperty.call(DM_RANGE, k)) {
+var r = DM_RANGE[k];
+cfg[k] = Math.round(dmNum(val, r[0], r[1], cfg[k]) * 100) / 100;
+} else if (k === 'dmarea') {
+var p = Number(val);
+if (DM_AREAS.indexOf(p) < 0) return;
+cfg.dmarea = p;
+} else if (k === 'blockWords' || k === 'blockUsers') cfg[k] = dmCfgList(val, DM_BLOCK_MAX);
+else return;
+cfg.on = !!dm.on;                             // 设置面板不决定开关，回写当前状态免得被覆盖
+dmCfgSave(cfg);
+dm.cfg = cfg;
+dmPanelPaint(box, cfg);
+if (k === 'opacity') {                        // 只是画布透明度：不重装、不重置轨道
+dm.alpha = cfg.opacity;
+if (dm.cv && dm.cv.style) dm.cv.style.opacity = String(cfg.opacity);
+return;
+}
+dmApplySoon(S, k === 'blockWords' || k === 'blockUsers');
+}
+function dmPanelReset(S) {
+var dm = S && S.dm;
+if (!dm) return;
+var cfg = dmCfgNorm(null);                     // 缺省值（on 取旧键，下面立刻用当前开关覆盖）
+cfg.on = !!dm.on;
+dmCfgSave(cfg);
+dm.cfg = cfg;
+dmPanelSync(S);
+dmApply(S);
+}
+function dmPanelShow(S, on) {
+var box = dmPanelEl(S);
+if (!box) return false;
+var show = on === undefined ? box.hasAttribute('hidden') : !!on;
+if (show) { box.removeAttribute('hidden'); dmPanelSync(S); }
+else box.setAttribute('hidden', '');
+var b = S.root.querySelector('.qp-dmset-btn');
+if (b) b.setAttribute('aria-expanded', show ? 'true' : 'false');
+return show;
+}
+function dmPanelBind(S) {
+var box = dmPanelEl(S);
+if (!box) return;
+box.addEventListener('input', function (ev) {
+var t = ev.target;
+if (!t || !t.getAttribute || t.type === 'checkbox') return;   // 勾选框交给 change
+var k = t.getAttribute('data-k');
+if (k) dmPanelChange(S, k, t.value);
+});
+box.addEventListener('change', function (ev) {
+var t = ev.target;
+if (!t || !t.getAttribute || t.type !== 'checkbox') return;   // 滑杆 / 文本的 change 已由 input 处理
+var k = t.getAttribute('data-k');
+if (k) dmPanelChange(S, k, !!t.checked);
+});
+box.addEventListener('click', function (ev) {
+var t = ev.target;
+if (!t || !t.closest || !alive(S)) return;
+if (t.closest('.qp-dmset-done')) { dmPanelShow(S, false); return; }
+if (t.closest('.qp-dmset-reset')) { dmPanelReset(S); return; }
+var seg = t.closest('.qp-dmset-seg button[data-v]');
+if (seg) dmPanelChange(S, 'dmarea', seg.getAttribute('data-v'));
+});
 }
 function bind(S) {
 var v = S.v, root = S.root;
@@ -2428,6 +2784,9 @@ var closeBtn = q('.qp-close');
 if (closeBtn) closeBtn.onclick = function () { close(); };
 var dmBtn = q('.qp-dm-toggle');
 if (dmBtn) dmBtn.onclick = function () { if (alive(S) && S.dm) dmToggle(S, !S.dm.on); };
+var dmSetBtn = q('.qp-dmset-btn');
+if (dmSetBtn) dmSetBtn.onclick = function () { if (alive(S)) dmPanelShow(S); };
+dmPanelBind(S);
 var playBtn = q('.qp-play');
 if (playBtn) playBtn.onclick = function () { togglePlay(S); };
 var muteBtn = q('.qp-mute');
@@ -2700,7 +3059,22 @@ toggleDanmaku: toggleDanmaku,
 danmakuOn: danmakuOn,
 clearDanmaku: clearDanmaku,
 _gate: gate,                                 // 离线自检：进度节流是纯函数
-_lines: { of: byoOf, save: saveByo, del: delByo }
+_lines: { of: byoOf, save: saveByo, del: delByo },
+_dm: {
+def: function () { return dmCfgNorm(null); },
+cfg: dmCfg, norm: dmCfgNorm, filter: dmFilter,
+apply: function () { return cur && cur.dm ? dmApply(cur) : 0; },
+panel: function (on) { return cur ? dmPanelShow(cur, on) : false; },
+stats: function () {
+var dm = cur && cur.dm;
+if (!dm) return null;
+return {
+on: dm.on, raw: (dm.raw || []).length, items: dm.items.length,
+rows: dm.rows, rowsAll: dm.rowsAll, speed: dm.speed, fs: dm.fs,
+area: dm.area, alpha: dm.alpha, cid: dm.cid
+};
+}
+}
 };
 })();
 window.QPlayer = QPlayer;
@@ -3383,6 +3757,18 @@ var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['anime?fav=1
 .map(function (x) {
 return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
 }).join('');
+var tabbar = document.getElementById('tabbar');
+if (!tabbar) {
+tabbar = document.createElement('nav');
+tabbar.className = 'tabbar';
+tabbar.id = 'tabbar';
+document.body.appendChild(tabbar);
+}
+tabbar.innerHTML = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['anime?fav=1', 'fav', '追番'],
+['movie', 'movie', '电影'], ['user', 'user', '我的']]
+.map(function (x) {
+return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
+}).join('');
 var host = document.getElementById('topbar');
 if (!host) return;
 host.innerHTML = '<div class="wrap"><a class="brand" href="./"><i></i>番组<b>计划</b></a>'
@@ -3396,6 +3782,19 @@ paintAuth();
 applyTheme(currentTheme());
 var thm = $('#thm');
 if (thm) thm.onclick = toggleTheme;
+syncHeaderH();
+if (window.addEventListener) window.addEventListener('resize', syncHeaderH);
+}
+function syncHeaderH() {
+var head = document.querySelector('header.site-head');
+if (!head || !head.getBoundingClientRect) return;
+var h = Math.round(head.getBoundingClientRect().height);
+var st = document.documentElement && document.documentElement.style;
+if (st && st.setProperty) st.setProperty('--header-h', h + 'px');
+}
+function deepLinkId() {
+var m = /[?&]id=(\d+)/.exec(location.search || '');
+return m ? Number(m[1]) : 0;
 }
 function bootAnime() {
 return jd('anime.json').then(function (d) {
@@ -3418,6 +3817,9 @@ openModal(Number(c.dataset.id));
 });
 $('#mask') && $('#mask').addEventListener('click', function (e) { if (e.target.id === 'mask') close(); });
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+window.addEventListener('popstate', function () {
+if (document.querySelector('#mask.on')) close();
+});
 bootHeader();
 bootAnime().then(function () {
 if (PAGE === 'anime') {
@@ -3428,6 +3830,8 @@ $('#q').addEventListener('input', function () {
 clearTimeout(qt);
 qt = setTimeout(applyBrowse, 220);
 });
+var deep = deepLinkId();
+if (deep) openModal(deep);
 } else if (PAGE === 'movie') {
 initMovie();
 } else if (PAGE === 'rank') {
