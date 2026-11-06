@@ -671,6 +671,7 @@ if (t && t.closest && (t.closest('.mgrow') || t.closest('.tg-h') || t.closest('[
 onChip(ev);
 });
 new MutationObserver(function () {
+if (document.body.getAttribute('data-ext-detail') === '1') return;
 var h3 = m.querySelector('h3');
 if (!h3) return;
 var name = h3.textContent.trim();

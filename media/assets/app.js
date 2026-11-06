@@ -190,18 +190,20 @@ if (!q.length) { img.onerror = null; img.style.visibility = 'hidden'; return; }
 img.src = q.shift();
 img.dataset.fb = q.join('|');
 };
-function posterBig(id) { return (ANI.poster || '') + id + '.jpg'; }
-function posterSrc(id) {
-var base = ANI.posterSd || ANI.poster || '';
-return base + id + '.jpg';
+var BUILD = '';
+try { BUILD = String(document.body.getAttribute('data-build') || '').replace(/[^0-9A-Za-z]/g, ''); } catch (e) { }
+if (!BUILD) BUILD = 'x';
+function bust(u) {
+if (!u) return u;
+return u + (u.indexOf('?') < 0 ? '?' : '&') + 'v=' + BUILD;
 }
-function posterHd(id) { return posterBig(id); }
+function posterHd(id) { return bust((ANI.poster || '') + id + '.jpg'); }
+function posterSrc(id) { return posterHd(id); }
 function posterFb(id, ex) {
-return fbAttr([posterBig(id), (ex || [])[1]]);
-}
-function posterFbHd(id, ex) {
-var sd = posterSrc(id);
-return fbAttr([sd === posterBig(id) ? '' : sd, (ex || [])[1]]);
+var base = ANI.posterSd || ANI.poster || '';
+var sd = base ? bust(base + id + '.jpg') : '';
+if (sd === posterHd(id)) sd = '';
+return fbAttr([sd, (ex || [])[1]]);
 }
 function avatarSrc(u) {
 if (!u || /^https?:/i.test(u)) return '';   // 未镜像的 lain.bgm.tv 图在国内不可达，直接出首字
@@ -227,7 +229,7 @@ var h = '<article class="card" data-id="' + id + '"><div class="pw">'
 return h;
 }
 function mcard(x, kind, idx) {
-var img = x.img ? '<img src="' + esc(x.img) + '" loading="lazy" decoding="async" alt="">'
+var img = x.img ? '<img src="' + esc(bust(x.img)) + '" loading="lazy" decoding="async" alt="">'
 : '<div class="ph">🎬</div>';
 var rate = (x.r != null && x.r !== '') ? x.r : x.rating;
 var sub = [(rate ? '★ ' + Number(rate).toFixed(1) : ''), (x.y || x.year || '')]
@@ -337,7 +339,7 @@ r[7] ? '★' + Number(r[7]).toFixed(1) : '', r[8] ? r[8] + ' 话' : '']
 .filter(Boolean).join(' · ');
 return '<a class="bigbanner' + (on ? ' is-on' : '') + '" href="/detail?id=' + id + '">'
 + '<img class="bigbanner-bg" data-src="' + esc(posterHd(id)) + '"'
-+   posterFbHd(id, ANI.extra[id] || []) + (on ? ' fetchpriority="high"' : '') + ' alt="">'
++   posterFb(id, ANI.extra[id] || []) + (on ? ' fetchpriority="high"' : '') + ' alt="">'
 + '<div class="bigbanner-in">'
 + '<span class="bigbanner-tag">本季推荐</span>'
 + '<h2>' + titleHTML(name) + '</h2>'
@@ -1329,10 +1331,113 @@ fill(function (r) { return !!y && String(r[4] || '') === y; });
 fill(function (r) { return !!t && r[3] === t && !!r[7]; });
 return out.slice(0, 6);
 }
+function extParams() {
+var m = /[?&]ext=(db|tm)(?:&|$)/.exec(location.search || '');
+if (!m) return null;
+var i = Number((/[?&]i=(\d+)/.exec(location.search || '') || [])[1] || 0);
+return { kind: m[1], i: i };
+}
+function renderExtDetail(ext) {
+var m = $('#modal');
+if (!m) return;
+var gen = ++DETAIL_GEN;
+m.setAttribute('data-bgm', '');
+document.body.setAttribute('data-ext-detail', '1');
+m.innerHTML = '<div class="loading">详情加载中…</div>';
+jd('movies.json').then(function (d) {
+if (gen !== DETAIL_GEN) return;
+var list = (d && (ext.kind === 'tm' ? d.tmdb : d.douban)) || [];
+var x = list[ext.i];
+if (!x) { detailEmpty('条目不存在', '这条豆瓣 / TMDB 记录不在数据里。', false); return; }
+drawExtDetail(m, ext.kind, ext.i, x, list);
+}, function () {
+if (gen !== DETAIL_GEN) return;
+detailEmpty('详情加载失败', 'movies.json 没拉到，检查网络后重试。', true, '条目不存在');
+});
+}
+function drawExtDetail(m, kind, i, x, list) {
+var isTm = kind === 'tm';
+var title = x.n || x.title || ('#' + i);
+var orig = isTm ? (x.ot || '') : (x.sub || '');
+var rate = (x.r != null && x.r !== '') ? Number(x.r) : 0;
+var year = String(x.y || x.year || '');
+var srcName = isTm ? 'TMDB' : '豆瓣';
+var intro = String((isTm ? x.ov : x.intro) || '');
+var meta = [];
+if (year) meta.push(['年份', year]);
+if (orig && orig !== title) meta.push(['原名', orig]);
+if (x.sub) meta.push(['地区 / 类型', x.sub]);
+meta.push(['来源', srcName]);
+var rel = [];
+for (var k = 0; k < list.length && rel.length < 6; k++) {
+if (k === i) continue;
+if (year && String(list[k].y || '') === year) rel.push([list[k], k]);
+}
+for (var k2 = 0; k2 < list.length && rel.length < 6; k2++) {
+if (k2 === i) continue;
+var dup = rel.some(function (pair) { return pair[1] === k2; });
+if (!dup && (list[k2].r != null && list[k2].r !== '')) rel.push([list[k2], k2]);
+}
+var relHtml = rel.map(function (pair) { return mcard(pair[0], kind, pair[1]); }).join('');
+m.innerHTML = '<nav class="dp-crumb"><a href="/movie">电影</a><span>/</span><b>'
++ esc(title) + '</b></nav>'
++ '<section class="mhero">'
++   '<div class="mposter">'
++     (x.img ? '<img src="' + esc(x.img) + '" loading="lazy" decoding="async" alt="">'
+: '<div class="ph">🎬</div>')
++   '</div>'
++   '<div class="mh-info">'
++     '<h3>' + esc(title) + '</h3>'
++     (orig && orig !== title ? '<div class="orig">' + esc(orig) + '</div>' : '')
++     '<div class="mbadges">'
++       (year ? '<span class="mbadge">' + esc(year) + '</span>' : '')
++       '<span class="mbadge">' + esc(srcName) + '</span>'
++     '</div>'
++     '<div class="mrate-line">'
++       (rate
+? '<b class="score">' + rate.toFixed(1) + '</b>'
++ '<span class="stars" style="--p:' + Math.round(rate * 10) + '"></span>'
+: '<b class="score dim">暂无评分</b>')
++       '<span class="votes">' + esc(srcName) + ' 评分</span>'
++     '</div>'
++     '<div class="acts">'
++       '<a class="btn pri" href="' + esc(x.u || x.url || '#') + '" target="_blank" rel="noopener">'
++         esc(srcName) + ' 页面</a>'
++       '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
++         encodeURIComponent(title) + '">B 站搜索</a>'
++     '</div>'
++   '</div>'
++ '</section>'
++ '<div class="dp-grid">'
++   '<div class="dp-main">'
++     '<div class="mbody" data-p="ext">'
++       '<section class="sect" id="dp-plot"><div class="sec-h"><h2>简介</h2></div>'
++         '<p class="plot">' + esc(intro || '暂无简介') + '</p></section>'
++       '<section class="sect"><div class="sec-h"><h2>信息</h2></div>'
++         '<dl class="infobox">'
++           meta.map(function (kv) {
+return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
+}).join('')
++         '</dl></section>'
++     '</div>'
++   '</div>'
++   '<aside class="dp-side">'
++     '<section class="sect"><div class="sec-h"><h2>相关推荐</h2></div>'
++       (relHtml ? '<div class="grid mgrid dp-rel">' + relHtml + '</div>'
+: '<p class="plot">暂无相关推荐</p>')
++     '</section>'
++     '<section class="sect"><div class="sec-h"><h2>数据来源</h2></div>'
++       '<p class="dp-src">' + esc(srcName) + '</p></section>'
++   '</aside>'
++ '</div>';
+document.title = title + ' · 番组计划';
+}
 function renderDetail() {
 var m = $('#modal');
 if (!m) return;                            // 非 detail 页 / 壳缺失：不做任何事
 var gen = ++DETAIL_GEN;
+var ext = extParams();
+if (ext) { renderExtDetail(ext); return; } // 豆瓣 / TMDB：同款整页详情，不走 Bangumi 分片
 var id = detailId();
 m.setAttribute('data-bgm', '');             // 先清掉上一代的 id：磁力层按它做身份校验
 if (!id) { detailEmpty('条目不存在', '地址里没有 id 参数，回番剧页挑一部吧。', false); return; }
@@ -1423,6 +1528,11 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b
 +       '<div class="dp-player" id="dpPlayer" style="--cover:url(' + esc(posterHd(id)) + ')"></div>'
 +       '<div class="mbody dp-eps" data-p="detail"></div>'
 +     '</div>'
++     (ex[2]
+? '<section class="sect" id="dp-trailer"><div class="sec-h"><h2>预告</h2></div>'
++ '<div class="trailer-slot" id="dpTrailerSlot">'
++ '<button class="btn pri" id="dpTrailer" type="button">▶ 播放预告（YouTube）</button></div></section>'
+: '')
 +     '<nav class="mtabs dp-nav">'
 +       '<a class="mtab on" href="#dp-plot">简介</a>'
 +       '<a class="mtab" href="#dp-chars">角色</a>'
@@ -1457,6 +1567,7 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b
 +   '</aside>'
 + '</div>';
 m.setAttribute('data-bgm', String(id));
+document.body.removeAttribute('data-ext-detail');   // 回到番剧详情：磁力层恢复挂载
 document.title = title + ' · 番组计划';
 srcPanelMount(m, id, title, curEp);
 var plot = m.querySelector('#plot');
@@ -1523,6 +1634,17 @@ if (dpslot) {
 dpslot.onclick = function () {
 if (dpslot.childNodes.length) return;
 openQuarkPlay(dpslot, id, title);
+};
+}
+var trb = m.querySelector('#dpTrailer');
+if (trb && ex[2]) {
+trb.onclick = function () {
+var slot = m.querySelector('#dpTrailerSlot');
+if (!slot || slot.querySelector('iframe')) return;
+slot.innerHTML = '<iframe src="https://www.youtube.com/embed/'
++ encodeURIComponent(ex[2]) + '?autoplay=1&rel=0"'
++ ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen'
++ ' style="width:100%;height:100%;border:0"></iframe>';
 };
 }
 var nav = m.querySelector('.dp-nav');
@@ -4707,13 +4829,15 @@ var mc = e.target.closest && e.target.closest('.mcard');
 if (mc) {
 if (e.metaKey || e.ctrlKey || e.button !== 0) return;
 e.preventDefault();
-openExtModal(mc.dataset.ext, Number(mc.dataset.i));
+location.href = '/detail?ext=' + encodeURIComponent(mc.dataset.ext || 'db')
++ '&i=' + encodeURIComponent(mc.dataset.i || '0');
 return;
 }
 var c = e.target.closest && e.target.closest('.card');
 if (!c) return;
-if (PAGE === 'detail') return;
-openModal(Number(c.dataset.id));
+if (e.metaKey || e.ctrlKey || e.button !== 0) return;
+e.preventDefault();
+location.href = '/detail?id=' + encodeURIComponent(c.dataset.id || '');
 });
 $('#mask') && $('#mask').addEventListener('click', function (e) { if (e.target.id === 'mask') close(); });
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
