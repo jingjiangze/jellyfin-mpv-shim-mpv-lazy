@@ -21,7 +21,7 @@
   var SRC_BASE = 'https://120.48.56.189';
   var SRC_TTL = 60 * 1000;                       // 探测结果缓存时长
   var SRC_QUARK_BIND = 'https://120.48.56.189/qr/';
-  var SRC_USER = './user';                       // B 站绑定在个人主页
+  var SRC_USER = '/user';                       // B 站绑定在个人主页
   var SRC_KEYS = ['quark', 'bili', 'byo', 'magnet'];
   var SRC_NAME = { quark: '夸克网盘', bili: 'B 站', byo: '自备源', magnet: '磁力' };
   var SRC_MEM = {};                              // "<id>:<ep>" -> {ts, data, pend}

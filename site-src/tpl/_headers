@@ -18,17 +18,37 @@
 /magnet-eps.js
   Cache-Control: public, max-age=300, must-revalidate
 
+# HTML 一律短边缘缓存 + 必须回源验证。
+# 2026-11-06 事故：`https://anime.jiangjiangze.icu/` 在部分 PoP 上被缓存成 301 → 它自己，
+# https 访问连续 8 跳以上 → 浏览器 ERR_TOO_MANY_REDIRECTS。
+# 原先写的是 s-maxage=300 + stale-while-revalidate=120，坏响应能在边缘滞留 5–7 分钟；
+# 这里收到 60s 且关掉 SWR，坏对象最多存活 one minute，且不会「一边回源一边继续发旧的」。
 /
-  Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=120
+  Cache-Control: public, max-age=30, s-maxage=60, must-revalidate
 
 /index.html
-  Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=120
+  Cache-Control: public, max-age=30, s-maxage=60, must-revalidate
+
+/anime
+  Cache-Control: public, max-age=30, s-maxage=60, must-revalidate
+
+/detail
+  Cache-Control: public, max-age=30, s-maxage=60, must-revalidate
+
+/movie
+  Cache-Control: public, max-age=30, s-maxage=60, must-revalidate
+
+/rank
+  Cache-Control: public, max-age=30, s-maxage=60, must-revalidate
+
+/user
+  Cache-Control: public, max-age=30, s-maxage=60, must-revalidate
 
 /library
-  Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=120
+  Cache-Control: public, max-age=30, s-maxage=60, must-revalidate
 
 /library.html
-  Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=120
+  Cache-Control: public, max-age=30, s-maxage=60, must-revalidate
 
 /sw.js
   Cache-Control: no-cache

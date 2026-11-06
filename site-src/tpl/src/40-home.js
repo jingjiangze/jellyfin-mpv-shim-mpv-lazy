@@ -121,7 +121,7 @@ function bannerHtml(r, on) {
   var sub = [r[4] || '', TYPE[r[3]] || r[3] || '',
     r[7] ? '★' + Number(r[7]).toFixed(1) : '', r[8] ? r[8] + ' 话' : '']
     .filter(Boolean).join(' · ');
-  return '<a class="bigbanner' + (on ? ' is-on' : '') + '" href="./detail?id=' + id + '">'
+  return '<a class="bigbanner' + (on ? ' is-on' : '') + '" href="/detail?id=' + id + '">'
     + '<img class="bigbanner-bg" src="' + esc(posterSrc(id)) + '" alt="">'
     + '<div class="bigbanner-in">'
     + '<span class="bigbanner-tag">本季推荐</span>'
@@ -237,7 +237,7 @@ function contBlock() {
   if (!list.length) return '';
   return '<section class="block"><div class="sec-h"><h2>继续观看</h2>'
     + '<span class="sec-sub">' + list.length + ' 部 '
-    + '<a class="morelink" href="./user">观看记录 ›</a></span></div>'
+    + '<a class="morelink" href="/user">观看记录 ›</a></span></div>'
     + '<div class="grid">' + list.map(contCard).join('') + '</div></section>';
 }
 
@@ -252,12 +252,12 @@ function renderHome() {
   var cont = contBlock();
   /* 每块只放一行 7 张（gamer 的首页区块就是这个节奏），整季/整年去番剧页看 */
   var today = block('今天更新 · ' + (WD[wd - 1] || ''), todayRows().slice(0, 7),
-    '<a class="morelink" href="./anime">全部番剧 ›</a>');
+    '<a class="morelink" href="/anime">全部番剧 ›</a>');
   var season = block('本季新番 · ' + (HOME.q ? '第' + HOME.q + '季度' : HOME.y), seasonPool.slice(0, 7),
-    '<a class="morelink" href="./anime">更多 ›</a>');
-  var top = block('本季高分', topRows(7), '<a class="morelink" href="./rank">排行榜 ›</a>');
+    '<a class="morelink" href="/anime">更多 ›</a>');
+  var top = block('本季高分', topRows(7), '<a class="morelink" href="/rank">排行榜 ›</a>');
   var hot = block('热门排行', rankPool('rank-all').slice(0, 7),
-    '<a class="morelink" href="./rank">全部排行 ›</a>', '', true);
+    '<a class="morelink" href="/rank">全部排行 ›</a>', '', true);
 
   /* banner 全宽，放在内容之前；一张可用的都没有就不出 banner */
   var picks = bannerPick(seasonPool.length ? seasonPool : ANI.rows, BB_N);

@@ -548,8 +548,8 @@
     var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
     /* 菜单 5 项（照 ani.gamer.com.tw 的 .mainmenu）：选中项只加 .is-on，
        主色块由 CSS 画（白字压 #00B4D8 对比度不够，用深墨字）。 */
-    var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
-      ['rank', 'rank', '排行榜'], ['user', 'user', '我的']]
+    var nav = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'], ['/movie', 'movie', '电影'],
+      ['/rank', 'rank', '排行榜'], ['/user', 'user', '我的']]
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');
@@ -562,8 +562,8 @@
       tabbar.id = 'tabbar';
       document.body.appendChild(tabbar);
     }
-    var items = [['./', 'home', '首页'], ['anime', 'anime', '番剧'],
-      ['movie', 'movie', '电影'], ['user', 'user', '我的']];
+    var items = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'],
+      ['/movie', 'movie', '电影'], ['/user', 'user', '我的']];
     /* 列数跟项数走，增删导航项不用再改 CSS */
     tabbar.style.setProperty('--tabn', String(items.length));
     tabbar.innerHTML = items
@@ -577,7 +577,7 @@
        --header-h 由下面的 syncHeaderH() 量完写回（.filters-bar 的 top 吃这个变量）。
        nav 同时保留 .mainnav 类：CSS 的菜单规则与其它模块的取值都还认它。 */
     host.innerHTML = '<div class="sky"><div class="hd-wrap">'
-      + '<a class="brand" href="./"><i></i>番组<b>计划</b></a>'
+      + '<a class="brand" href="/"><i></i>番组<b>计划</b></a>'
       + '<div class="searchbox"><input id="q" type="search" placeholder="' + ph + '" autocomplete="off"></div>'
       + '<span class="cnt" id="cnt"></span>'
       + '<button class="thm" id="thm" type="button" aria-label="切换主题">☀</button>'
@@ -661,7 +661,7 @@
       var deep = deepLinkId();
       if (deep && !DEEP_REDIRECT) {
         DEEP_REDIRECT = true;
-        location.replace('./detail?id=' + deep);
+        location.replace('/detail?id=' + deep);
       }
     } else if (PAGE === 'movie') {
       initMovie();

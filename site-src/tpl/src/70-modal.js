@@ -26,7 +26,7 @@
     el.innerHTML = (rec.tags || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; }).slice(0, 12).map(function (t) {
       var n = TAGCNT[t];
       /* 标签可点：静态站同目录的番剧页用 ?tag= 接深链，交给浏览器导航，不拦点击、不关弹窗 */
-      var href = './anime.html?tag=' + encodeURIComponent(t);
+      var href = '/anime?tag=' + encodeURIComponent(t);
       return '<a class="tagpill" href="' + esc(href) + '">' + esc(t) + (n ? '<em>' + n + '</em>' : '') + '</a>';
     }).join('');
   }

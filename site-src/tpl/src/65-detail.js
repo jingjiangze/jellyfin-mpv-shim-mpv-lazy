@@ -11,8 +11,15 @@
      路由：/detail?id=<bgm id>。没有 id / 记录不存在 / 分片拉不到都落到空态。 */
   var DETAIL_GEN = 0;            // 每次 renderDetail 自增：异步结果只落最后一代
 
+  /* 取当前条目的 id，三种入口都认：
+       /detail?id=123          整页详情（主入口）
+       /anime/123              老深链：_redirects 用 200 重写到这里，地址栏不变
+       /detail/123             同上（预留给 path 形式的分享链接）
+     顺序必须是 query 优先：用 200 重写时 pathname 与 query 可能同时存在，query 更明确。 */
   function detailId() {
     var m = /[?&]id=(\d+)/.exec(location.search || '');
+    if (m) return Number(m[1]);
+    m = /\/(?:anime|detail)\/(\d+)\/?$/.exec(location.pathname || '');
     return m ? Number(m[1]) : 0;
   }
 
@@ -39,11 +46,11 @@
     var m = $('#modal');
     if (!m) return;
     document.title = (docTitle || head) + ' · 番组计划';
-    m.innerHTML = '<nav class="dp-crumb"><a href="./anime">番剧</a><span>/</span><b>'
+    m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b>'
       + esc(head) + '</b></nav>'
       + '<section class="sect"><div class="sec-h"><h2>' + esc(head) + '</h2></div>'
       + '<p class="plot">' + esc(sub) + '</p>'
-      + '<p><a class="btn pri" href="./anime">回番剧页</a>'
+      + '<p><a class="btn pri" href="/anime">回番剧页</a>'
       + (retry ? ' <button class="btn" id="dpRetry" type="button">重试</button>' : '')
       + '</p></section>';
     var rb = m.querySelector('#dpRetry');
@@ -142,7 +149,7 @@
       return animeCard(r, { showYear: 1 });
     }).join('');
 
-    m.innerHTML = '<nav class="dp-crumb"><a href="./anime">番剧</a><span>/</span><b>'
+    m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b>'
       + esc(title) + '</b></nav>'
       + '<section class="mhero">'
       +   '<img class="mposter" src="' + esc(posterSrc(id)) + '"' + fbAttr([ex[1]]) + ' alt="">'
@@ -348,7 +355,7 @@
         var rid = c.getAttribute('data-id');
         if (!rid) return;
         ev.preventDefault();
-        location.href = './detail?id=' + rid;
+        location.href = '/detail?id=' + rid;
       };
     }
 

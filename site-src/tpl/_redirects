@@ -1,6 +1,8 @@
 /library /  301
 /library.html /  301
 /magnet.html /  301
-# 整页详情页收口：/anime/<bgm id> 这类老式路径 301 到 detail?id=<id>，
-# 静态站只有一个 detail.html 壳、按 query 渲染（CF Pages 占位符 :id 全文件只能用一次）
-/anime/:id    /detail?id=:id    301
+# 老深链 /anime/<bgm id>：**用 200 重写**（浏览器地址不变），id 由 detail 页从 pathname 解析。
+# 不要写成 301 → /detail?id=:id —— 实测 CF Pages 不替换 query 里的 :id 占位符，
+# 会落到 /detail?id=%3Aid 这种坏地址；而 301 会被边缘缓存，
+# 一旦缓存了错误目标，整个 https 入口就会 ERR_TOO_MANY_REDIRECTS（2026-11-06 实际发生）。
+/anime/:id /detail  200

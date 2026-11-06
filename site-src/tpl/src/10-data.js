@@ -5,7 +5,7 @@
   var D_BASES = [
     'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/data/',
     'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/',
-    './data/'
+    '/data/'
   ];
   function jd(name) {
     var i = 0;
