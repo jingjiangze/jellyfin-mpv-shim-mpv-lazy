@@ -2883,7 +2883,8 @@ main {
 }
 
 @media (max-width: 560px) {
-  /* 列宽 96px 已在 19 节声明，这里只管海报固定在第 1 列（跨行由 19 节的 grid-row 负责）+ 按钮通栏 */
+  /* 列宽 96px 已在 19 节声明，这里只管海报固定在第 1 列（跨行由 19 节的 grid-row 负责）+ 按钮通栏。
+     行距的实际覆盖在 .dp 段末尾（`.dp .mhero` 是 0,2,0，必须排在它后面）。 */
   .mhero, .mhd { gap: var(--s2) var(--s3); }
   .mhero > .mposter, .mhd > .mposter { grid-column: 1; }
   .mhero > .mh-info, .mhd > .mh-info { display: contents; }
@@ -3199,8 +3200,8 @@ main {
 .qp-line-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .qp-line-row { display: inline-flex; align-items: center; gap: var(--s1); }
 .qp-line { height: var(--ctl-h); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  padding: 0 var(--s3); border: 1px solid var(--line); border-radius: var(--r-pill);
-  background: var(--card2); color: var(--fg2); font-size: var(--fs-xs); cursor: pointer; }
+  padding: 0 var(--s3); border: 1px solid var(--line); border-radius: var(--r-xs);
+  background: var(--card); color: var(--fg2); font-size: var(--fs-xs); cursor: pointer; }
 .qp-line:hover { border-color: var(--accent-line); color: var(--accent); }
 .qp-line.on { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .qp-line.is-bad { opacity: .55; }
@@ -3359,6 +3360,13 @@ main {
   .dp-nav { position: static; }
   .dp-eps { max-height: 360px; }
   .dp .mhero { grid-template-columns: 96px minmax(0,1fr); }
+}
+
+/* 手机详情 hero 的行距：基础规则 `.dp .mhero{gap:var(--s6)=32px}` 是 (0,2,0)，
+   19 节断点里那条同特异性规则在它前面，压不住 —— 实测 390px 下 row-gap 仍是 32px，
+   标题与原名之间空 50px、评分与收藏数之间空 60px。这条必须排在 `.dp .mhero` 之后。 */
+@media (max-width: 560px) {
+  .dp .mhero, .dp .mhd { gap: var(--s2) var(--s3); padding: var(--s4) 0 var(--s3); }
 }
 
 /* 详情页播放器槽：未开播时是「封面 + 播放圆钮」（gamer 未点开始前就是一张封面），
