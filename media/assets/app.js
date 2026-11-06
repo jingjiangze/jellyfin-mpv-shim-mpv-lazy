@@ -22,7 +22,7 @@ return '<button class="chip' + (on ? ' on' : '') + '" type="button" ' + attr + '
 var D_BASES = [
 'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/data/',
 'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/',
-'./data/'
+'/data/'
 ];
 function jd(name) {
 var i = 0;
@@ -328,7 +328,7 @@ var id = r[0], name = r[2] || r[1];
 var sub = [r[4] || '', TYPE[r[3]] || r[3] || '',
 r[7] ? '★' + Number(r[7]).toFixed(1) : '', r[8] ? r[8] + ' 话' : '']
 .filter(Boolean).join(' · ');
-return '<a class="bigbanner' + (on ? ' is-on' : '') + '" href="./detail?id=' + id + '">'
+return '<a class="bigbanner' + (on ? ' is-on' : '') + '" href="/detail?id=' + id + '">'
 + '<img class="bigbanner-bg" src="' + esc(posterSrc(id)) + '" alt="">'
 + '<div class="bigbanner-in">'
 + '<span class="bigbanner-tag">本季推荐</span>'
@@ -430,7 +430,7 @@ var list = contList(7);
 if (!list.length) return '';
 return '<section class="block"><div class="sec-h"><h2>继续观看</h2>'
 + '<span class="sec-sub">' + list.length + ' 部 '
-+ '<a class="morelink" href="./user">观看记录 ›</a></span></div>'
++ '<a class="morelink" href="/user">观看记录 ›</a></span></div>'
 + '<div class="grid">' + list.map(contCard).join('') + '</div></section>';
 }
 function renderHome() {
@@ -440,12 +440,12 @@ var wd = wdToday();
 var seasonPool = seasonRows();
 var cont = contBlock();
 var today = block('今天更新 · ' + (WD[wd - 1] || ''), todayRows().slice(0, 7),
-'<a class="morelink" href="./anime">全部番剧 ›</a>');
+'<a class="morelink" href="/anime">全部番剧 ›</a>');
 var season = block('本季新番 · ' + (HOME.q ? '第' + HOME.q + '季度' : HOME.y), seasonPool.slice(0, 7),
-'<a class="morelink" href="./anime">更多 ›</a>');
-var top = block('本季高分', topRows(7), '<a class="morelink" href="./rank">排行榜 ›</a>');
+'<a class="morelink" href="/anime">更多 ›</a>');
+var top = block('本季高分', topRows(7), '<a class="morelink" href="/rank">排行榜 ›</a>');
 var hot = block('热门排行', rankPool('rank-all').slice(0, 7),
-'<a class="morelink" href="./rank">全部排行 ›</a>', '', true);
+'<a class="morelink" href="/rank">全部排行 ›</a>', '', true);
 var picks = bannerPick(seasonPool.length ? seasonPool : ANI.rows, BB_N);
 var gen = ++BANNER_GEN;
 if (BB_TIMER) { clearInterval(BB_TIMER); BB_TIMER = 0; }   // 上一代的自动轮播先停
@@ -1260,6 +1260,8 @@ applyMovie(reset === true);
 var DETAIL_GEN = 0;            // 每次 renderDetail 自增：异步结果只落最后一代
 function detailId() {
 var m = /[?&]id=(\d+)/.exec(location.search || '');
+if (m) return Number(m[1]);
+m = /\/(?:anime|detail)\/(\d+)\/?$/.exec(location.pathname || '');
 return m ? Number(m[1]) : 0;
 }
 function detailShard(id) {
@@ -1278,11 +1280,11 @@ function detailEmpty(head, sub, retry, docTitle) {
 var m = $('#modal');
 if (!m) return;
 document.title = (docTitle || head) + ' · 番组计划';
-m.innerHTML = '<nav class="dp-crumb"><a href="./anime">番剧</a><span>/</span><b>'
+m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b>'
 + esc(head) + '</b></nav>'
 + '<section class="sect"><div class="sec-h"><h2>' + esc(head) + '</h2></div>'
 + '<p class="plot">' + esc(sub) + '</p>'
-+ '<p><a class="btn pri" href="./anime">回番剧页</a>'
++ '<p><a class="btn pri" href="/anime">回番剧页</a>'
 + (retry ? ' <button class="btn" id="dpRetry" type="button">重试</button>' : '')
 + '</p></section>';
 var rb = m.querySelector('#dpRetry');
@@ -1367,7 +1369,7 @@ return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
 var relHtml = detailRelated(rec, id).map(function (r) {
 return animeCard(r, { showYear: 1 });
 }).join('');
-m.innerHTML = '<nav class="dp-crumb"><a href="./anime">番剧</a><span>/</span><b>'
+m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b>'
 + esc(title) + '</b></nav>'
 + '<section class="mhero">'
 +   '<img class="mposter" src="' + esc(posterSrc(id)) + '"' + fbAttr([ex[1]]) + ' alt="">'
@@ -1540,7 +1542,7 @@ if (!c || c === rel) return;
 var rid = c.getAttribute('data-id');
 if (!rid) return;
 ev.preventDefault();
-location.href = './detail?id=' + rid;
+location.href = '/detail?id=' + rid;
 };
 }
 bindBili(id, title, (row && row[4]) || '');
@@ -1564,7 +1566,7 @@ function renderTags(rec, el) {
 if (!el) return;
 el.innerHTML = (rec.tags || []).filter(function (t, i, arr) { return arr.indexOf(t) === i; }).slice(0, 12).map(function (t) {
 var n = TAGCNT[t];
-var href = './anime.html?tag=' + encodeURIComponent(t);
+var href = '/anime?tag=' + encodeURIComponent(t);
 return '<a class="tagpill" href="' + esc(href) + '">' + esc(t) + (n ? '<em>' + n + '</em>' : '') + '</a>';
 }).join('');
 }
@@ -3637,7 +3639,7 @@ window.QPlayer = QPlayer;
 var SRC_BASE = 'https://120.48.56.189';
 var SRC_TTL = 60 * 1000;                       // 探测结果缓存时长
 var SRC_QUARK_BIND = 'https://120.48.56.189/qr/';
-var SRC_USER = './user';                       // B 站绑定在个人主页
+var SRC_USER = '/user';                       // B 站绑定在个人主页
 var SRC_KEYS = ['quark', 'bili', 'byo', 'magnet'];
 var SRC_NAME = { quark: '夸克网盘', bili: 'B 站', byo: '自备源', magnet: '磁力' };
 var SRC_MEM = {};                              // "<id>:<ep>" -> {ts, data, pend}
@@ -4626,8 +4628,8 @@ paintLoginEntry(el);
 function bootHeader() {
 var P = PAGE;
 var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
-var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
-['rank', 'rank', '排行榜'], ['user', 'user', '我的']]
+var nav = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'], ['/movie', 'movie', '电影'],
+['/rank', 'rank', '排行榜'], ['/user', 'user', '我的']]
 .map(function (x) {
 return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
 }).join('');
@@ -4638,8 +4640,8 @@ tabbar.className = 'tabbar';
 tabbar.id = 'tabbar';
 document.body.appendChild(tabbar);
 }
-var items = [['./', 'home', '首页'], ['anime', 'anime', '番剧'],
-['movie', 'movie', '电影'], ['user', 'user', '我的']];
+var items = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'],
+['/movie', 'movie', '电影'], ['/user', 'user', '我的']];
 tabbar.style.setProperty('--tabn', String(items.length));
 tabbar.innerHTML = items
 .map(function (x) {
@@ -4648,7 +4650,7 @@ return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x
 var host = document.getElementById('topbar');
 if (!host) return;
 host.innerHTML = '<div class="sky"><div class="hd-wrap">'
-+ '<a class="brand" href="./"><i></i>番组<b>计划</b></a>'
++ '<a class="brand" href="/"><i></i>番组<b>计划</b></a>'
 + '<div class="searchbox"><input id="q" type="search" placeholder="' + ph + '" autocomplete="off"></div>'
 + '<span class="cnt" id="cnt"></span>'
 + '<button class="thm" id="thm" type="button" aria-label="切换主题">☀</button>'
@@ -4712,7 +4714,7 @@ qt = setTimeout(applyBrowse, 220);
 var deep = deepLinkId();
 if (deep && !DEEP_REDIRECT) {
 DEEP_REDIRECT = true;
-location.replace('./detail?id=' + deep);
+location.replace('/detail?id=' + deep);
 }
 } else if (PAGE === 'movie') {
 initMovie();
