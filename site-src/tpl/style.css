@@ -397,7 +397,8 @@ main {
   flex: 0 0 auto;
   height: var(--ctl-h);
   padding: 0 var(--s3);
-  border-radius: var(--r-pill);
+  /* 与 .thm 同款小圆角（gamer 顶栏三件套都是矩形按钮，不是药丸） */
+  border-radius: var(--r-ctl);
   font-size: var(--fs-sm);
   color: var(--dim);
   background: transparent;
@@ -823,6 +824,16 @@ main {
               box-shadow var(--dur-2) var(--ease);
 }
 
+/* 电影页的 .mcard 与番组卡同观感（gamer 只有番组卡一种样式，全站卡片应当一致）：
+   白底 + 6px 圆角 + 双阴影，不再用描边；hover 只提阴影，不位移。 */
+.mcard {
+  background: var(--card);
+  border: 0;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .1), 0 4px 8px rgba(0, 0, 0, .03);
+  transition: box-shadow var(--dur-2) var(--ease);
+}
+
 /* hover 只提阴影，不再整体位移（整格上移会让相邻行跟着视觉抖动） */
 .card:hover {
   transform: none;
@@ -830,9 +841,8 @@ main {
 }
 
 .mcard:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent-line);
-  box-shadow: var(--sh-2);
+  transform: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .1), 0 6px 12px rgba(0, 0, 0, .08);
 }
 
 /* 封面悬停：缩放与遮罩都限定在 .card > .pw 的 img / ::after 上。
@@ -1057,6 +1067,17 @@ main {
   padding-right: var(--s3);
 }
 
+/* 电影卡标题与番组卡同口径：单行省略（多行标题会把一排卡压得高低不齐） */
+.mcard .t {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  min-height: 20px;
+}
+
 .morewrap {
   display: flex;
   justify-content: center;
@@ -1070,10 +1091,10 @@ main {
 .morebtn {
   height: 38px;
   padding: 0 var(--s5);
-  border-radius: 999px;
+  border-radius: var(--r-xs);
   font-size: var(--fs-sm);
   color: var(--fg);
-  background: var(--card2);
+  background: var(--card);
   border: 1px solid var(--line);
   transition: border-color .16s ease, color .16s ease;
 }
@@ -1439,7 +1460,8 @@ main {
   gap: 6px;
   height: 34px;
   padding: 0 var(--s4);
-  border-radius: 50px;
+  /* gamer 的按钮是小圆角矩形（≈3–4px），不是药丸；药丸留给胶囊筛选这类元素 */
+  border-radius: var(--r-xs);
   font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--fg);
