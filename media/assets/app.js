@@ -337,7 +337,7 @@ r[7] ? '★' + Number(r[7]).toFixed(1) : '', r[8] ? r[8] + ' 话' : '']
 .filter(Boolean).join(' · ');
 return '<a class="bigbanner' + (on ? ' is-on' : '') + '" href="/detail?id=' + id + '">'
 + '<img class="bigbanner-bg" data-src="' + esc(posterHd(id)) + '"'
-+   posterFbHd(id, ANI.extra[id] || []) + ' alt="">'
++   posterFbHd(id, ANI.extra[id] || []) + (on ? ' fetchpriority="high"' : '') + ' alt="">'
 + '<div class="bigbanner-in">'
 + '<span class="bigbanner-tag">本季推荐</span>'
 + '<h2>' + titleHTML(name) + '</h2>'
@@ -566,7 +566,7 @@ throw new Error('资料格式不对，稍后重试');
 });
 }
 function userLoginHTML() {
-return '<div class="pf-hero"></div>'
+return '<div class="sec-h"><h2>我的</h2><span class="sec-sub">未登录</span></div>'
 + '<div class="empty">登录后查看我的主页 —— 追番、观看进度和账号设置都在这里</div>'
 + '<div class="pf-acts-note">'
 + '<p><b>B 站扫码绑定</b>：绑定结果记在你的账号下（每人对自己的绑定负责），登录后才会出现扫码按钮。</p>'
@@ -4328,7 +4328,7 @@ mask.innerHTML = '<div class="authcard" role="dialog" aria-modal="true">'
 + '<button class="btn pri" id="authlogin" type="button">登录</button>'
 + '<button class="btn" id="authreg" type="button">注册</button>'
 + '</div>'
-+ '<p class="authhint" id="authemailtip">邮箱只用于登录与找回，不发推广；验证码 10 分钟内有效。</p>'
++ '<p class="authhint" id="authemailtip">邮箱只用于登录与找回，不发推广。注册会往这个邮箱发 6 位验证码（10 分钟内有效），验证通过才算注册成功；密码至少 8 位。</p>'
 + '</div>'
 + '<div class="authbody" data-t="verify" hidden>'
 + '<p class="authhint" id="authverifyhint">验证码已发到你的邮箱，10 分钟内有效。</p>'
@@ -4468,7 +4468,16 @@ var mask = document.getElementById('authmask');
 if (!mask) return;
 showAuthView('verify');
 var tip = document.getElementById('authverifyhint');
-if (tip) tip.textContent = hint || '验证码已发送';
+if (tip) {
+tip.innerHTML = '';
+tip.appendChild(document.createTextNode(hint || '验证码已发送'));
+if (AUTH_PENDING) {
+var b = document.createElement('b');
+b.textContent = AUTH_PENDING;
+tip.appendChild(document.createTextNode(' → '));
+tip.appendChild(b);
+}
+}
 var code = document.getElementById('authcode');
 if (code) code.value = devCode ? String(devCode) : '';
 var ce = document.getElementById('authcodeerr');
