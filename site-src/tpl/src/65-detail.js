@@ -304,6 +304,12 @@
       /* 磁力锚点：必须是 #modal 里第一个 .mbody[data-p="detail"]（magnet-eps.js 取首个并 append） */
       +       '<div class="mbody dp-eps" data-p="detail"></div>'
       +     '</div>'
+      /* 预告（YouTube 官方源，ex[2] 有才出）：点按钮才注 iframe，页面加载不带第三方 JS */
+      +     (ex[2]
+            ? '<section class="sect" id="dp-trailer"><div class="sec-h"><h2>预告</h2></div>'
+              + '<div class="trailer-slot" id="dpTrailerSlot">'
+              + '<button class="btn pri" id="dpTrailer" type="button">▶ 播放预告（YouTube）</button></div></section>'
+            : '')
       +     '<nav class="mtabs dp-nav">'
       +       '<a class="mtab on" href="#dp-plot">简介</a>'
       +       '<a class="mtab" href="#dp-chars">角色</a>'
@@ -426,6 +432,19 @@
       dpslot.onclick = function () {
         if (dpslot.childNodes.length) return;
         openQuarkPlay(dpslot, id, title);
+      };
+    }
+
+    /* 预告：点按钮才注入 YouTube iframe（页面本身不加载任何第三方脚本） */
+    var trb = m.querySelector('#dpTrailer');
+    if (trb && ex[2]) {
+      trb.onclick = function () {
+        var slot = m.querySelector('#dpTrailerSlot');
+        if (!slot || slot.querySelector('iframe')) return;
+        slot.innerHTML = '<iframe src="https://www.youtube.com/embed/'
+          + encodeURIComponent(ex[2]) + '?autoplay=1&rel=0"'
+          + ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen'
+          + ' style="width:100%;height:100%;border:0"></iframe>';
       };
     }
 

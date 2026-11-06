@@ -3511,3 +3511,15 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
 .btn.pri:hover {
   border-color: var(--ark);
 }
+
+/* 预告槽：16:9 黑底，按钮居中；点播后才注 iframe */
+.trailer-slot {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  border-radius: 2px;
+  overflow: hidden;
+  background: #000;
+}
+
+.trailer-slot iframe { display: block; }
