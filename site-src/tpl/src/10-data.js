@@ -1,11 +1,15 @@
-  /* 数据 JSON 三源：同源 → 数据集（国内快，实测 0.2–0.5s）→ GitHub 镜像。
-     CF Pages 对缺失路径会回 200 + text/html，所以不能只看 r.ok，必须验 content-type。
-     实测 content-type：同源/CF = application/json；数据集 = application/octet-stream
-     （不是 json，所以单独放行，否则主源会被误判失败）；GitHub 镜像 = application/json。 */
+  /* 数据 JSON 三源。顺序是按**国内实测总耗时**定的，不是按字节数：
+       数据集 ModelScope：940 KB 原样传输，但国内 CDN 0.31–0.45 s（含 TTFB）→ 第一
+       同源 CF Pages    ：brotli 362 KB，可国内回源 2.3–8.3 s（时快时慢）→ 只做兜底
+       gh-proxy 镜像    ：第三兜底
+     别再按「谁压缩率高」排序 —— 试过把同源提到第一，首屏 JSON 反而慢一个数量级。
+     CF Pages 对缺失路径会回 200 + text/html，所以不能只看 r.ok，必须验 content-type：
+     同源/CF = application/json；数据集 = application/octet-stream（不是 json，单独放行）；
+     GitHub 镜像 = application/json。 */
   var D_BASES = [
     'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/data/',
-    'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/',
-    '/data/'
+    '/data/',
+    'https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/data/'
   ];
   function jd(name) {
     var i = 0;

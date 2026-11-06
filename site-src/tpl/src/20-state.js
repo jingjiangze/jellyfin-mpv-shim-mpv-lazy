@@ -155,13 +155,10 @@
       .catch(function () { /* 静默：进度是增值功能，拉不到不影响任何页面渲染 */ });
   }
 
-  /* 海报清晰度：hd 用大图 ANI.poster，sd 用小图 ANI.posterSd（省流量）。
-     sd 图缺失或加载失败时由 data-fb 回落到大图，绝不能出现空白封面。 */
-  var PSZ = { mode: 'hd' };
-  try {
-    var _psz = localStorage.getItem('psz');
-    if (_psz === 'hd' || _psz === 'sd') PSZ.mode = _psz;
-  } catch (e) { /* 隐私模式 / file:// 下 localStorage 可能不可用，忽略 */ }
+  /* 海报清晰度：**永远优先高清**（大图 ANI.poster）。
+     原来的顶栏「高清/标准」按钮已删除 —— 画质不该让人手选：
+     高清图加载失败（网络差 / 图裂）时由 data-fb 链自动回落到小图 ANI.posterSd，
+     见 30-view.js 的 posterSd() / posterFb()。 */
 
   /* 立即拉一次：fetch 不依赖 DOM，不需要等 DOMContentLoaded。
      （注意：从 /auth/start 回调落地的那一次，URL 里的 #t=<token> 由 90-boot.js

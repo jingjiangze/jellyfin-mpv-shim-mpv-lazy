@@ -9,9 +9,32 @@
     img.dataset.fb = q.join('|');
   };
 
+  /* 海报有两种尺寸档（实测同一部）：
+       posters/bgm-632061.jpg    203–446 KB   —— 大图
+       posters-c/bgm-632061.jpg     10 KB     —— 缩略图
+     卡片宽度只有 183px、详情页封面 184px，用 400KB 的大图纯属浪费（首屏 28 张 ≈ 7MB）。
+     所以：**按显示尺寸选档** —— 卡片/弹窗封面用缩略图，全宽 banner / 播放器封面用大图；
+     任何一档加载失败都由 data-fb 链自动换下一档，用户不需要手动切换。 */
+  function posterBig(id) { return (ANI.poster || '') + id + '.jpg'; }
+
+  /* 卡片与详情页封面（≈184px 宽）：优先缩略图，没有小图档时退回大图 */
   function posterSrc(id) {
-    var base = PSZ.mode === 'sd' ? (ANI.posterSd || ANI.poster) : ANI.poster;
+    var base = ANI.posterSd || ANI.poster || '';
     return base + id + '.jpg';
+  }
+
+  /* 大图（banner 250px 高全宽、播放器封面 688×387 用得上） */
+  function posterHd(id) { return posterBig(id); }
+
+  /* 小图 → 大图 → AniList 封面。第一档挂了浏览器报 onerror，链条自动降级。 */
+  function posterFb(id, ex) {
+    return fbAttr([posterBig(id), (ex || [])[1]]);
+  }
+
+  /* 大图 → 小图 → AniList：给 banner / 播放器封面用（首档就是大图） */
+  function posterFbHd(id, ex) {
+    var sd = posterSrc(id);
+    return fbAttr([sd === posterBig(id) ? '' : sd, (ex || [])[1]]);
   }
 
   /* 角色头像：CI 会把 lain.bgm.tv 的图下载到自家 CDN，分片里存的是 ch-<id>-<i>.jpg 裸文件名。
@@ -32,11 +55,9 @@
   function animeCard(r, opt) {
     var id = r[0], name = r[2] || r[1];
     var ex = ANI.extra[id] || [];
-    var alCover = ex[1] || '';
     var src = posterSrc(id);
-    var fb = PSZ.mode === 'sd' ? [alCover, ANI.poster + id + '.jpg'] : [alCover];
     var h = '<article class="card" data-id="' + id + '"><div class="pw">'
-      + '<img src="' + esc(src) + '"' + fbAttr(fb) + ' loading="lazy" decoding="async" alt="">'
+      + '<img src="' + esc(src) + '"' + posterFb(id, ex) + ' loading="lazy" decoding="async" alt="">'
       /* 名次件（只有排行块传 opt.rank）：gamer 排行榜的角标是左上角一块深色方块 */
       + (opt && opt.rank ? '<span class="rnum' + (opt.rank <= 3 ? ' top' : '') + '">'
           + opt.rank + '</span>' : '')

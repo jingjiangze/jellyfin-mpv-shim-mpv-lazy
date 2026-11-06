@@ -393,32 +393,7 @@ main {
 #cnt.is-user { cursor: pointer; }
 
 /* 右侧三件套（.psz / .thm / #cnt .login）统一 --ctl-h 高，横向排一行 */
-.psz {
-  flex: 0 0 auto;
-  height: var(--ctl-h);
-  padding: 0 var(--s3);
-  /* 与 .thm 同款小圆角（gamer 顶栏三件套都是矩形按钮，不是药丸） */
-  border-radius: var(--r-ctl);
-  font-size: var(--fs-sm);
-  color: var(--dim);
-  background: transparent;
-  border: 1px solid var(--line);
-  user-select: none;
-  white-space: nowrap;
-  transition: color .16s ease, background .16s ease, border-color .16s ease;
-}
 
-.psz:hover {
-  color: var(--fg);
-  border-color: var(--line-hi);
-}
-
-.psz[aria-pressed="true"] {
-  color: var(--accent-ink);
-  background: var(--accent);
-  border-color: transparent;
-  font-weight: 600;
-}
 
 /* 主题切换按钮：与 #psz 同尺寸 */
 .thm {
@@ -2336,9 +2311,6 @@ main {
     max-width: none;
   }
 
-  .psz {
-    display: none;
-  }
 
   .thm {
     flex: 0 0 auto;
@@ -3046,6 +3018,31 @@ main {
   flex-wrap: wrap;
   gap: var(--s2);
   margin-bottom: var(--s4);
+}
+
+/* 未登录引导里解释「绑定归谁」的两行说明（B 站记在账号下 / 夸克在站点服务器上） */
+.pf-acts-note {
+  max-width: 620px;
+  margin: 0 0 var(--s4);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  background: var(--card);
+}
+
+.pf-acts-note p {
+  margin: 0 0 var(--s2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  color: var(--fg2);
+}
+
+.pf-acts-note p:last-child {
+  margin-bottom: 0;
+}
+
+.pf-acts-note b {
+  color: var(--fg);
 }
 
 /* 空态（只有一排按钮、没有追番格子）时居中，不留一条左对齐的孤行 */

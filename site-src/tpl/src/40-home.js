@@ -121,8 +121,11 @@ function bannerHtml(r, on) {
   var sub = [r[4] || '', TYPE[r[3]] || r[3] || '',
     r[7] ? '★' + Number(r[7]).toFixed(1) : '', r[8] ? r[8] + ' 话' : '']
     .filter(Boolean).join(' · ');
+  /* 背景图先不设 src：5 张大图（每张 200–450 KB）同时下载会白占 1–2 MB，
+     只给「当前张」在 initCarousel 切到它时才把 data-src 写进 src。 */
   return '<a class="bigbanner' + (on ? ' is-on' : '') + '" href="/detail?id=' + id + '">'
-    + '<img class="bigbanner-bg" src="' + esc(posterSrc(id)) + '" alt="">'
+    + '<img class="bigbanner-bg" data-src="' + esc(posterHd(id)) + '"'
+    +   posterFbHd(id, ANI.extra[id] || []) + ' alt="">'
     + '<div class="bigbanner-in">'
     + '<span class="bigbanner-tag">本季推荐</span>'
     + '<h2>' + titleHTML(name) + '</h2>'
@@ -168,7 +171,17 @@ function initCarousel(main, rows, gen) {
   if (!n) return;
   var at = 0;
 
+  /* 切到某一层才把它的大图接上（data-src → src）：5 张背景图不再同时请求 */
+  function loadBg(i) {
+    var img = slides[i] && slides[i].querySelector('.bigbanner-bg');
+    if (!img) return;
+    if (!img.getAttribute('src') && img.getAttribute('data-src')) {
+      img.src = img.getAttribute('data-src');
+    }
+  }
+
   function plot(i) {
+    loadBg(i);
     var box = slides[i] && slides[i].querySelector('.bigbanner-plot');
     if (box && !box.textContent) fillBannerPlot(slides[i], rows[i], gen);
   }
@@ -223,7 +236,7 @@ function contCard(it) {
   var pc = it.dur > 0 && it.pos > 0 ? Math.min(100, Math.round(it.pos / it.dur * 100)) : 0;
   var left = it.dur > 0 && it.pos > 0 ? Math.round((it.dur - it.pos) / 60) : 0;
   return '<article class="card cont" data-id="' + id + '"><div class="pw">'
-    + '<img src="' + esc(posterSrc(id)) + '"' + fbAttr([(ANI.extra[id] || [])[1]])
+    + '<img src="' + esc(posterSrc(id)) + '"' + posterFb(id, ANI.extra[id] || [])
     + ' loading="lazy" decoding="async" alt="">'
     + (r[8] ? '<span class="ep">' + r[8] + ' 集</span>' : '')
     /* 没时长（只上报过「看到第 N 集」）就留 6% 起始痕，别画成 0 宽的假进度 */

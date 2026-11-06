@@ -283,7 +283,13 @@
     var act = t.getAttribute('data-act');
     if (act) {                                    // 绑定入口：只导航，不播放
       if (act === 'bind-quark') srcOpenUrl(SRC_QUARK_BIND);
-      else if (act === 'bind-bili') srcOpenUrl(SRC_USER);
+      else if (act === 'bind-bili') {
+        /* B 站绑定是按站点 uid 存的（bili_bind 表 uid 主键），没登录就没有「归属」，
+           直接跳 /user 只会看到一句登录引导 —— 这里先弹登录面板，登录完再回主页绑定。 */
+        if (typeof authToken === 'function' && authToken()) srcOpenUrl(SRC_USER);
+        else if (typeof openAuthPanel === 'function') openAuthPanel('login');
+        else srcOpenUrl(SRC_USER);
+      }
       return;
     }
     var key = t.getAttribute('data-src');

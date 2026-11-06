@@ -69,11 +69,17 @@
       });
   }
 
-  /* 未登录引导：不请求任何接口，只给一个「登录」按钮（面板是 90-boot.js 的）。 */
+  /* 未登录引导：不请求任何接口，只给一个「登录」按钮（面板是 90-boot.js 的）。
+     明确写出「绑定要用账号归属」：B 站绑定在后端按站点 uid 存（bili_bind 表 uid 主键），
+     没有账号就没有可归属的行 —— 不登录时连扫码入口都不该出现，否则绑了也无处落地。 */
   function userLoginHTML() {
     return '<div class="pf-hero"></div>'
       + '<div class="empty">登录后查看我的主页 —— 追番、观看进度和账号设置都在这里</div>'
-      + '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录</button></div>';
+      + '<div class="pf-acts-note">'
+      + '<p><b>B 站扫码绑定</b>：绑定结果记在你的账号下（每人对自己的绑定负责），登录后才会出现扫码按钮。</p>'
+      + '<p><b>夸克网盘</b>：绑在站点服务器上，全站共用一份，绑定入口在播放源面板。</p>'
+      + '</div>'
+      + '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录 / 注册</button></div>';
   }
 
   /* ---------------- B 站账号（详情弹窗的「弹幕版」播放要用） ----------------

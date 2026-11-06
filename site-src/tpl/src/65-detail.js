@@ -152,7 +152,7 @@
     m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b>'
       + esc(title) + '</b></nav>'
       + '<section class="mhero">'
-      +   '<img class="mposter" src="' + esc(posterSrc(id)) + '"' + fbAttr([ex[1]]) + ' alt="">'
+      +   '<img class="mposter" src="' + esc(posterSrc(id)) + '"' + posterFb(id, ex) + ' alt="">'
       +   '<div class="mh-info">'
       +     '<h3>' + esc(title) + '</h3>'
       +     (orig && orig !== title ? '<div class="orig">' + esc(orig) + '</div>' : '')
@@ -185,7 +185,7 @@
       +     '<div class="dp-watch">'
       /* 空态给封面 + 播放钮（gamer 的播放器未开始时就是一张封面），点「开始观看」后
          由 75/76 把这里整段换掉；--cover 只给 CSS 用，不参与逻辑 */
-      +       '<div class="dp-player" id="dpPlayer" style="--cover:url(' + esc(posterSrc(id)) + ')"></div>'
+      +       '<div class="dp-player" id="dpPlayer" style="--cover:url(' + esc(posterHd(id)) + ')"></div>'
       /* 磁力锚点：必须是 #modal 里第一个 .mbody[data-p="detail"]（magnet-eps.js 取首个并 append） */
       +       '<div class="mbody dp-eps" data-p="detail"></div>'
       +     '</div>'
