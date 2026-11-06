@@ -9,32 +9,33 @@
     img.dataset.fb = q.join('|');
   };
 
-  /* 海报有两种尺寸档（实测同一部）：
-       posters/bgm-632061.jpg    203–446 KB   —— 大图
-       posters-c/bgm-632061.jpg     10 KB     —— 缩略图
-     卡片宽度只有 183px、详情页封面 184px，用 400KB 的大图纯属浪费（首屏 28 张 ≈ 7MB）。
-     所以：**按显示尺寸选档** —— 卡片/弹窗封面用缩略图，全宽 banner / 播放器封面用大图；
-     任何一档加载失败都由 data-fb 链自动换下一档，用户不需要手动切换。 */
-  function posterBig(id) { return (ANI.poster || '') + id + '.jpg'; }
+  /* 海报版本号 = 站点构建号（body[data-build]）。海报在数据集里会被重新抓取/更新，
+     浏览器和边缘缓存可能还留着旧图 —— URL 带上构建号，每次部署即「强制刷新」全部海报。 */
+  var BUILD = '';
+  try { BUILD = String(document.body.getAttribute('data-build') || '').replace(/[^0-9A-Za-z]/g, ''); } catch (e) { }
+  if (!BUILD) BUILD = 'x';
 
-  /* 卡片与详情页封面（≈184px 宽）：优先缩略图，没有小图档时退回大图 */
-  function posterSrc(id) {
-    var base = ANI.posterSd || ANI.poster || '';
-    return base + id + '.jpg';
+  function bust(u) {
+    if (!u) return u;
+    return u + (u.indexOf('?') < 0 ? '?' : '&') + 'v=' + BUILD;
   }
 
-  /* 大图（banner 250px 高全宽、播放器封面 688×387 用得上） */
-  function posterHd(id) { return posterBig(id); }
+  /* 海报两档（实测同一部）：
+       posters/bgm-<id>.jpg    203–446 KB —— 高清
+       posters-c/bgm-<id>.jpg     10 KB   —— 缩略图
+     2026-11-07 定版：**默认就要高清**（所有位主图一律高清 + 构建号强制刷新），
+     缩略图只作为「高清加载失败」时的自动回退档，没有任何手动切换入口。 */
+  function posterHd(id) { return bust((ANI.poster || '') + id + '.jpg'); }
 
-  /* 小图 → 大图 → AniList 封面。第一档挂了浏览器报 onerror，链条自动降级。 */
+  /* 主图 = 高清（番组卡 / 详情封面 / banner / 播放器封面统一走这里） */
+  function posterSrc(id) { return posterHd(id); }
+
+  /* 回退链：高清挂了 → 缩略图 → AniList 封面 */
   function posterFb(id, ex) {
-    return fbAttr([posterBig(id), (ex || [])[1]]);
-  }
-
-  /* 大图 → 小图 → AniList：给 banner / 播放器封面用（首档就是大图） */
-  function posterFbHd(id, ex) {
-    var sd = posterSrc(id);
-    return fbAttr([sd === posterBig(id) ? '' : sd, (ex || [])[1]]);
+    var base = ANI.posterSd || ANI.poster || '';
+    var sd = base ? bust(base + id + '.jpg') : '';
+    if (sd === posterHd(id)) sd = '';
+    return fbAttr([sd, (ex || [])[1]]);
   }
 
   /* 角色头像：CI 会把 lain.bgm.tv 的图下载到自家 CDN，分片里存的是 ch-<id>-<i>.jpg 裸文件名。
@@ -71,7 +72,7 @@
   }
 
   function mcard(x, kind, idx) {
-    var img = x.img ? '<img src="' + esc(x.img) + '" loading="lazy" decoding="async" alt="">'
+    var img = x.img ? '<img src="' + esc(bust(x.img)) + '" loading="lazy" decoding="async" alt="">'
                     : '<div class="ph">🎬</div>';
     var rate = (x.r != null && x.r !== '') ? x.r : x.rating;
     var sub = [(rate ? '★ ' + Number(rate).toFixed(1) : ''), (x.y || x.year || '')]

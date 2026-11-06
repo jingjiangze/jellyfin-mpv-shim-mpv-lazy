@@ -80,12 +80,127 @@
     return out.slice(0, 6);
   }
 
+  /* 豆瓣 / TMDB 条目（没有 bgm id）也走同款整页详情：/detail?ext=db&i=N。
+     数据来自 movies.json（同一份 60-movie.js 用的），布局复用 .mhero/.dp-grid/.dp-side，
+     视觉上与番剧详情完全一致；**不带** .mbody[data-p="detail"] 锚点 —— 磁力层按锚点 +
+     h3 片名做匹配，外源条目没有 bgm 身份，掺进去只会错配。 */
+  function extParams() {
+    var m = /[?&]ext=(db|tm)(?:&|$)/.exec(location.search || '');
+    if (!m) return null;
+    var i = Number((/[?&]i=(\d+)/.exec(location.search || '') || [])[1] || 0);
+    return { kind: m[1], i: i };
+  }
+
+  function renderExtDetail(ext) {
+    var m = $('#modal');
+    if (!m) return;
+    var gen = ++DETAIL_GEN;
+    m.setAttribute('data-bgm', '');
+    /* 磁力层按 h3 片名做模糊匹配，外源条目没有 bgm 身份 —— 挂上去只会错配，
+       打上标记让 magnet-eps 的观察器直接跳过本页。 */
+    document.body.setAttribute('data-ext-detail', '1');
+    m.innerHTML = '<div class="loading">详情加载中…</div>';
+    jd('movies.json').then(function (d) {
+      if (gen !== DETAIL_GEN) return;
+      var list = (d && (ext.kind === 'tm' ? d.tmdb : d.douban)) || [];
+      var x = list[ext.i];
+      if (!x) { detailEmpty('条目不存在', '这条豆瓣 / TMDB 记录不在数据里。', false); return; }
+      drawExtDetail(m, ext.kind, ext.i, x, list);
+    }, function () {
+      if (gen !== DETAIL_GEN) return;
+      detailEmpty('详情加载失败', 'movies.json 没拉到，检查网络后重试。', true, '条目不存在');
+    });
+  }
+
+  function drawExtDetail(m, kind, i, x, list) {
+    var isTm = kind === 'tm';
+    var title = x.n || x.title || ('#' + i);
+    var orig = isTm ? (x.ot || '') : (x.sub || '');
+    var rate = (x.r != null && x.r !== '') ? Number(x.r) : 0;
+    var year = String(x.y || x.year || '');
+    var srcName = isTm ? 'TMDB' : '豆瓣';
+    var intro = String((isTm ? x.ov : x.intro) || '');
+    var meta = [];
+    if (year) meta.push(['年份', year]);
+    if (orig && orig !== title) meta.push(['原名', orig]);
+    if (x.sub) meta.push(['地区 / 类型', x.sub]);
+    meta.push(['来源', srcName]);
+
+    /* 相关推荐：同表内同年份优先，凑 6 条（mcard 卡片走全局委托 → 同款 ext 详情） */
+    var rel = [];
+    for (var k = 0; k < list.length && rel.length < 6; k++) {
+      if (k === i) continue;
+      if (year && String(list[k].y || '') === year) rel.push([list[k], k]);
+    }
+    for (var k2 = 0; k2 < list.length && rel.length < 6; k2++) {
+      if (k2 === i) continue;
+      var dup = rel.some(function (pair) { return pair[1] === k2; });
+      if (!dup && (list[k2].r != null && list[k2].r !== '')) rel.push([list[k2], k2]);
+    }
+    var relHtml = rel.map(function (pair) { return mcard(pair[0], kind, pair[1]); }).join('');
+
+    m.innerHTML = '<nav class="dp-crumb"><a href="/movie">电影</a><span>/</span><b>'
+      + esc(title) + '</b></nav>'
+      + '<section class="mhero">'
+      +   '<div class="mposter">'
+      +     (x.img ? '<img src="' + esc(x.img) + '" loading="lazy" decoding="async" alt="">'
+                   : '<div class="ph">🎬</div>')
+      +   '</div>'
+      +   '<div class="mh-info">'
+      +     '<h3>' + esc(title) + '</h3>'
+      +     (orig && orig !== title ? '<div class="orig">' + esc(orig) + '</div>' : '')
+      +     '<div class="mbadges">'
+      +       (year ? '<span class="mbadge">' + esc(year) + '</span>' : '')
+      +       '<span class="mbadge">' + esc(srcName) + '</span>'
+      +     '</div>'
+      +     '<div class="mrate-line">'
+      +       (rate
+                ? '<b class="score">' + rate.toFixed(1) + '</b>'
+                  + '<span class="stars" style="--p:' + Math.round(rate * 10) + '"></span>'
+                : '<b class="score dim">暂无评分</b>')
+      +       '<span class="votes">' + esc(srcName) + ' 评分</span>'
+      +     '</div>'
+      +     '<div class="acts">'
+      +       '<a class="btn pri" href="' + esc(x.u || x.url || '#') + '" target="_blank" rel="noopener">'
+      +         esc(srcName) + ' 页面</a>'
+      +       '<a class="btn" target="_blank" rel="noopener" href="https://search.bilibili.com/all?keyword='
+      +         encodeURIComponent(title) + '">B 站搜索</a>'
+      +     '</div>'
+      +   '</div>'
+      + '</section>'
+      + '<div class="dp-grid">'
+      +   '<div class="dp-main">'
+      +     '<div class="mbody" data-p="ext">'
+      +       '<section class="sect" id="dp-plot"><div class="sec-h"><h2>简介</h2></div>'
+      +         '<p class="plot">' + esc(intro || '暂无简介') + '</p></section>'
+      +       '<section class="sect"><div class="sec-h"><h2>信息</h2></div>'
+      +         '<dl class="infobox">'
+      +           meta.map(function (kv) {
+                        return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
+                      }).join('')
+      +         '</dl></section>'
+      +     '</div>'
+      +   '</div>'
+      +   '<aside class="dp-side">'
+      +     '<section class="sect"><div class="sec-h"><h2>相关推荐</h2></div>'
+      +       (relHtml ? '<div class="grid mgrid dp-rel">' + relHtml + '</div>'
+                     : '<p class="plot">暂无相关推荐</p>')
+      +     '</section>'
+      +     '<section class="sect"><div class="sec-h"><h2>数据来源</h2></div>'
+      +       '<p class="dp-src">' + esc(srcName) + '</p></section>'
+      +   '</aside>'
+      + '</div>';
+    document.title = title + ' · 番组计划';
+  }
+
   /* 90-boot.js 在 detail 分支调这个。分片只有 200–500ms，但慢网下不能白屏，
      先放一句加载中（#modal 的 id 与 .dp 类都不动），数据回来再整段重画。 */
   function renderDetail() {
     var m = $('#modal');
     if (!m) return;                            // 非 detail 页 / 壳缺失：不做任何事
     var gen = ++DETAIL_GEN;
+    var ext = extParams();
+    if (ext) { renderExtDetail(ext); return; } // 豆瓣 / TMDB：同款整页详情，不走 Bangumi 分片
     var id = detailId();
     m.setAttribute('data-bgm', '');             // 先清掉上一代的 id：磁力层按它做身份校验
     if (!id) { detailEmpty('条目不存在', '地址里没有 id 参数，回番剧页挑一部吧。', false); return; }
@@ -223,6 +338,7 @@
       +   '</aside>'
       + '</div>';
     m.setAttribute('data-bgm', String(id));
+    document.body.removeAttribute('data-ext-detail');   // 回到番剧详情：磁力层恢复挂载
     document.title = title + ' · 番组计划';
     /* 播放源面板：只探测不播放（3 个状态 GET 由 78 自己发；60s 内二次调用不重探）。
        放在整段 DOM 落地之后：面板要按 data-bgm 认自己这一代。 */

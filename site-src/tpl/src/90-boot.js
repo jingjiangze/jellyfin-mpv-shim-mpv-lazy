@@ -611,20 +611,23 @@
   }
 
   document.addEventListener('click', function (e) {
-    /* 豆瓣 / TMDB 卡片：就地开详情弹窗，不跳外站。必须 preventDefault，
-       否则弹窗与 <a target="_blank"> 跳转会同时发生；⌘/Ctrl/中键 放行原行为。 */
+    /* 豆瓣 / TMDB 卡片：跳到同款整页详情（/detail?ext=db&i=N），与番剧一致。
+       必须 preventDefault，否则跳转与 <a target="_blank"> 会同时发生；⌘/Ctrl/中键放行。 */
     var mc = e.target.closest && e.target.closest('.mcard');
     if (mc) {
       if (e.metaKey || e.ctrlKey || e.button !== 0) return;
       e.preventDefault();
-      openExtModal(mc.dataset.ext, Number(mc.dataset.i));
+      location.href = '/detail?ext=' + encodeURIComponent(mc.dataset.ext || 'db')
+        + '&i=' + encodeURIComponent(mc.dataset.i || '0');
       return;
     }
     var c = e.target.closest && e.target.closest('.card');
     if (!c) return;
-    /* 整页详情里卡片（相关推荐）自己绑了换页跳转，这里再开弹窗只会盖住整页 */
-    if (PAGE === 'detail') return;
-    openModal(Number(c.dataset.id));
+    /* 详情标准（2026-11-07）：番剧 / 剧场版全部走整页详情，不再开弹窗。
+       ⌘/Ctrl/中键 交还浏览器（新标签打开）。 */
+    if (e.metaKey || e.ctrlKey || e.button !== 0) return;
+    e.preventDefault();
+    location.href = '/detail?id=' + encodeURIComponent(c.dataset.id || '');
   });
   $('#mask') && $('#mask').addEventListener('click', function (e) { if (e.target.id === 'mask') close(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });

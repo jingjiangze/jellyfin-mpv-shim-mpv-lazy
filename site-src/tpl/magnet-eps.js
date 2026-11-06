@@ -902,6 +902,9 @@
       onChip(ev);
     });
     new MutationObserver(function () {
+      /* 外源条目（豆瓣 / TMDB 的 /detail?ext=…）没有 bgm 身份，磁力按片名匹配只会错配
+         —— 65-detail.js 会打 data-ext-detail 标记，这里看到就直接跳过。 */
+      if (document.body.getAttribute('data-ext-detail') === '1') return;
       var h3 = m.querySelector('h3');
       if (!h3) return;
       var name = h3.textContent.trim();

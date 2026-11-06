@@ -3431,3 +3431,83 @@ main {
   .dp-srcs .qp-line-list::-webkit-scrollbar { display: none; }
   .dp-srcs .qp-line-row { flex: 0 0 auto; }
 }
+
+/* ================================================================ 24 明日方舟设计语言（2026-11-07）
+   只做「语言注入」，不推翻 gamer 布局：锐利几何（小圆角/切角）、细滚动条、
+   HUD 式强调色（--ark 橙）与角标。改令牌就整站生效，别散落写死色值。 */
+:root {
+  --ark: #ff8a00;            /* 明日方舟橙：强调 / 名次 / 悬停 */
+  --ark-ink: #1c1c1e;        /* 橙上的深墨字 */
+  --cut: 7px;                /* 角标切角尺寸 */
+}
+
+/* ---- 滚动条（页面主滚动 + 通用细滚动容器）：细、方、 hover 变橙 ---- */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: #b7b9c0 transparent;
+}
+html::-webkit-scrollbar { width: 10px; height: 10px; }
+html::-webkit-scrollbar-track { background: transparent; }
+html::-webkit-scrollbar-thumb {
+  background: #b7b9c0;
+  border: 3px solid var(--bg, #f6f6fa);
+  border-radius: 0;
+}
+html::-webkit-scrollbar-thumb:hover { background: var(--ark); }
+[data-theme="dark"] html, html[data-theme="dark"] { scrollbar-color: #4a4a52 transparent; }
+[data-theme="dark"] html::-webkit-scrollbar-thumb,
+html[data-theme="dark"]::-webkit-scrollbar-thumb {
+  background: #4a4a52;
+  border-color: var(--bg, #111114);
+}
+.modal, .dp-eps, .qp-eps, .qp-lines, .mupd {
+  scrollbar-width: thin;
+  scrollbar-color: #b7b9c0 transparent;
+}
+.modal::-webkit-scrollbar, .dp-eps::-webkit-scrollbar, .qp-eps::-webkit-scrollbar,
+.qp-lines::-webkit-scrollbar, .mupd::-webkit-scrollbar { width: 8px; height: 8px; }
+.modal::-webkit-scrollbar-thumb, .dp-eps::-webkit-scrollbar-thumb,
+.qp-eps::-webkit-scrollbar-thumb, .qp-lines::-webkit-scrollbar-thumb,
+.mupd::-webkit-scrollbar-thumb { background: #b7b9c0; border-radius: 0; }
+.modal::-webkit-scrollbar-thumb:hover, .dp-eps::-webkit-scrollbar-thumb:hover,
+.qp-eps::-webkit-scrollbar-thumb:hover, .qp-lines::-webkit-scrollbar-thumb:hover,
+.mupd::-webkit-scrollbar-thumb:hover { background: var(--ark); }
+
+/* ---- 锐利几何：卡片 / 按钮角标全面收小圆角 ---- */
+.card, .mcard { border-radius: 2px; }
+.btn, .morebtn, .qp-line, .chip, .mbadge, .tagpill, .f-label select, .filters select {
+  border-radius: 2px;
+}
+.acts .btn:last-child:nth-child(odd) { border-radius: 2px; }
+
+/* ---- HUD 角标：单侧切角（clip-path），方舟标志性的「缺一角」标签 ---- */
+.rate, .ep, .prg, .rnum {
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+}
+.ep {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+
+/* ---- 区块标题：左侧橙色方块标记（gamer 的 2px 主色线保留） ---- */
+.sec-h h2::before, .bhead h2::before, .mhead h2::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 12px;
+  margin-bottom: 2px;
+  background: var(--ark);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%);
+}
+
+/* ---- 名次徽章：前三名改方舟橙 + 深墨字 ---- */
+.rnum.top {
+  background: var(--ark);
+  color: var(--ark-ink);
+}
+
+/* ---- 主按钮：hover 描边换橙（青色主色保留在底色上，避免双色打架） ---- */
+.btn.pri:hover {
+  border-color: var(--ark);
+}

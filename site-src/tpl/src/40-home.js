@@ -125,7 +125,7 @@ function bannerHtml(r, on) {
      只给「当前张」在 initCarousel 切到它时才把 data-src 写进 src。 */
   return '<a class="bigbanner' + (on ? ' is-on' : '') + '" href="/detail?id=' + id + '">'
     + '<img class="bigbanner-bg" data-src="' + esc(posterHd(id)) + '"'
-    +   posterFbHd(id, ANI.extra[id] || []) + (on ? ' fetchpriority="high"' : '') + ' alt="">'
+    +   posterFb(id, ANI.extra[id] || []) + (on ? ' fetchpriority="high"' : '') + ' alt="">'
     + '<div class="bigbanner-in">'
     + '<span class="bigbanner-tag">本季推荐</span>'
     + '<h2>' + titleHTML(name) + '</h2>'
