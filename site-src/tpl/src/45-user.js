@@ -442,7 +442,8 @@
     var avHtml = av
       ? '<img class="av" src="' + esc(av) + '" alt="">'
       : '<span class="av">' + esc(name.slice(0, 1).toUpperCase()) + '</span>';
-    var rows = favRows(12);
+    var rows = favRows(24);
+    var cont = typeof contList === 'function' ? contList(24) : [];
     var body;
     if (!ANI.rows || !ANI.rows.length) {
       body = '<div class="empty">番剧数据还没加载好 —— 稍后刷新看看</div>';
@@ -454,6 +455,12 @@
         return animeCard(r, { showYear: 1 });
       }).join('') + '</div>';
     }
+    /* 观看记录（gamer 的「觀看紀錄」页签）：同一份本地/远端进度，按最近观看排，
+       卡片带进度条，点进去直接回详情页继续。没有记录就整页签给空态文案。 */
+    var contBody = cont.length
+      ? '<div class="grid">' + cont.map(contCard).join('') + '</div>'
+      : '<div class="empty">还没有观看记录 —— 进任意一部番剧点「播放」就会开始记录</div>'
+        + '<div class="pf-actions is-empty"><a class="btn" href="anime">去番剧页</a></div>';
     return '<div class="pf-hero"></div>'
       + '<div class="pf-id">' + avHtml
       + '<div class="pf-name"><h1>' + esc(name) + '</h1>'
@@ -461,6 +468,7 @@
       + '<div class="pf-stats">'
       + '<div><b>' + favList().length + '</b><i>追番</i></div>'
       + '<div><b>' + watchedCount() + '</b><i>看过</i></div>'
+      + '<div><b>' + cont.length + '</b><i>观看记录</i></div>'
       + '</div>'
       + '<div class="pf-actions">'
       + '<button class="btn" id="pfpw" type="button">修改密码</button>'
@@ -468,8 +476,12 @@
       + '<a class="btn" href="https://120.48.56.189/qr/" target="_blank" rel="noopener">绑定夸克网盘</a>'
       + '</div>'
       + '<div class="pf-bili" id="pfbili"></div>'
-      + '<div class="mtabs"><button class="mtab on" type="button">我的追番</button></div>'
-      + '<div class="pf-body">' + body + '</div>';
+      + '<div class="mtabs pf-tabs">'
+      + '<button class="mtab on" type="button" data-tab="fav">我的追番（' + rows.length + '）</button>'
+      + '<button class="mtab" type="button" data-tab="cont">观看记录（' + cont.length + '）</button>'
+      + '</div>'
+      + '<div class="pf-body" data-pane="fav">' + body + '</div>'
+      + '<div class="pf-body" data-pane="cont" hidden>' + contBody + '</div>';
   }
 
   /* 登录面板是 90-boot.js 的，成功后它只重绘顶栏（paintAuth），不会重绘 #main。
@@ -512,6 +524,17 @@
       var m = $('#main');
       if (m) { m.innerHTML = userLoginHTML(); bindUserLogin(); }
     };
+    /* 「我的追番 / 观看记录」页签：本地切 hidden，不重画整页（重画会丢滚动位置） */
+    var tabs = document.querySelectorAll('.pf-tabs .mtab');
+    tabs.forEach(function (b) {
+      b.onclick = function () {
+        var want = b.getAttribute('data-tab');
+        tabs.forEach(function (x) { x.classList.toggle('on', x === b); });
+        document.querySelectorAll('.pf-body[data-pane]').forEach(function (p) {
+          p.hidden = p.getAttribute('data-pane') !== want;
+        });
+      };
+    });
   }
 
   /* 页面入口（90-boot.js 的 boot 链与 repaint 都调这里）。

@@ -560,8 +560,9 @@ main {
   cursor: pointer;
   font-size: var(--fs-sm);
   color: var(--fg);
-  background: var(--card2);
-  border: 1px solid var(--line-ctl);
+  /* gamer 的下拉是白底 + 1px 灰边（不是灰底胶囊），与卡片同色系 */
+  background: var(--card);
+  border: 1px solid var(--line);
   transition: border-color .16s ease;
 }
 
@@ -583,25 +584,93 @@ main {
   border-radius: var(--r);
 }
 
-/* 首页去侧栏：筛选条移到内容上方，内容区占满全宽（DOM 顺序不变，.levels 仍在前） */
-.home-cols {
-  display: block;
-}
-
+/* 首页内容区（banner 之后）：max-width 由 .wrap 统一管，这里只要不收缩 */
 .home-main {
   min-width: 0;
 }
 
 /* 首页 banner（gamer 的 .big_banner）：整条 250px 大图 + 左侧渐变压暗 + 推荐文案。
-   放在 .home-cols 之前，占内容区全宽；图用海报放大裁切，文字恒为白（不受主题影响）。 */
-.bigbanner {
+   放在 .home-main 之前，占内容区全宽；图用海报放大裁切，文字恒为白（不受主题影响）。
+   外壳 .bb 承担占位/圆角/间距，.bigbanner 变成叠在里面的幻灯片（gamer 的轮播）。 */
+.bb {
   position: relative;
-  display: block;
   height: 250px;
   border-radius: var(--r);
   overflow: hidden;
-  margin: var(--s4) 0 var(--s5);
+  margin: var(--s4) 0 var(--s4);
   background: var(--card2);
+}
+
+.bigbanner {
+  position: absolute;
+  inset: 0;
+  display: block;
+  height: 100%;
+  border-radius: 0;
+  overflow: hidden;
+  margin: 0;
+  background: var(--card2);
+  opacity: 0;
+  transition: opacity .45s var(--ease);
+  pointer-events: none;
+}
+
+.bigbanner.is-on {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+/* 左右箭头：gamer 是半透明圆钮，平时 visible（触屏没有 hover） */
+.bb-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .38);
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: .55;
+  transition: opacity var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+
+.bb:hover .bb-nav, .bb-nav:focus-visible { opacity: 1; }
+.bb-nav:hover { background: rgba(0, 0, 0, .62); }
+.bb-prev { left: 14px; }
+.bb-next { right: 14px; }
+
+/* 圆点：当前项拉成小横条（gamer 同款指示器） */
+.bb-dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.bb-dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .45);
+  cursor: pointer;
+  transition: width var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+
+.bb-dots i.on {
+  width: 20px;
+  border-radius: 4px;
+  background: #fff;
 }
 
 .bigbanner-bg {
@@ -669,69 +738,10 @@ main {
   overflow: hidden;
 }
 
-/* 首页筛选条：不画成白卡面板，而是内容上方的一条工具条（只留底部分隔线） */
-.levels {
-  position: static;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--s3) var(--s5);
-  padding: 0 0 var(--s3);
-  margin: 0 0 var(--s4);
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-}
-
-/* 桌面：每组只占内容宽（不再均分 220px）；≤1100 整行铺开、≤760 竖排，见 19 节断点 */
-.levels .lv {
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-/* 季度原为侧栏内纵向长列表，横排后走胶囊横向换行，避免顶栏被撑高。
-   选择器带 .chips 重复类名是为了压过下方 .chips.chips--col 的纵向声明。 */
-.levels .chips.chips--col {
-  flex-direction: row;
-  flex-wrap: wrap;
-}
-
-.levels .chips.chips--col .chip {
-  width: auto;
-  justify-content: flex-start;
-}
-
-.lv-h {
-  margin: 0 0 var(--s3);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: var(--ls-caps);
-  color: var(--fg2);
-}
-
-.lv-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 34px;
-  padding: 0 var(--s3);
-  border-radius: var(--r-sm);
-  font-size: var(--fs-sm);
-  color: var(--fg);
-  background: var(--card2);
-  border: 1px solid var(--line);
-  transition: color .16s ease, border-color .16s ease;
-}
-
-.lv-link:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.lv-link:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+/* 首页首块标题不吃 32px 上边距：banner 与第一块之间另有 --s5 间距，
+   再叠 32px 会在首屏正中留一条空带（实测）。只在首页首块生效。 */
+.home-main > .block:first-child .sec-h {
+  padding-top: var(--s4);
 }
 
 .chips {
@@ -765,39 +775,6 @@ main {
   background: var(--accent-soft);
   border-color: var(--accent-line);
   font-weight: 600;
-}
-
-.chips.chips--col {
-  flex-direction: column;
-  gap: 6px;
-}
-
-.chips--col .chip {
-  width: 100%;
-  justify-content: space-between;
-}
-
-.chips.chips--wd {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.chips--wd .chip {
-  justify-content: center;
-  padding: 5px var(--s1);
-}
-
-.lv-n {
-  margin-left: auto;
-  font-size: var(--fs-xs);
-  color: var(--dim2);
-  font-variant-numeric: tabular-nums;
-}
-
-.chip.on .lv-n {
-  color: inherit;
-  opacity: .9;
 }
 
 /* ---------------------------------------------------------------- 7 栅格 / 卡片 */
@@ -890,6 +867,36 @@ main {
   opacity: 1;
 }
 
+/* 悬停播放钮（gamer 卡片悬停正中的圆钮）：伪元素实现，不新增 DOM，
+   触屏没有 hover 就自然不出现；不吃点击（pointer-events:none），卡片整体仍是链接。 */
+.card > .pw::before {
+  content: '▶';
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .55);
+  color: #fff;
+  font-size: 15px;
+  text-indent: 2px;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(.86);
+  transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
+  pointer-events: none;
+}
+
+.card:hover > .pw::before,
+.card:focus-visible > .pw::before {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
 .mcard a {
   display: block;
   color: inherit;
@@ -973,7 +980,7 @@ main {
    .mcard 仍是原来的两行 15px（外链卡多一行信息，且自有白底描边） */
 .card .t {
   margin: 0;
-  padding: 6px 8px 0;
+  padding: 6px 8px 8px;
   min-height: 20px;
   font-size: 14px;
   font-weight: 400;
@@ -995,11 +1002,22 @@ main {
   color: var(--dim);
 }
 
+/* gamer 的番组卡只有「封面 + 标题」两段，年份/类型不占第三行（详情页里都有）。
+   唯一例外是「继续观看」卡：那一行放的是进度（看到第几集 / 还剩多少分钟），必须留。 */
 .card .sub2 {
+  display: none;
   padding: 0 8px 8px;
   font-size: 13px;
   line-height: 20px;
   color: var(--dim);
+}
+
+.card.cont .sub2 {
+  display: block;
+}
+
+.card.cont .t {
+  padding-bottom: 0;
 }
 
 /* .mcard 还有外框，文字需要内缩；.card 的白块内边距在 .card .t / .card .sub2 里各自写 */
@@ -2198,17 +2216,6 @@ main {
 }
 
 @media (max-width: 900px) {
-  /* 季度/星期胶囊在窄屏改横向换行；与 0,3,0 的 nowrap 对齐特异性，靠源序取胜
-     （.levels 的列宽由 1100 断点统一处理） */
-  .levels .chips.chips--col,
-  .levels .chips.chips--wd {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-  .chips--col .chip {
-    width: auto;
-    justify-content: flex-start;
-  }
   .chgrid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -2336,9 +2343,26 @@ main {
     line-height: 28px;
   }
 
-  /* banner 收窄：图矮 60px，文字贴边，简介在窄屏不显示（放不下两行会压掉片名） */
-  .bigbanner {
+  /* banner 收窄：图矮 60px，文字贴边，简介在窄屏不显示（放不下两行会压掉片名）。
+     高度现在归外层 .bb（.bigbanner 是 inset:0 的幻灯片），两个都要写。 */
+  .bb {
     height: 190px;
+  }
+
+  .bigbanner {
+    height: 100%;
+  }
+
+  /* 触屏没有 hover，箭头缩一号、常显一点；圆点贴底 10px */
+  .bb-nav {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+    opacity: .7;
+  }
+
+  .bb-dots {
+    bottom: 10px;
   }
 
   .bigbanner-in {
@@ -2351,49 +2375,6 @@ main {
 
   .bigbanner-plot {
     display: none;
-  }
-
-  /* 手机端筛选条压缩：季度/星期各占一行横滑，避免 3 组×2 行把首屏吃掉 */
-  .levels {
-    flex-direction: column;
-    padding: 0 0 var(--s2);
-    gap: var(--s2);
-  }
-
-  /* 竖排下 flex-basis 是高度维度：必须 0 0 auto，否则会吃掉整屏 */
-  .levels .lv {
-    flex: 0 0 auto;
-    width: 100%;
-    gap: var(--s1-5);
-  }
-
-  .levels .chips.chips--col,
-  .levels .chips.chips--wd {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    overflow: visible;
-    gap: 6px;
-    padding-bottom: 2px;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .levels .chips.chips--col::-webkit-scrollbar,
-  .levels .chips.chips--wd::-webkit-scrollbar {
-    display: none;
-  }
-
-  .levels .chip {
-    flex: 0 0 auto;
-    width: auto;
-    min-height: 32px;
-    padding: 0 10px;
-  }
-
-  .levels .chip em {
-    margin-left: 4px;
-    white-space: nowrap;
   }
 
   /* 番剧页筛选：只做容器外壳，两列网格由文件末尾的 .filters grid 规则接管
@@ -2836,35 +2817,6 @@ main {
    ② 浏览页筛选：桌面 4 个下拉等宽（标签下拉原本是其它下拉的 2 倍宽），并与页头留出上边距。
    ③ 手机详情 hero：海报只占首行，标题/评分走右列，想看 + 操作按钮通栏，消掉海报下方整块空白。 */
 
-/* 组内胶囊不折行；列宽主规则在 6 节，这里只管 .chips 的行为。
-   选择器与 6 节 .chips.chips--col 同特异性（0,3,0），靠位置在后压过它的 wrap。 */
-.levels .chips.chips--col,
-.levels .chips.chips--wd {
-  flex-wrap: nowrap;
-}
-
-.levels .chips--col .lv-link {
-  width: auto;
-  padding: 0 var(--s4);
-}
-
-/* 761–1100：每组整行铺开，胶囊回到可换行。
-   ≤760 由 19 节的竖排规则接管（.lv 必须是 0 0 auto，flex-basis 在竖排下是高度） */
-@media (max-width: 1100px) and (min-width: 761px) {
-  .levels .lv {
-    flex: 1 1 100%;
-  }
-  /* 特异性与上方 0,3,0 的 nowrap 对齐，同特异性下靠源序（本块在后）取胜 */
-  .levels .chips,
-  .levels .chips.chips--col,
-  .levels .chips.chips--wd {
-    flex-wrap: wrap;
-  }
-  .levels .chips--col .lv-link {
-    width: 100%;
-  }
-}
-
 @media (min-width: 761px) {
   .filters {
     display: grid;
@@ -2885,11 +2837,6 @@ main {
   .mhero > .mh-info > *, .mhd > .mh-info > * { grid-column: 2; }
   .mhero > .mh-info > .mcollect, .mhd > .mh-info > .mcollect,
   .mhero > .mh-info > .acts, .mhd > .mh-info > .acts { grid-column: 1 / -1; }
-}
-
-/* 星期组写死 4 列网格导致 8 个胶囊必分两行；宽屏恢复单行，窄屏仍用网格/横滑。 */
-@media (min-width: 1101px) {
-  .levels .chips.chips--wd { display: flex; flex-wrap: nowrap; }
 }
 
 /* 详情按钮组：删掉 Bangumi/B站弹幕播放/磁力详情后，移动端 2 列网格在奇数项时右下留半格，最后一个按钮通栏。 */
@@ -3078,6 +3025,23 @@ main {
 .prg { position: absolute; z-index: 2; left: var(--s2); bottom: var(--s2); padding: 4px 6px;
   border-radius: var(--r-sm); font-size: var(--fs-xs); font-weight: 600; line-height: 1;
   color: #ececf1; background: rgba(6,6,10,.78); backdrop-filter: blur(6px); }
+
+/* 「继续观看」卡片的观看进度：贴在海报最底边的 3px 细条（gamer 的观看纪录卡同位置） */
+.cont-bar {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, .28);
+}
+
+.cont-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
 
 /* 在线播放：<video> 充满弹窗宽度，暗底圆角 */
 .trailer video { display: block; width: 100%; max-height: 62vh; background: #000; border-radius: var(--r); }
@@ -3344,10 +3308,45 @@ main {
   .dp .mhero { grid-template-columns: 96px minmax(0,1fr); }
 }
 
-/* 详情页播放器槽：未开播时给一个可点击的占位（不占额外高度，16:9 已有） */
-.dp-player:empty { display: grid; place-items: center; background: var(--card2);
-  border: 1px dashed var(--line-ctl); border-radius: var(--r); color: var(--dim); font-size: var(--fs-sm); }
-.dp-player:empty::after { content: '点上方「▶ 播放」开始 · 也可在下方选集里选一集'; }
+/* 详情页播放器槽：未开播时是「封面 + 播放圆钮」（gamer 未点开始前就是一张封面），
+   不占额外高度（16:9 已有）。--cover 由 65-detail.js 写在 style 上。 */
+.dp-player:empty {
+  display: grid;
+  place-items: center;
+  background: var(--card2) var(--cover, none) center/cover no-repeat;
+  border: 0;
+  border-radius: var(--r);
+  color: #fff;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+/* 压暗 + 播放圆钮：白字在亮海报上也读得清 */
+.dp-player:empty::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8, 10, 14, .12), rgba(8, 10, 14, .55));
+}
+
+.dp-player:empty::after {
+  content: '▶';
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .5);
+  border: 2px solid rgba(255, 255, 255, .85);
+  font-size: 20px;
+  text-indent: 3px;
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.dp-player:empty:hover::after {
+  transform: scale(1.06);
+}
 /* 播放器自带 .qp-stage 的 16:9 + 控制条 + 选集，比槽高约 130px：
    槽必须让出比例与裁切，否则 .qp-bar 与选集会被 overflow:hidden 切掉。 */
 .dp-player:not(:empty) { border: 0; background: transparent; border-radius: 0;

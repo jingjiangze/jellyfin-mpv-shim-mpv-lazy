@@ -1,44 +1,27 @@
-/* ---------------- 首页：年 → 季度 → 周几（三级下钻） ---------------- */
-var HOME = { y: 0, q: 0, wd: 0 };
+/* ---------------- 首页（照 ani.gamer.com.tw：无筛选条，区块按当天/当季自动出） ---------------- */
+var HOME = { y: 0, q: 0 };
 var QS = [1, 2, 3, 4];
 
 function seasonOf(m) { return m ? Math.ceil(m / 3) : 0; }
 
 function yearRows(y) { return ANI.rows.filter(function (r) { return r[4] === y; }); }
 
-function homeRows() {
-  return yearRows(HOME.y).filter(function (r) {
-    if (HOME.q && seasonOf(r[5]) !== HOME.q) return false;
-    if (HOME.wd && r[6] !== HOME.wd) return false;
-    return true;
-  }).sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); });
+function byScore(a, b) { return (b[7] || 0) - (a[7] || 0); }
+
+/* 当天星期（站点口径 1=周一 … 7=周日）。首页「今天更新」不让人选，
+   直接按今天出 —— gamer 首页也是这个行为，筛选一律去番剧页做。 */
+function wdToday() { return ((new Date().getDay() + 6) % 7) + 1; }
+
+function todayRows() {
+  var wd = wdToday();
+  return yearRows(HOME.y).filter(function (r) { return r[6] === wd; }).sort(byScore);
 }
 
-/* 左侧（竖屏顶部）选择面板 */
-function renderLevels() {
-  var qs = {};
-  yearRows(HOME.y).forEach(function (r) {
-    var q = seasonOf(r[5]);
-    if (q) qs[q] = (qs[q] || 0) + 1;
-  });
-  var qlist = Object.keys(qs).map(Number).sort();
-
-  /* 首页只留「季度 + 星期」：年份固定为当前年（顶栏计数里已标明是哪一年），
-     少一层选择，季度一眼可选。要看往年去「番剧」页筛。 */
-  var h = '<aside class="levels">';
-  h += '<div class="lv"><div class="lv-h">季度</div><div class="chips chips--col">'
-    + chip('全部', !HOME.q, 'data-q', 0)
-    + qlist.map(function (q) {
-      return chip('第' + q + '季度<span class="lv-n">' + qs[q] + '</span>', q === HOME.q, 'data-q', q);
-    }).join('')
-    + '</div></div>';
-
-  h += '<div class="lv"><div class="lv-h">星期</div><div class="chips chips--wd">'
-    + chip('全部', !HOME.wd, 'data-wd', 0)
-    + WD.map(function (d, i) { return chip(d, HOME.wd === i + 1, 'data-wd', i + 1); }).join('')
-    + '</div></div>';
-
-  return h + '</aside>';
+/* 本季新番：当前年 + 最新季度全部，按评分排 */
+function seasonRows() {
+  return yearRows(HOME.y).filter(function (r) {
+    return !HOME.q || seasonOf(r[5]) === HOME.q;
+  }).sort(byScore);
 }
 
 /* 排行块默认不渲染：先放空壳，滚到附近才排序 + 填卡。
@@ -112,22 +95,28 @@ function block(title, list, moreHtml, gridClass) {
     + '</div></section>';
 }
 
-/* 首页 banner（gamer 的 .big_banner，整条 250px）：用当前筛选结果里评分最高的一部做单张大图。
-   列表行不带简介，简介等这一条的详情分片回来再补；拉不到就留空 <p>（空元素无高度，不撑版）。 */
+/* 首页 banner（gamer 的 .big_banner，整条 250px）：照 gamer 做成轮播 —— 多张 + 左右箭头 +
+   圆点，6s 自动、hover 暂停。取当前筛选结果里评分最高的 5 部，凑不到 5 部有几部放几部。
+   列表行不带简介，简介等**该张**的详情分片回来再补；拉不到就留空 <p>（空元素无高度，不撑版）。 */
 var BANNER_GEN = 0;
+var BB_TIMER = 0;          // 轮播定时器（模块级：重画首页必须先清掉上一代，否则它还在拨旧 DOM）
+var BB_N = 5;
 
-function bannerPick(rows) {
-  for (var i = 0; i < rows.length; i++) { if (rows[i] && rows[i][7]) return rows[i]; }
-  return null;
+function bannerPick(rows, n) {
+  var out = [];
+  for (var i = 0; i < rows.length && out.length < (n || 1); i++) {
+    if (rows[i] && rows[i][7]) out.push(rows[i]);
+  }
+  return out;
 }
 
-function bannerHtml(r) {
+function bannerHtml(r, on) {
   var id = r[0], name = r[2] || r[1];
   /* 副标题：年 · 类型 · 评分 · 话数，缺哪项就不占位（与弹窗 .mbadges 的口径一致） */
   var sub = [r[4] || '', TYPE[r[3]] || r[3] || '',
     r[7] ? '★' + Number(r[7]).toFixed(1) : '', r[8] ? r[8] + ' 话' : '']
     .filter(Boolean).join(' · ');
-  return '<a class="bigbanner" href="./detail?id=' + id + '">'
+  return '<a class="bigbanner' + (on ? ' is-on' : '') + '" href="./detail?id=' + id + '">'
     + '<img class="bigbanner-bg" src="' + esc(posterSrc(id)) + '" alt="">'
     + '<div class="bigbanner-in">'
     + '<span class="bigbanner-tag">本季推荐</span>'
@@ -137,11 +126,23 @@ function bannerHtml(r) {
     + '</div></a>';
 }
 
+function bannerCarousel(rows) {
+  var slides = rows.map(function (r, i) { return bannerHtml(r, i === 0); }).join('');
+  var dots = rows.map(function (r, i) {
+    return '<i data-i="' + i + '"' + (i ? '' : ' class="on"') + '></i>';
+  }).join('');
+  return '<div class="bb">' + slides
+    + '<button class="bb-nav bb-prev" type="button" aria-label="上一张">‹</button>'
+    + '<button class="bb-nav bb-next" type="button" aria-label="下一张">›</button>'
+    + '<div class="bb-dots">' + dots + '</div></div>';
+}
+
 /* gen：renderHome 每次重画自增，异步回来的简介只落最后一代（否则切筛选后会写进新 DOM） */
-function fillBannerPlot(main, r, gen) {
+function fillBannerPlot(slide, r, gen) {
+  if (!slide) return;
   detailShard(r[0]).then(function (list) {
     if (gen !== BANNER_GEN || !list) return;
-    var box = main.querySelector('.bigbanner-plot');
+    var box = slide.querySelector('.bigbanner-plot');
     if (!box) return;
     var rec = null;
     for (var i = 0; i < list.length; i++) {
@@ -152,33 +153,114 @@ function fillBannerPlot(main, r, gen) {
   }, function () { /* 分片拉不到：banner 其余部分照常，简介留空 */ });
 }
 
+/* 轮播交互：只给「当前张」补简介（不预拉 5 个分片），hover 暂停，切张后重置计时。 */
+function initCarousel(main, rows, gen) {
+  var root = main.querySelector('.bb');
+  if (!root) return;
+  var slides = [].slice.call(root.querySelectorAll('.bigbanner'));
+  var dots = [].slice.call(root.querySelectorAll('.bb-dots i'));
+  var n = slides.length;
+  if (!n) return;
+  var at = 0;
+
+  function plot(i) {
+    var box = slides[i] && slides[i].querySelector('.bigbanner-plot');
+    if (box && !box.textContent) fillBannerPlot(slides[i], rows[i], gen);
+  }
+  function go(i) {
+    at = ((i % n) + n) % n;
+    slides.forEach(function (e, k) { e.classList.toggle('is-on', k === at); });
+    dots.forEach(function (d, k) { d.classList.toggle('on', k === at); });
+    plot(at);
+  }
+  function stop() { if (BB_TIMER) { clearInterval(BB_TIMER); BB_TIMER = 0; } }
+  /* 跳页时 #main 整段被换掉，定时器还活着就会一直拨已脱离文档的节点 —— 一旦断开就自停 */
+  function tick() {
+    stop();
+    BB_TIMER = setInterval(function () {
+      if (!root.isConnected) { stop(); return; }
+      go(at + 1);
+    }, 6000);
+  }
+
+  root.querySelector('.bb-prev').onclick = function (e) { e.preventDefault(); go(at - 1); tick(); };
+  root.querySelector('.bb-next').onclick = function (e) { e.preventDefault(); go(at + 1); tick(); };
+  dots.forEach(function (d) {
+    d.onclick = function (e) { e.preventDefault(); go(Number(d.getAttribute('data-i'))); tick(); };
+  });
+  root.onmouseenter = stop;
+  root.onmouseleave = tick;
+  plot(0);
+  if (n > 1) tick();
+}
+
+/* 继续观看（gamer 首页同样有这个区块）：读本地/远端进度，按最近观看排序。
+   进度里可能留着已下架条目的 id，找不到列表行就跳过，不做占位卡。 */
+function contList(n) {
+  var all = progressAll();
+  var idx = {};
+  for (var i = 0; i < ANI.rows.length; i++) idx[String(ANI.rows[i][0])] = ANI.rows[i];
+  var out = [];
+  for (var k in all) {
+    if (!Object.prototype.hasOwnProperty.call(all, k)) continue;
+    var rec = progressOf(k);
+    var row = idx[String(k)];
+    if (!rec || !row) continue;
+    out.push({ r: row, ep: Math.floor(Number(rec.ep)), pos: Number(rec.pos) || 0,
+      dur: Number(rec.dur) || 0, ts: Number(rec.ts) || 0 });
+  }
+  out.sort(function (a, b) { return b.ts - a.ts; });
+  return out.slice(0, n || 7);
+}
+
+function contCard(it) {
+  var r = it.r, id = r[0], name = r[2] || r[1];
+  var pc = it.dur > 0 && it.pos > 0 ? Math.min(100, Math.round(it.pos / it.dur * 100)) : 0;
+  var left = it.dur > 0 && it.pos > 0 ? Math.round((it.dur - it.pos) / 60) : 0;
+  return '<article class="card cont" data-id="' + id + '"><div class="pw">'
+    + '<img src="' + esc(posterSrc(id)) + '"' + fbAttr([(ANI.extra[id] || [])[1]])
+    + ' loading="lazy" decoding="async" alt="">'
+    + (r[8] ? '<span class="ep">' + r[8] + ' 集</span>' : '')
+    /* 没时长（只上报过「看到第 N 集」）就留 6% 起始痕，别画成 0 宽的假进度 */
+    + '<span class="cont-bar"><i style="width:' + (pc || 6) + '%"></i></span>'
+    + '</div><div class="t">' + titleHTML(name) + '</div>'
+    + '<div class="sub2">看到第 ' + it.ep + ' 集' + (left ? ' · 剩 ' + left + ' 分钟' : '') + '</div></article>';
+}
+
+function contBlock() {
+  var list = contList(7);
+  if (!list.length) return '';
+  return '<section class="block"><div class="sec-h"><h2>继续观看</h2>'
+    + '<span class="sec-sub">' + list.length + ' 部 '
+    + '<a class="morelink" href="./user">观看记录 ›</a></span></div>'
+    + '<div class="grid">' + list.map(contCard).join('') + '</div></section>';
+}
+
 function renderHome() {
   if (!HOME.y) homeDefaults();
-  var rows = homeRows();
   var main = $('#main');
 
-  /* 两段：今天更新 → 本季高分。全部由内存里的 ANI.rows 算出，不发新请求；
-     「今天更新」吃 homeRows() 的当前筛选结果。 */
-  var today = block('今天更新', rows, '');
-  if (!today) today = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
-  var top = block('本季高分', topRows(8), '<a class="morelink" href="rank">排行榜 ›</a>', 'rankgrid');
+  /* 区块（自上而下，照 gamer 首页）：继续观看 → 今天更新 → 本季新番 → 本季高分 → 热门排行。
+     全部由内存里的 ANI.rows + 本地进度算出，不发新请求。空块自动不出。 */
+  var wd = wdToday();
+  var seasonPool = seasonRows();
+  var cont = contBlock();
+  /* 每块只放一行 7 张（gamer 的首页区块就是这个节奏），整季/整年去番剧页看 */
+  var today = block('今天更新 · ' + (WD[wd - 1] || ''), todayRows().slice(0, 7),
+    '<a class="morelink" href="./anime">全部番剧 ›</a>');
+  var season = block('本季新番 · ' + (HOME.q ? '第' + HOME.q + '季度' : HOME.y), seasonPool.slice(0, 7),
+    '<a class="morelink" href="./anime">更多 ›</a>');
+  var top = block('本季高分', topRows(7), '<a class="morelink" href="./rank">排行榜 ›</a>');
+  var hot = block('热门排行', rankPool('rank-all').slice(0, 7), '<a class="morelink" href="./rank">全部排行 ›</a>');
 
-  /* banner 全宽，放在 .home-cols 之前；一条可用的都没有就不出 banner */
-  var pick = bannerPick(rows);
+  /* banner 全宽，放在内容之前；一张可用的都没有就不出 banner */
+  var picks = bannerPick(seasonPool.length ? seasonPool : ANI.rows, BB_N);
   var gen = ++BANNER_GEN;
+  if (BB_TIMER) { clearInterval(BB_TIMER); BB_TIMER = 0; }   // 上一代的自动轮播先停
 
-  main.innerHTML = (pick ? bannerHtml(pick) : '')
-    + '<div class="home-cols">' + renderLevels()
-    + '<div class="home-main">' + today + top + '</div></div>';
-  if (pick) fillBannerPlot(main, pick, gen);
-
-  /* 交互 */
-  main.querySelectorAll('[data-q]').forEach(function (b) {
-    b.onclick = function () { HOME.q = Number(b.dataset.q); HOME.wd = 0; renderHome(); };
-  });
-  main.querySelectorAll('[data-wd]').forEach(function (b) {
-    b.onclick = function () { HOME.wd = Number(b.dataset.wd); renderHome(); };
-  });
+  main.innerHTML = (picks.length ? bannerCarousel(picks) : '')
+    + '<div class="home-main">' + cont + today + season + top + hot + '</div>';
+  if (picks.length) initCarousel(main, picks, gen);
 
   /* 卡片点击由文件底部的全局事件委托处理，这里不需要再绑定 */
 }
@@ -195,8 +277,7 @@ function homeDefaults() {
   /* 默认落在「最新季度」；没有月份信息的则不限季度 */
   var q = 0;
   inY.forEach(function (r) { var s = seasonOf(r[5]); if (s > q) q = s; });
-  /* 默认显示「今天」这一周：getDay() 0=周日…6=周六，站点 WD 1=周一…7=周日 */
-  HOME = { y: y, q: q, wd: ((new Date().getDay() + 6) % 7) + 1 };
+  HOME = { y: y, q: q };
 }
 
 /* 首页 / 排行榜共用的搜索绑定：输入即筛番剧，清空后回到调用方指定的页面。

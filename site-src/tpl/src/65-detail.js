@@ -164,9 +164,9 @@
       +     '</div>'
       +     '<div class="mcollect">' + collect + '</div>'
       +     '<div class="acts">'
-      +       '<button class="btn pri" id="watch" type="button">▶ 播放</button>'
+      /* gamer 作品页只留一个主按钮「開始觀看」+ 收藏；Bangumi 外链已按要求去掉 */
+      +       '<button class="btn pri" id="watch" type="button">▶ 开始观看</button>'
       +       '<button class="btn" id="favbtn" type="button">☆ 追番</button>'
-      +       '<a class="btn" target="_blank" rel="noopener" href="https://bgm.tv/subject/' + id + '">Bangumi</a>'
       +     '</div>'
       +   '</div>'
       + '</section>'
@@ -176,7 +176,9 @@
          在播放器 root 内查 .qp-line-list，放进去两边抢同一个选择器） */
       +     srcPanelHtml(id, title, curEp)
       +     '<div class="dp-watch">'
-      +       '<div class="dp-player" id="dpPlayer"></div>'
+      /* 空态给封面 + 播放钮（gamer 的播放器未开始时就是一张封面），点「开始观看」后
+         由 75/76 把这里整段换掉；--cover 只给 CSS 用，不参与逻辑 */
+      +       '<div class="dp-player" id="dpPlayer" style="--cover:url(' + esc(posterSrc(id)) + ')"></div>'
       /* 磁力锚点：必须是 #modal 里第一个 .mbody[data-p="detail"]（magnet-eps.js 取首个并 append） */
       +       '<div class="mbody dp-eps" data-p="detail"></div>'
       +     '</div>'
@@ -291,6 +293,16 @@
         var now = toggleFollow(fk);
         fb.textContent = now ? '★ 已追' : '☆ 追番';
         fb.classList.toggle('on', now);
+      };
+    }
+
+    /* 播放器槽的空态就是封面 + 播放钮（gamer 同款），点它等同点「开始观看」。
+       开播后 76 会把内容塞进来，这时再有点击就不该重开 —— 用「槽里有没有子节点」判。 */
+    var dpslot = m.querySelector('#dpPlayer');
+    if (dpslot) {
+      dpslot.onclick = function () {
+        if (dpslot.childNodes.length) return;
+        openQuarkPlay(dpslot, id, title);
       };
     }
 
