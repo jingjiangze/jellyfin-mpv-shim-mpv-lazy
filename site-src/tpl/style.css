@@ -3523,3 +3523,7 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
 }
 
 .trailer-slot iframe { display: block; }
+
+/* 方舟式海报阴影：比原来的 28px 大投影更平、更硬，贴近军武风 */
+.mposter { box-shadow: 0 8px 20px rgba(0, 0, 0, .30); }
+[data-theme="dark"] .mposter { box-shadow: 0 8px 20px rgba(0, 0, 0, .55); }
