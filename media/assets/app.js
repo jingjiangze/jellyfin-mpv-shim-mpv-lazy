@@ -466,7 +466,17 @@ return '<div class="pf-hero"></div>'
 + '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录</button></div>';
 }
 var BILI_BIND_PATH = '/bili/bind';
+var BILI_QR_START = '/bili/qr/start';
+var BILI_QR_POLL = '/bili/qr/poll';
+var BILI_QR_MS = 2000;       // 轮询间隔
+var BILI_QR_MAX = 90;        // 90 × 2s = 180s，与后端二维码有效期对齐
 var BILI_ST = null;          // 上次读到的绑定状态：null=没问过；{bound:true,uname,vip_type} / {bound:false}
+var QR_TIMER = 0;            // 扫码轮询定时器（模块级：切后台/卡片被替换都要清掉）
+var QR_KEY = '';             // 当前二维码 key_id；空 = 没有在跑的扫码流程
+var QR_TRIES = 0;            // 已发出的轮询次数
+var QR_GEN = 0;              // 流程代号：重新生成/停止后，旧回调不再落地
+var QR_BUSY = false;         // 上一轮请求还没回来时跳过这一拍，避免请求堆叠
+var QR_PASTE_OPEN = false;   // 兜底粘贴框是否展开（重画卡片后保持）
 function pfNode(id) { return document.getElementById(id); }
 function pfBiliCard(st) {
 var head = '<div class="mnote" id="pfbili-msg" role="status" aria-live="polite"></div>';
@@ -474,18 +484,33 @@ if (st && st.bound) {
 return head
 + '<p class="authhint">B 站：<b>' + esc(st.uname || '未知昵称') + '</b>'
 + '（会员 VIP' + (Number(st.vip_type) || 0) + '）</p>'
-+ '<div class="pf-actions"><button class="btn" id="pfunbind" type="button">解绑</button></div>';
++ '<div class="pf-actions">'
++ '<button class="btn" id="pfreque" type="button">重新扫码</button>'
++ '<button class="btn" id="pfunbind" type="button">解绑</button>'
++ '</div>'
++ '<div id="pfbili-qr"></div>';
 }
 return head
++ '<div id="pfbili-qr"></div>'
++ '<div class="pf-actions">'
++ '<button class="btn pri" id="pfbind-qr" type="button">扫码绑定 B 站账号</button>'
++ '</div>'
++ '<div id="pfbili-paste"' + (QR_PASTE_OPEN ? '' : ' style="display:none"') + '>'
 + '<label class="authfield"><span>B 站 SESSDATA</span>'
 + '<input type="password" id="pfsess" placeholder="粘贴 SESSDATA" autocomplete="off" spellcheck="false"></label>'
 + '<div class="pf-actions"><button class="btn pri" id="pfbind" type="button">绑定</button></div>'
 + '<p class="authhint">只用于读取你账号的播放地址与弹幕；只收 SESSDATA，不收 bili_jct。'
-+ 'SESSDATA 等于你 B 站账号的登录凭证，绑定后如不放心可随时解绑。</p>';
++ 'SESSDATA 等于你 B 站账号的登录凭证，绑定后如不放心可随时解绑。</p>'
++ '</div>'
++ '<p class="authhint">扫码在 B 站官方完成，站点不接触你的密码；绑定后随时可解绑。'
++ '<button class="mnote-btn" id="pfsess-open" type="button">'
++ (QR_PASTE_OPEN ? '收起粘贴框' : '改用粘贴 SESSDATA') + '</button></p>';
 }
 function pfBiliPaint(st, msg) {
 var box = pfNode('pfbili');
 if (!box) return;
+pfBiliQrStop();
+if (st && st.bound) QR_PASTE_OPEN = false;   // 绑上以后收起兜底框，下次解绑仍以扫码为主
 box.innerHTML = pfBiliCard(st);
 pfBiliWire();
 if (msg) pfBiliMsg(msg);
@@ -502,6 +527,12 @@ box.innerHTML = '<div class="mnote">' + esc(msg)
 pfBiliWire();
 }
 function pfBiliWire() {
+var q = pfNode('pfbind-qr');                    // 未绑定：主按钮走扫码
+if (q) q.onclick = function () { pfBiliQrStart(); };
+var rq = pfNode('pfreque');                     // 已绑定：重新扫码覆盖
+if (rq) rq.onclick = function () { pfBiliQrStart(); };
+var so = pfNode('pfsess-open');                 // 兜底：展开/收起粘贴框
+if (so) so.onclick = function () { pfBiliTogglePaste(); };
 var b = pfNode('pfbind');
 if (b) b.onclick = function () { pfBiliDoBind(b); };
 var u = pfNode('pfunbind');
@@ -509,6 +540,152 @@ if (u) u.onclick = function () { pfBiliDoUnbind(u); };
 var r = pfNode('pfbili-re');
 if (r) r.onclick = function () { loadPfBili(true); };
 }
+function pfBiliQrStop() {
+QR_GEN += 1;
+if (QR_TIMER) { clearInterval(QR_TIMER); QR_TIMER = 0; }
+QR_KEY = '';
+QR_TRIES = 0;
+QR_BUSY = false;
+}
+function pfBiliQrPause() {
+if (QR_TIMER) { clearInterval(QR_TIMER); QR_TIMER = 0; }
+QR_BUSY = false;
+}
+function pfBiliQrText(msg) {
+var el = pfNode('pfbili-qrmsg');
+if (el) el.textContent = msg || '';       // textContent：状态文案不当 HTML 解析
+}
+function pfBiliQrRetryBtn() {
+var box = pfNode('pfbili-qractions');
+if (!box) return;
+box.innerHTML = '<button class="mnote-btn" id="pfqr-re" type="button">重新生成二维码</button>';
+var b = pfNode('pfqr-re');
+if (b) b.onclick = function () { pfBiliQrStart(); };
+}
+function pfBiliQrNote(msg, retry) {
+var box = pfNode('pfbili-qr');
+pfBiliQrStop();
+if (!box) return;
+box.innerHTML = '<p class="authhint">' + esc(msg) + '</p>'
++ (retry ? '<div class="pf-actions"><button class="mnote-btn" id="pfqr-re" type="button">重新生成</button></div>' : '');
+var b = pfNode('pfqr-re');
+if (b) b.onclick = function () { pfBiliQrStart(); };
+}
+function pfBiliQrExpired() {
+var box = pfNode('pfbili-qr');
+pfBiliQrStop();
+if (!box) return;
+box.innerHTML = '<div class="pf-actions">'
++ '<button class="mnote-btn" id="pfqr-re" type="button">二维码已过期，点这里重新生成</button></div>';
+var b = pfNode('pfqr-re');
+if (b) b.onclick = function () { pfBiliQrStart(); };
+}
+function pfBiliQrShow(png) {
+var box = pfNode('pfbili-qr');
+if (!box) return;
+var src = String(png || '');
+if (!/^data:image\/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=\s]+$/i.test(src)) {
+pfBiliQrNote('二维码数据格式不对，可改用粘贴 SESSDATA', true);
+return;
+}
+box.innerHTML = '<img class="pf-qr" id="pfqrimg" alt="B站登录二维码" src="' + esc(src) + '"'
++ ' style="width:180px;height:180px;display:block;margin:0 auto 8px;border-radius:8px;background:#fff">'
++ '<p class="authhint" id="pfbili-qrmsg" role="status" aria-live="polite"></p>'
++ '<div id="pfbili-qractions"></div>';
+pfBiliQrText('用 B 站 App 扫码 · 180 秒内有效');
+}
+function pfBiliQrPoll() {
+if (QR_TIMER) { clearInterval(QR_TIMER); QR_TIMER = 0; }
+var gen = QR_GEN;
+var timer = setInterval(function () {
+if (gen !== QR_GEN) { clearInterval(timer); return; }   // 已重新生成/停止
+if (!pfNode('pfbili') || !pfNode('pfqrimg')) { pfBiliQrStop(); return; }  // 卡片被换页摘掉
+if (QR_BUSY) return;                                     // 上一拍还没回来，跳过
+if (!QR_KEY) { pfBiliQrStop(); return; }
+if (QR_TRIES >= BILI_QR_MAX) { pfBiliQrExpired(); return; }
+var tk = authToken();
+if (!tk) { pfBiliQrStop(); pfBiliFail('登录已失效，请重新登录后再试'); return; }
+QR_TRIES += 1;
+QR_BUSY = true;
+authFetch(BILI_QR_POLL + '?key=' + encodeURIComponent(QR_KEY), null, 12000,
+{ authorization: 'Bearer ' + tk }, { method: 'GET' })
+.then(function (r) {
+QR_BUSY = false;
+if (gen !== QR_GEN) return;
+var j = r.j || {};
+if (r.status === 401) { pfBiliQrStop(); pfBiliFail('登录已失效，请重新登录后再试'); return; }
+if (r.status === 404 || r.status === 410 || j.error === 'expired') { pfBiliQrExpired(); return; }
+if (!r.ok || !j.ok || !j.state) return;               // 其它失败：下一拍再试
+pfBiliQrState(j.state, j);
+}, function () {
+QR_BUSY = false;                                      // 网络抖动：不终止
+});
+}, BILI_QR_MS);
+QR_TIMER = timer;
+}
+function pfBiliQrState(state, j) {
+if (state === 'ok') {
+pfBiliQrStop();
+BILI_ST = { bound: true, uname: j.uname, vip_type: j.vip_type };
+pfBiliPaint(BILI_ST, '扫码绑定成功');       // 重画即清掉二维码 DOM
+return;
+}
+if (state === 'scanned') { pfBiliQrText('已扫码，请在手机上确认'); return; }
+if (state === 'expired') { pfBiliQrExpired(); return; }
+if (state === 'error') {
+pfBiliQrStop();
+pfBiliQrText('扫码状态异常，可重新生成二维码');
+pfBiliQrRetryBtn();
+return;
+}
+pfBiliQrText('等待扫码…');                    // waiting（及未知态）
+}
+function pfBiliQrStart() {
+var tk = authToken();
+if (!tk) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
+pfBiliQrStop();                                // 重开时先停旧流程（gen++）
+var gen = QR_GEN;
+var box = pfNode('pfbili-qr');
+if (box) box.innerHTML = '<p class="authhint">二维码生成中…</p>';
+pfBiliMsg('');
+var done = setBusy(pfNode('pfbind-qr'), '生成中…');
+authFetch(BILI_QR_START, {}, 15000, { authorization: 'Bearer ' + tk }, { method: 'POST' })
+.then(function (r) {
+done();
+if (gen !== QR_GEN) return;                // 期间又点了生成/离开页面
+var j = r.j || {};
+if (r.status === 401) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
+if (r.status === 429) { pfBiliQrNote('操作太频繁，等一分钟再试', true); return; }
+if (r.status === 503) { pfBiliQrNote('服务端缺少二维码组件，可改用粘贴 SESSDATA', true); return; }
+if (!r.ok || !j.ok || !j.key_id || !j.png) {
+pfBiliQrNote('二维码生成失败（HTTP ' + r.status + '），可改用粘贴 SESSDATA', true);
+return;
+}
+QR_KEY = String(j.key_id);
+QR_TRIES = 0;
+pfBiliQrShow(j.png);
+pfBiliQrPoll();
+}, function (e) {
+done();
+if (gen !== QR_GEN) return;
+pfBiliQrNote((e && e.message) || '二维码生成失败，请重试', true);
+});
+}
+function pfBiliTogglePaste() {
+QR_PASTE_OPEN = !QR_PASTE_OPEN;
+var box = pfNode('pfbili-paste');
+if (box) box.style.display = QR_PASTE_OPEN ? '' : 'none';
+var btn = pfNode('pfsess-open');
+if (btn) btn.textContent = QR_PASTE_OPEN ? '收起粘贴框' : '改用粘贴 SESSDATA';
+if (QR_PASTE_OPEN) {
+var inp = pfNode('pfsess');
+if (inp) { try { inp.focus(); } catch (e) { /* 老浏览器忽略 */ } }
+}
+}
+document.addEventListener('visibilitychange', function () {
+if (document.visibilityState === 'hidden') { pfBiliQrPause(); return; }
+if (!QR_TIMER && QR_KEY && QR_TRIES < BILI_QR_MAX && pfNode('pfqrimg')) pfBiliQrPoll();
+});
 function loadPfBili(force) {
 var box = pfNode('pfbili');
 if (!box) return;
@@ -687,7 +864,6 @@ main.innerHTML = '<div class="empty">' + esc((e && e.message) || '资料加载�
 });
 }
 var BROWSE = { view: [], shown: 0, page: 120, busy: false };
-var FAV_ONLY = /[?&]fav=1\b/.test(location.search);
 function renderBrowse(mode) {
 var grid = $('#grid');
 if (!grid) { BROWSE.busy = false; return; }
@@ -704,18 +880,14 @@ BROWSE.shown = 0;
 var html = '';
 for (var i = BROWSE.shown; i < want; i++) html += animeCard(BROWSE.view[i], { showYear: 1 });
 if (!BROWSE.view.length) {
-html = FAV_ONLY
-? '<div class="empty favhint">还没有追番 —— 去「番剧」点卡片或详情里的 ☆ 追番</div>'
-: '<div class="empty">这个组合没有作品 —— 换个年份/类型，或点「全部」再试</div>';
+html = '<div class="empty">这个组合没有作品 —— 换个年份/类型，或点「全部」再试</div>';
 }
 grid.insertAdjacentHTML('beforeend', html);
 BROWSE.shown = want;
 var left = BROWSE.view.length - BROWSE.shown;
 $('#morewrap').hidden = left <= 0;
 if (left > 0) $('#morebtn').textContent = '加载更多 · 还剩 ' + left + ' 部';
-var hintText = FAV_ONLY
-? '我的追番 · ' + BROWSE.view.length + ' 部'
-: '筛出 ' + BROWSE.view.length + ' 部，已显示 ' + BROWSE.shown;
+var hintText = '筛出 ' + BROWSE.view.length + ' 部，已显示 ' + BROWSE.shown;
 $('#hint').textContent = hintText;
 var hint2 = $('#hint2');
 if (hint2) hint2.textContent = hintText;
@@ -727,21 +899,12 @@ var y = ($('#f-year') || {}).value || '';
 var t = ($('#f-type') || {}).value || '';
 var sort = ($('#f-sort') || {}).value || 'year';
 var tg = ($('#f-tag') || {}).value || '';
-var favSet = null;
-if (FAV_ONLY) {
-favSet = {};
-favList().forEach(function (id) { favSet[String(id)] = 1; });
-y = '';
-var fy = $('#f-year');
-if (fy) fy.value = '';
-}
 var tgSet = null;
 if (tg && TAGS && TAGS[tg]) {
 tgSet = {};
 TAGS[tg].forEach(function (id) { tgSet[id] = 1; });
 }
 BROWSE.view = ANI.rows.filter(function (r) {
-if (favSet && !favSet[String(r[0])]) return false;
 if (tgSet && !tgSet[r[0]]) return false;
 if (!q && y && String(r[4] || '') !== y) return false;
 if (t && r[3] !== t) return false;
@@ -841,17 +1004,6 @@ mountTagFilter();
 var deepTag = pickTagFromUrl();
 if (deepTag && TAGS && TAGS[deepTag]) { $('#f-tag').value = deepTag; $('#f-year').value = ''; }
 applyBrowse();
-if (FAV_ONLY) {
-var maskEl = $('#mask');
-if (maskEl && window.MutationObserver) {
-var wasOpen = maskEl.classList.contains('on');
-new MutationObserver(function () {
-var open = maskEl.classList.contains('on');
-if (wasOpen && !open) applyBrowse();
-wasOpen = open;
-}).observe(maskEl, { attributes: true, attributeFilter: ['class'] });
-}
-}
 var wrap = $('#morewrap');
 if (wrap && window.IntersectionObserver) {
 var io = new IntersectionObserver(function (es) {
@@ -3750,9 +3902,9 @@ paintLoginEntry(el);
 });
 }
 function bootHeader() {
-var P = PAGE === 'anime' && FAV_ONLY ? 'fav' : PAGE;
+var P = PAGE;
 var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
-var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['anime?fav=1', 'fav', '追番'],
+var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'],
 ['movie', 'movie', '电影'], ['rank', 'rank', '排行榜']]
 .map(function (x) {
 return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
@@ -3764,8 +3916,10 @@ tabbar.className = 'tabbar';
 tabbar.id = 'tabbar';
 document.body.appendChild(tabbar);
 }
-tabbar.innerHTML = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['anime?fav=1', 'fav', '追番'],
-['movie', 'movie', '电影'], ['user', 'user', '我的']]
+var items = [['./', 'home', '首页'], ['anime', 'anime', '番剧'],
+['movie', 'movie', '电影'], ['user', 'user', '我的']];
+tabbar.style.setProperty('--tabn', String(items.length));
+tabbar.innerHTML = items
 .map(function (x) {
 return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
 }).join('');
