@@ -138,4 +138,145 @@
         }
       };
     });
+    biliEntry(m, id, title);
   }
+
+  /* ---------------- 用自己的 B 站账号看（弹幕版） ----------------
+     链路：站点 token（localStorage.gh_token，与 20-state.js 的 followToken 同键）
+       → biliResolve 拿 {bvid, aid, pages} → 选 cid
+       → POST /bili/playurl（盒子用个人主页里绑定的 SESSDATA 换一条用户自己的 B 站直链）
+       → 自研播放器 QPlayer.open（dm.cid 交给 76 自己拉 /bili/dm?cid=）。
+     两条链路互不影响：这里只读站点 token 与 biliResolve 缓存，不碰 75-quarkplay.js 的
+     任何 QP_* 状态；失败也只落到播放器自己的 rebind / error 态，夸克源照旧可用。
+     /bili/playurl 契约：ok{url,quality,size} / need_rebind(409) / not_bound(404) / 未登录 401。 */
+  var BILI_PLAY_GEN = 0;      // 连点两次：只让最后一次的异步结果落地
+
+  /* 集号：B 站分P标题写法很杂（「第 3 话」「[03]」「E03」「S01E03」「_03」），统一抽成数字；
+     抽不到返回 0，调用方退回按顺序取 pages[ep-1]。 */
+  var BILI_EP_RE = /第\s*(\d+)\s*[话集]|\[(\d{1,3})\]|E(\d{1,3})|S\d+E(\d{1,3})|_(\d{1,3})/;
+  function biliEpNo(part) {
+    var m = BILI_EP_RE.exec(String(part == null ? '' : part));
+    if (!m) return 0;
+    for (var i = 1; i < m.length; i++) { if (m[i]) return Number(m[i]); }
+    return 0;
+  }
+
+  function biliPickPage(pages, ep) {
+    var want = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
+    for (var i = 0; i < pages.length; i++) {
+      if (pages[i] && biliEpNo(pages[i].part) === want) return pages[i];
+    }
+    return pages[want - 1] || pages[0] || null;
+  }
+
+  /* 带站点 token 的请求（biliGet 只管匿名 GET）：返回 {status, ok, j}；
+     超时 / 断网抛可读文案，交给调用方落到播放器状态上。 */
+  function biliAuth(path, method, body, ms) {
+    var tk = '';
+    try { tk = localStorage.getItem('gh_token') || ''; } catch (e) { tk = ''; }
+    var opt = { method: method || 'GET', headers: { authorization: 'Bearer ' + tk } };
+    if (body != null) {
+      opt.headers['content-type'] = 'application/json';
+      opt.body = JSON.stringify(body);
+    }
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, ms || 15000);
+    if (ctl) opt.signal = ctl.signal;
+    return fetch(BILI_BASE + path, opt).then(function (r) {
+      clearTimeout(timer);
+      return r.json().catch(function () { return null; }).then(function (j) {
+        return { status: r.status, ok: r.ok, j: j };
+      });
+    }, function (e) {
+      clearTimeout(timer);
+      if (ctl && ctl.signal && ctl.signal.aborted) throw new Error('网络慢，请重试');
+      throw new Error('网络异常，请检查连接');
+    });
+  }
+
+  /* 打开播放器骨架。拿不到直链（rebind / error）时也要先建实例，
+     否则 QPlayer.state() 没有 cur 可写，用户会看到一片空白。
+     有 url 就交给 open 起播：76 的 open() 会对首条源自己 startLine，
+     再调一次 QPlayer.play(url) 只会把同一个地址二次 load（addLine 按 url 去重，
+     不会多出一条线路，但第一次 load 被中断会白走一次 onLoadFail），所以这里不重复调用。 */
+  function biliOpenPlayer(m, id, title, ep, cid, url) {
+    var ctx = {
+      m: m,
+      id: String(id),
+      title: String(title || ''),
+      ep: ep,
+      sources: url ? [{ label: 'B 站（弹幕版）', url: String(url), type: 'mp4' }] : []
+    };
+    if (cid) ctx.dm = { cid: String(cid) };
+    return window.QPlayer.open(ctx);
+  }
+
+  function biliPlayEp(m, id, title, ep) {
+    var tk = '';
+    try { tk = localStorage.getItem('gh_token') || ''; } catch (e) { tk = ''; }
+    if (!tk) { if (window.__openLogin) window.__openLogin('email'); return; }
+    if (!m || !window.QPlayer) return;
+    var want = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
+    var gen = ++BILI_PLAY_GEN;
+    function fail(msg, state) {
+      biliOpenPlayer(m, id, title, want, 0, '');
+      window.QPlayer.state(state || 'error', { msg: msg });
+    }
+    biliResolve(id, title).then(function (v) {
+      if (gen !== BILI_PLAY_GEN) return;
+      if (!v || !v.bvid || !v.pages || !v.pages.length) { fail('没找到这部番的 B 站源，换夸克源试试'); return; }
+      var pg = biliPickPage(v.pages, want);
+      if (!pg || !pg.cid) { fail('这一集没有可用的 B 站分P'); return; }
+      return biliAuth('playurl', 'POST', { bvid: v.bvid, cid: pg.cid, qn: 80 }, 20000).then(function (r) {
+        if (gen !== BILI_PLAY_GEN) return;
+        var j = r.j || {};
+        if (r.ok && j.ok && j.url) { biliOpenPlayer(m, id, title, want, pg.cid, j.url); return; }
+        if (r.status === 401) { fail('站点登录已失效，请重新登录', 'login'); return; }
+        if (j.error === 'need_rebind' || j.error === 'not_bound') {
+          biliOpenPlayer(m, id, title, want, 0, '');
+          /* rebind：76 的默认动作是「去扫码」指向夸克，这里换成个人主页的绑定入口 */
+          window.QPlayer.state('rebind', {
+            msg: 'B 站登录已失效，去个人主页重新粘贴 SESSDATA',
+            actions: [{ label: '去个人主页', href: 'user' }]
+          });
+          return;
+        }
+        fail('B 站播放地址取不到，稍后再试');
+      });
+    }).catch(function () {
+      if (gen !== BILI_PLAY_GEN) return;
+      if (window.QPlayer && m) fail('B 站播放失败，稍后再试');
+    });
+  }
+
+  /* 上次看到第几集：沿用 20-state.js 的进度（window.__prog），没有就第 1 集。
+     集号在这里定，播放器内的「换线路」只换源不改集。 */
+  function biliSavedEp(id) {
+    try {
+      var p = window.__prog && typeof window.__prog.get === 'function' ? window.__prog.get(id) : null;
+      if (p && Number(p.ep) > 0) return Math.floor(Number(p.ep));
+    } catch (e) { /* 进度坏了就从头播 */ }
+    return 1;
+  }
+
+  /* 详情弹窗入口：插进 .acts，与「▶ 播放」（夸克源）并列。
+     绑定/未绑定不在这里判 —— 交给 playurl 的 need_rebind/not_bound 兜，
+     少一次往返，也不会因为绑定状态过期就藏掉入口。 */
+  function biliEntry(m, id, title) {
+    var acts = m && m.querySelector ? m.querySelector('.acts') : null;
+    if (!acts || acts.querySelector('#biliplay')) return;
+    var b = document.createElement('span');
+    b.className = 'btn';
+    b.id = 'biliplay';
+    b.setAttribute('role', 'button');
+    b.setAttribute('tabindex', '0');
+    b.textContent = '▶ B 站（弹幕版）';
+    b.onclick = function () { biliPlayEp(m, id, title, biliSavedEp(id)); };
+    b.onkeydown = function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); b.click(); }
+    };
+    acts.appendChild(b);
+  }
+
+  /* 控制台/其它模块的入口；参数顺序与内部实现一致：弹窗容器、番剧 id、片名、集号 */
+  window.__biliPlay = biliPlayEp;

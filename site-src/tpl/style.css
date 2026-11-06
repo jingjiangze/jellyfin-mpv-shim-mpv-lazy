@@ -2951,3 +2951,13 @@ main {
   .qp-nextbar { flex-wrap: wrap; }
   .qp-autonext { flex: 1 1 100%; order: 3; }
 }
+
+/* ---------------------------------------------------------------- 20 弹幕层（76-qplayer.js canvas）
+   .qp-stage 已有 position:relative（见上），canvas 用 inset:0 铺满整块舞台（含 letterbox 黑边）。
+   注意：canvas 是替换元素，只写 inset:0 时 width:auto 会取它的固有尺寸 300×150（实测），
+   必须显式写 width/height:100% 才会真的铺满。
+   z-index:1 压在 <video> 之上、.qp-overlay(2) / .qp-bigplay(3) 之下：loading 时被遮罩盖住，
+   而且 pointer-events:none 不吃点击，点画面照旧能暂停。开关放在 .qp-head（.qp-bar 窄屏已排满两行）。 */
+.qp-dm { position:absolute; inset:0; width:100%; height:100%; z-index:1; pointer-events:none; }
+.qp-dm-toggle { margin-left:auto; }
+.qplayer[data-dm="0"] .qp-dm { display:none; }

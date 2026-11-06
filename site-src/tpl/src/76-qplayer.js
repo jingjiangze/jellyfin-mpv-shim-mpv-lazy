@@ -9,12 +9,16 @@
      契约（75-quarkplay.js 调用）：
        QPlayer.open(ctx) → token
          ctx = {m, id, title, ep, sources:[{label,url,type}], startAt,
+                dm: {cid, items},          // 可选：给了 items 直接用，只给 cid 则播放器自己拉 /bili/dm
                 onProgress, onEnded, onNext, onPickEp, onRetry}
        QPlayer.state(s, extra)   s ∈ loading|transcoding|none|login|quota|rebind|error|ready
        QPlayer.play(url, label, opt)   切一条直链并播放（opt = {fid, startAt}）
        QPlayer.setSources(list)        替换「官方源」部分（用户自备线路不受影响）
        QPlayer.setEpisodes(list, cur, hint)
        QPlayer.setFid(fid)             进度上报要带的网盘文件 id
+       QPlayer.setDanmaku(items)       装/换一集弹幕（空数组 = 关闭），切换集时调用即重置
+       QPlayer.toggleDanmaku(on) / QPlayer.danmakuOn()   弹幕开关（偏好存 qp_dm_on）
+       QPlayer.clearDanmaku()          清空并停 rAF（close() 内部也会调）
        QPlayer.close()                 幂等
 
      BYO 线路存 localStorage['qp_lines']：{"<bgm id>":[{label,url,type}]}。
@@ -24,11 +28,25 @@
   var QP_RATES = [2, 1.5, 1.25, 1, 0.75];     // 倍速循环（初始 1.0×，按钮按数组顺序轮转）
   var QP_REBIND = 'https://120.48.56.189/qr/';
 
+  /* ---------------- 弹幕常量 ----------------
+     DM_BASE 是盒子自己的地址（弹幕接口 /bili/dm?cid=… 挂在同域），写常量而不是相对路径，
+     是因为 76 也会被 app.js 拼接进别的路径下（/bili/xxx 这类），相对路径会指错地方。 */
+  var DM_BASE = 'https://120.48.56.189';
+  var QP_DM_KEY = 'qp_dm_on';                    // 弹幕开关偏好：'1' / '0'
+  var DM_SPEED = 144;                            // 滚动弹幕速度 px/s（B 站量级；舞台变窄也不会挤成一团）
+  var DM_FIX_S = 4;                              // 顶部 / 底部固定弹幕停留秒数
+  var DM_LATE = 1;                               // 晚于这个秒数的弹幕直接丢（切后台 / 卡顿后不补投）
+  var DM_MAX_ITEMS = 20000;                      // 单集最多装 2 万条，防脏数据把内存撑爆
+  var DM_TEXT_MAX = 120;                         // 单条文本上限（B 站单条 100 字）
+  var DM_FONT = 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+
   var QPlayer = (function () {
     /* 静态骨架：不含任何用户数据，动态内容一律 textContent / 事件绑定 */
     var TPL = '<div class="qp-head"><b class="qp-title"></b><span class="qp-sub"></span>'
+      + '<button class="qp-btn qp-dm-toggle" type="button" aria-label="弹幕开关">弹幕 开</button>'
       + '<button class="qp-btn qp-close" type="button" aria-label="关闭播放器">×</button></div>'
       + '<div class="qp-stage"><video class="qp-video" playsinline preload="metadata"></video>'
+      + '<canvas class="qp-dm" aria-hidden="true"></canvas>'
       + '<button class="qp-bigplay" type="button" hidden>▶</button>'
       + '<div class="qp-overlay"><div class="qp-spinner"></div><p class="qp-msg"></p>'
       + '<div class="qp-actions" hidden></div></div></div>'
@@ -552,6 +570,373 @@
       } catch (e) { /* 忽略 */ }
     }
 
+    /* ---------------- 弹幕层（纯 canvas，零依赖） ----------------
+       轨道分配抄 weizhenye/Danmaku 的思路，不引库：按行高分轨，每轨记「上一条的起点时间 / 宽度 / 速度」，
+       用宽度与速度换算的时间差判断新条会不会追尾（新条的左边缘追上前条的右边缘之前，前条是否已飞出左边界）；
+       放不下就换下一轨，全轨放不下直接丢（B 站也丢）。
+
+       时间全部落在「媒体时间」域：位置 = 用 video.currentTime 现算。
+       于是暂停天然不推进、倍速天然跟随（乘 playbackRate 会把倍速算两次）。
+
+       层在 .qp-stage 里 z-index:1，压在视频上、在 .qp-overlay(2) / .qp-bigplay(3) 之下：
+       loading 时被状态遮罩盖住，不会出现「遮罩后面还在飘字」。 */
+
+    /* rAF 句柄做成对象：浏览器没有 rAF（极老环境 / 离线桩）时退回 setTimeout 也能被正确取消 */
+    function dmRaf(cb) {
+      var f = window.requestAnimationFrame;
+      if (f) return { id: f(cb), raf: true };
+      return { id: setTimeout(function () { cb(Date.now()); }, 16), raf: false };
+    }
+    function dmCaf(h) {
+      if (!h) return;
+      try {
+        if (h.raf) window.cancelAnimationFrame(h.id);
+        else clearTimeout(h.id);
+      } catch (e) { /* 忽略 */ }
+    }
+
+    function dmPref() {
+      try { return localStorage.getItem(QP_DM_KEY) !== '0'; } catch (e) { return true; }
+    }
+    function dmSavePref(on) {
+      try { localStorage.setItem(QP_DM_KEY, on ? '1' : '0'); } catch (e) { /* 隐私模式：静默 */ }
+    }
+
+    /* 十进制 RGB（16777215 = 白）→ #rrggbb */
+    function dmColor(n) {
+      var v = Number(n);
+      if (!isFinite(v) || v < 0) return '#ffffff';
+      var hex = Math.floor(v % 16777216).toString(16);
+      while (hex.length < 6) hex = '0' + hex;
+      return '#' + hex;
+    }
+
+    /* 字号按舞台宽 / 1280 缩放并夹在 12..20：舞台 390 宽时 25px 原始字号会占掉 11% 高度 */
+    function dmFontPx(dm, size) {
+      var px = Math.round((Number(size) || 25) * dm.W / 1280);
+      return Math.max(12, Math.min(20, px));
+    }
+
+    /* 每条弹幕预渲染成一张小 canvas：measureText / strokeText 只做一次，之后每帧只 drawImage。
+       按字号的缩放缓存（舞台尺寸变了字号才会变，变了才重画）。 */
+    function dmSprite(dm, it, px) {
+      if (it._sp && it._px === px) return it._sp;
+      var dpr = dm.dpr || 1;
+      var font = '600 ' + px + 'px ' + DM_FONT;
+      if (!dm.meas) {
+        var mc = document.createElement('canvas');
+        try { dm.meas = mc.getContext('2d'); } catch (e) { dm.meas = null; }
+        if (!dm.meas) return null;
+      }
+      dm.meas.font = font;
+      var tw = 0;
+      try { tw = dm.meas.measureText(it.m).width || 0; } catch (e) { tw = 0; }
+      if (!(tw > 0)) tw = it.m.length * px * 0.6;       // 无字体信息时的兜底宽度
+      var pad = 2;                                     // 描边留白，防边缘被裁
+      var w = Math.ceil(tw) + pad * 2;
+      var h = Math.ceil(px * 1.22) + pad * 2;
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * dpr));
+      c.height = Math.max(1, Math.round(h * dpr));
+      var g = null;
+      try { g = c.getContext('2d'); } catch (e) { g = null; }
+      if (!g) return null;
+      g.scale(dpr, dpr);                               // dpr 只在这里缩放一次
+      g.font = font;
+      g.textAlign = 'left';
+      g.textBaseline = 'middle';
+      g.lineJoin = 'round';
+      g.strokeStyle = 'rgba(0, 0, 0, .82)';            // 1px 黑描边：浅色画面里也读得清
+      g.lineWidth = 2;
+      g.strokeText(it.m, pad, h / 2);
+      g.fillStyle = dmColor(it.color);
+      g.fillText(it.m, pad, h / 2);
+      var sp = { c: c, w: w, h: h };
+      it._sp = sp;
+      it._px = px;
+      return sp;
+    }
+
+    /* 二分：第一个 t >= x 的下标（seek 后不复扫全表） */
+    function dmLower(items, x) {
+      var lo = 0, hi = items.length;
+      while (lo < hi) {
+        var mid = (lo + hi) >> 1;
+        if (items[mid].t < x) lo = mid + 1;
+        else hi = mid;
+      }
+      return lo;
+    }
+
+    /* 尺寸 / dpr / 分行：舞台尺寸变了才重来（客户端读 clientWidth 不会触发重排，每帧读一次可接受） */
+    function dmResize(S) {
+      var dm = S && S.dm, cv = dm && dm.cv;
+      if (!cv) return false;
+      var W = cv.clientWidth, H = cv.clientHeight;
+      if (!(W > 0) || !(H > 0)) return false;          // 隐藏 / 还没布局：这一帧不画
+      var dpr = Math.min(2, Number(window.devicePixelRatio) || 1);
+      if (dm.g && W === dm.W && H === dm.H && dpr === dm.dpr) return true;
+      dm.W = W;
+      dm.H = H;
+      dm.dpr = dpr;
+      cv.width = Math.max(1, Math.round(W * dpr));
+      cv.height = Math.max(1, Math.round(H * dpr));
+      var g = null;
+      try { g = cv.getContext('2d'); } catch (e) { g = null; }
+      dm.g = g;
+      if (g) g.setTransform(dpr, 0, 0, dpr, 0, 0);     // dpr 缩放只做这一次
+      dmLayout(S);
+      return !!g;
+    }
+
+    function dmLayout(S) {
+      var dm = S.dm;
+      dm.lineH = Math.max(18, Math.min(26, Math.round(dm.H / 8)));
+      dm.pad = 4;
+      dm.rows = Math.max(1, Math.floor((dm.H - dm.pad * 2) / dm.lineH));
+      dm.cap = window.innerWidth <= 760 ? 20 : 30;     // 同屏上限：移动端 20，桌面 30
+      dm.roll = [];
+      dm.top = [];
+      dm.bot = [];
+      for (var i = 0; i < dm.rows; i++) {
+        dm.roll.push(null);                            // null | {t, w, v}
+        dm.top.push(0);                                // 该轨被占用到的媒体时间
+        dm.bot.push(0);
+      }
+      dm.live = [];
+      dm.next = dmLower(dm.items, (Number(S.v.currentTime) || 0) - DM_LATE);
+      dm.lastCt = -1;                                  // 逼下一帧走「重定位」分支
+    }
+
+    /* 追尾判定：前一条在 t0 时刻的右边界是否已进画面，且新条（更快时）在追上前是否已让前条飞出左边 */
+    function dmFits(rec, t0, w, v, W) {
+      if (!rec) return true;                           // 空轨
+      var dt = t0 - rec.t;
+      if (!(dt >= 0)) return false;
+      var left = W - rec.v * dt;                       // 前一条当前左边界
+      var right = left + rec.w;                        // 前一条当前右边界
+      if (right > W - 6) return false;                 // 尾巴还压在右边界上（留 6px 余量）
+      var vNew = Math.max(1, v), vPrev = Math.max(1, rec.v);
+      if (vNew <= vPrev) return true;                  // 不会追上
+      var exit = (left + rec.w) / vPrev;               // 前一条完全离场还需多久
+      return (W - right) / (vNew - vPrev) >= exit;     // 追上前它已经飞出画面
+    }
+
+    /* 投放一条：滚动 / 顶部固定 / 底部固定，放不下就丢 */
+    function dmSpawn(S, it) {
+      var dm = S.dm, W = dm.W, t0 = it.t;
+      var px = dmFontPx(dm, it.size);
+      var sp = dmSprite(dm, it, px);
+      if (!sp) return;
+
+      if (it.c === 4 || it.c === 5) {                  // 4 底部固定 / 5 顶部固定：停留 4s，顶上往下、底上往上
+        var isTop = it.c === 5, pool = isTop ? dm.top : dm.bot, row = -1;
+        for (var i = 0; i < dm.rows; i++) {
+          if (!pool[i] || t0 >= pool[i]) { row = i; break; }
+        }
+        if (row < 0) return;                           // 固定位全满：丢
+        pool[row] = t0 + DM_FIX_S;
+        var off = Math.round((dm.lineH - sp.h) / 2);
+        var y = isTop
+          ? dm.pad + row * dm.lineH + off
+          : dm.H - dm.pad - (row + 1) * dm.lineH + off;
+        dm.live.push({ mode: isTop ? 'top' : 'bot', t0: t0, w: sp.w, y: y, sp: sp });
+        return;
+      }
+
+      var v = DM_SPEED, row2 = -1, best = null;
+      for (var k = 0; k < dm.rows; k++) {
+        var rec = dm.roll[k];
+        if (!dmFits(rec, t0, sp.w, v, W)) continue;
+        if (!rec) { row2 = k; break; }                 // 空轨优先
+        if (!best || rec.t < best.t) { best = rec; row2 = k; }   // 都占着就选最久没用的那轨
+      }
+      if (row2 < 0) return;                            // 轨道全满：丢弃
+      dm.roll[row2] = { t: t0, w: sp.w, v: v };
+      dm.live.push({
+        mode: 'roll', t0: t0, v: v, w: sp.w,
+        y: dm.pad + row2 * dm.lineH + Math.round((dm.lineH - sp.h) / 2),
+        sp: sp
+      });
+    }
+
+    /* 推进到下一条该出现的弹幕（按媒体时间顺排，指针只前进） */
+    function dmAdvance(S, ct) {
+      var dm = S.dm, items = dm.items;
+      while (dm.next < items.length && items[dm.next].t <= ct) {
+        var it = items[dm.next];
+        dm.next += 1;
+        if (ct - it.t > DM_LATE) continue;             // 追不上的旧弹幕：丢，不补投
+        if (dm.live.length >= dm.cap) continue;        // 同屏满：丢
+        dmSpawn(S, it);
+      }
+    }
+
+    function dmDraw(S, ct) {
+      var dm = S.dm, g = dm.g;
+      if (!g) return;
+      g.clearRect(0, 0, dm.W, dm.H);                   // 每帧只清一次
+      var live = dm.live, keep = [];
+      for (var i = 0; i < live.length; i++) {
+        var e = live[i], x;
+        if (e.mode === 'roll') {
+          x = dm.W - e.v * (ct - e.t0);
+          if (x + e.w <= 0) continue;                  // 已经完全飞出左边
+        } else {
+          if (ct >= e.t0 + DM_FIX_S) continue;         // 固定弹幕到期
+          x = Math.round((dm.W - e.w) / 2);
+        }
+        g.drawImage(e.sp.c, x, e.y, e.sp.w, e.sp.h);
+        keep.push(e);
+      }
+      dm.live = keep;
+    }
+
+    /* seek / 换集 / 大幅跳时：清屏、重置轨道、二分定位到下一条（不从 0 重扫） */
+    function dmJump(S, ct) {
+      var dm = S.dm;
+      if (!dm) return;
+      dm.live = [];
+      for (var i = 0; i < dm.rows; i++) { dm.roll[i] = null; dm.top[i] = 0; dm.bot[i] = 0; }
+      dm.next = dmLower(dm.items, ct - DM_LATE);
+      dm.lastCt = ct;
+      if (dm.g) { try { dm.g.clearRect(0, 0, dm.W, dm.H); } catch (e) { /* 忽略 */ } }
+    }
+
+    /* 画一次（暂停时也能出画面：seek 后停住也要看到那一刻的弹幕） */
+    function dmTick(S) {
+      var dm = S && S.dm;
+      if (!dm || !dm.on || !dm.items.length) return;
+      if (!dmResize(S)) return;
+      var ct = Number(S.v.currentTime) || 0;
+      dm.lastCt = ct;
+      dmAdvance(S, ct);
+      dmDraw(S, ct);
+    }
+
+    /* 常驻循环：独立于 paint / schedule（那套是按需触发的，弹幕要每帧推进） */
+    function dmFrame(S) {
+      var dm = S && S.dm;
+      if (!dm) return;
+      dm.raf = null;
+      if (!alive(S) || !dm.on) return;                 // 关掉 / 已销毁：不再排下一帧，循环自然停
+      dm.raf = dmRaf(function () { dmFrame(S); });
+      if (!dmResize(S)) return;
+      var ct = Number(S.v.currentTime) || 0;
+      if (dm.lastCt >= 0 && ct === dm.lastCt) return;  // 暂停：不推进、不重绘
+      if (dm.lastCt < 0 || Math.abs(ct - dm.lastCt) > DM_LATE) dmJump(S, ct);
+      dmTick(S);
+    }
+
+    function dmStart(S) {
+      var dm = S && S.dm;
+      if (!alive(S) || !dm || !dm.on || dm.raf || !dm.items.length || !dm.cv) return;
+      dm.lastCt = -1;
+      dm.raf = dmRaf(function () { dmFrame(S); });
+    }
+
+    function dmStop(S) {
+      var dm = S && S.dm;
+      if (!dm) return;
+      if (dm.raf) { dmCaf(dm.raf); dm.raf = null; }
+      dm.live = [];
+      dm.lastCt = -1;
+      if (dm.g) { try { dm.g.clearRect(0, 0, dm.W || 0, dm.H || 0); } catch (e) { /* 忽略 */ } }
+    }
+
+    function dmPaintBtn(S) {
+      var b = S && S.root && S.root.querySelector('.qp-dm-toggle');
+      if (b) b.textContent = S && S.dm && S.dm.on ? '弹幕 开' : '弹幕 关';
+    }
+
+    /* 装载：脏数据一律洗掉（缺 t / 缺文本 / 模式越界都不渲染），按时间排序后重置播放状态 */
+    function dmSet(S, list) {
+      var dm = S && S.dm;
+      if (!dm) return 0;
+      dmStop(S);
+      var out = [], arr = Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+      for (var i = 0; i < arr.length && out.length < DM_MAX_ITEMS; i++) {
+        var x = arr[i];
+        if (!x) continue;
+        var t = Number(x.t);
+        var m = String(x.m == null ? '' : x.m).replace(/\s+/g, ' ').trim();
+        if (!isFinite(t) || t < 0 || !m) continue;
+        var c = Math.round(Number(x.c) || 1);
+        if (!(c >= 1 && c <= 5)) c = 1;
+        out.push({
+          t: t,
+          m: m.slice(0, DM_TEXT_MAX),
+          c: c,
+          size: Math.max(12, Math.min(64, Number(x.size) || 25)),
+          color: Number(x.color)
+        });
+      }
+      out.sort(function (a, b) { return a.t - b.t; });
+      dm.items = out;
+      dm.next = 0;
+      dm.live = [];
+      dm.lastCt = -1;
+      if (out.length) dmStart(S);                      // 空数组 = 关闭：停循环，层上不留东西
+      dmPaintBtn(S);
+      return out.length;
+    }
+
+    /* 拉接口：失败只让弹幕层空着，绝不碰 data-state（否则一次 404 会把「正在播放」变成错误页） */
+    function dmFetch(S, cid) {
+      var dm = S && S.dm;
+      if (!dm || !cid || typeof fetch !== 'function') return;
+      var key = String(cid), tok = S.tok;
+      dm.cid = key;
+      fetch(DM_BASE + '/bili/dm?cid=' + encodeURIComponent(key), { credentials: 'omit' })
+        .then(function (r) { return r && r.ok ? r.json() : null; })
+        .then(function (j) {
+          if (!alive(S) || S.tok !== tok || !cur || cur.tok !== tok || dm.cid !== key) return;
+          if (!j || Object.prototype.toString.call(j.items) !== '[object Array]') return;
+          dmSet(S, j.items);
+        })
+        .catch(function () { /* 静默：没弹幕不影响播放 */ });
+    }
+
+    function dmToggle(S, on) {
+      var dm = S && S.dm;
+      if (!dm) return false;
+      dm.on = !!on;
+      dmSavePref(dm.on);
+      if (S.root) S.root.setAttribute('data-dm', dm.on ? '1' : '0');
+      dmPaintBtn(S);
+      if (dm.on) dmStart(S); else dmStop(S);
+      return dm.on;
+    }
+
+    function dmClear(S) {
+      var dm = S && S.dm;
+      if (!dm) return;
+      dmStop(S);
+      dm.items = [];
+      dm.next = 0;
+      dm.live = [];
+      dm.cid = '';
+    }
+
+    function dmInit(S, ctx) {
+      var dm = {
+        on: dmPref(),
+        cv: S.root.querySelector('.qp-dm'),
+        g: null,
+        W: 0, H: 0, dpr: 1,
+        lineH: 22, pad: 4, rows: 1, cap: 30,
+        roll: [], top: [], bot: [],
+        items: [], next: 0, live: [],
+        raf: null, lastCt: -1, meas: null, cid: ''
+      };
+      S.dm = dm;
+      if (S.root) S.root.setAttribute('data-dm', dm.on ? '1' : '0');
+      dmPaintBtn(S);
+      var opt = (ctx && ctx.dm) || null;
+      if (opt && opt.items) dmSet(S, opt.items);       // 调用方带数据：直接用
+      else if (opt && opt.cid) dmFetch(S, opt.cid);    // 只给 cid：播放器自己拉
+    }
+
     /* ---------------- 事件绑定 ---------------- */
     function bind(S) {
       var v = S.v, root = S.root;
@@ -589,6 +974,9 @@
       v.addEventListener('play', function () { schedule(S); });
       v.addEventListener('seeked', function () {
         if (!alive(S)) return;
+        /* 拖进度 / 换源：清屏 + 重置轨道 + 按新的 currentTime 二分定位下一条，
+           并立刻画一帧（暂停中拖动也要看到那一刻的弹幕，别留一块被清空的画布） */
+        if (S.dm && S.dm.on) { dmJump(S, Number(v.currentTime) || 0); dmTick(S); }
         if (S.seekTimer) clearTimeout(S.seekTimer);
         S.seekTimer = setTimeout(function () {
           S.seekTimer = 0;
@@ -628,6 +1016,9 @@
 
       var closeBtn = q('.qp-close');
       if (closeBtn) closeBtn.onclick = function () { close(); };
+
+      var dmBtn = q('.qp-dm-toggle');
+      if (dmBtn) dmBtn.onclick = function () { if (alive(S) && S.dm) dmToggle(S, !S.dm.on); };
 
       var playBtn = q('.qp-play');
       if (playBtn) playBtn.onclick = function () { togglePlay(S); };
@@ -878,6 +1269,9 @@
       m.appendChild(root);
       try { root.scrollIntoView({ block: 'center' }); } catch (e) { /* 忽略 */ }
 
+      /* 弹幕：必须在入 DOM 之后初始化 —— dmSet 会立刻启动 rAF，alive() 需要 root.isConnected 为真 */
+      dmInit(S, ctx);
+
       if (S.lines.length) startLine(S, 0);
       else setState(S, 'loading', { msg: '正在准备播放…' });
       return S.tok;
@@ -891,6 +1285,7 @@
       if (S.nextTimer) { clearInterval(S.nextTimer); S.nextTimer = 0; }
       clearStall(S);
       if (S.seekTimer) { clearTimeout(S.seekTimer); S.seekTimer = 0; }
+      dmClear(S);                                 // 弹幕：停 rAF + 清引用，防泄漏
       try { document.removeEventListener('visibilitychange', S.onVis); } catch (e) { /* 忽略 */ }
       try { window.removeEventListener('pagehide', S.onPageHide); } catch (e) { /* 忽略 */ }
       try {
@@ -908,6 +1303,15 @@
     }
     function isConn(node) { return !!(node && node.isConnected); }
 
+    /* ---------------- 对外弹幕 API（同一时刻只有一个播放器，统一作用在 cur 上） ---------------- */
+    function setDanmaku(items) { return cur && cur.dm ? dmSet(cur, items) : 0; }
+    function toggleDanmaku(on) {
+      if (!cur || !cur.dm) return false;
+      return dmToggle(cur, on === undefined ? !cur.dm.on : !!on);
+    }
+    function danmakuOn() { return !!(cur && cur.dm && cur.dm.on); }
+    function clearDanmaku() { if (cur && cur.dm) dmClear(cur); }
+
     return {
       open: open,
       close: close,
@@ -918,6 +1322,10 @@
       setFid: setFid,
       pause: pause,
       isCurrent: isCurrent,
+      setDanmaku: setDanmaku,
+      toggleDanmaku: toggleDanmaku,
+      danmakuOn: danmakuOn,
+      clearDanmaku: clearDanmaku,
       _gate: gate,                                 // 离线自检：进度节流是纯函数
       _lines: { of: byoOf, save: saveByo, del: delByo }
     };

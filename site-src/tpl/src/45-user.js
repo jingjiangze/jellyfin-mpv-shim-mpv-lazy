@@ -76,6 +76,156 @@
       + '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录</button></div>';
   }
 
+  /* ---------------- B 站账号（详情弹窗的「弹幕版」播放要用） ----------------
+     契约（已部署）：GET /bili/bind → {ok,bound,uname,vip_type,status}，未绑定 {ok:false,error:'not_bound'}；
+     POST /bili/bind {sess} → {ok,uname,vip_type,ignored:[…]}，SESSDATA 失效 {ok:false,error:'expired'}；
+     DELETE /bili/bind → {ok,deleted:true}。全部带 Authorization: Bearer <站点 token>。
+     只收 SESSDATA（浏览器 DevTools 里 SESSDATA=… 的值），不收 bili_jct：它等于 B 站账号的
+     登录凭证，所以只在提交的那一条请求里出现一次 —— 不进 localStorage、不回显进 DOM
+     （输入框提交后立刻清空，失败也不回填）。未登录时整块不渲染，走 userLoginHTML 的登录引导。 */
+  var BILI_BIND_PATH = '/bili/bind';
+  var BILI_ST = null;          // 上次读到的绑定状态：null=没问过；{bound:true,uname,vip_type} / {bound:false}
+
+  function pfNode(id) { return document.getElementById(id); }
+
+  /* 卡片内容。用 authfield / authhint / mnote / pf-actions 这些既有样式，
+     不新增 class 依赖（style.css 不在本次改动范围）。错误行放最上面，重画时一并清掉。 */
+  function pfBiliCard(st) {
+    var head = '<div class="mnote" id="pfbili-msg" role="status" aria-live="polite"></div>';
+    if (st && st.bound) {
+      return head
+        + '<p class="authhint">B 站：<b>' + esc(st.uname || '未知昵称') + '</b>'
+        + '（会员 VIP' + (Number(st.vip_type) || 0) + '）</p>'
+        + '<div class="pf-actions"><button class="btn" id="pfunbind" type="button">解绑</button></div>';
+    }
+    return head
+      + '<label class="authfield"><span>B 站 SESSDATA</span>'
+      + '<input type="password" id="pfsess" placeholder="粘贴 SESSDATA" autocomplete="off" spellcheck="false"></label>'
+      + '<div class="pf-actions"><button class="btn pri" id="pfbind" type="button">绑定</button></div>'
+      + '<p class="authhint">只用于读取你账号的播放地址与弹幕；只收 SESSDATA，不收 bili_jct。'
+      + 'SESSDATA 等于你 B 站账号的登录凭证，绑定后如不放心可随时解绑。</p>';
+  }
+
+  /* 只重画这一块（主页追番列表不跟着重排）。节点已被换页/重绘摘掉就静默放弃。 */
+  function pfBiliPaint(st, msg) {
+    var box = pfNode('pfbili');
+    if (!box) return;
+    box.innerHTML = pfBiliCard(st);
+    pfBiliWire();
+    if (msg) pfBiliMsg(msg);
+  }
+
+  function pfBiliMsg(msg) {
+    var el = pfNode('pfbili-msg');
+    if (el) el.textContent = msg || '';     // textContent：后端文案不解析成 HTML
+  }
+
+  function pfBiliFail(msg) {
+    var box = pfNode('pfbili');
+    if (!box) return;
+    box.innerHTML = '<div class="mnote">' + esc(msg)
+      + ' <button class="mnote-btn" id="pfbili-re" type="button">重试</button></div>';
+    pfBiliWire();
+  }
+
+  function pfBiliWire() {
+    var b = pfNode('pfbind');
+    if (b) b.onclick = function () { pfBiliDoBind(b); };
+    var u = pfNode('pfunbind');
+    if (u) u.onclick = function () { pfBiliDoUnbind(u); };
+    var r = pfNode('pfbili-re');
+    if (r) r.onclick = function () { loadPfBili(true); };
+  }
+
+  function loadPfBili(force) {
+    var box = pfNode('pfbili');
+    if (!box) return;
+    if (!authToken()) { box.innerHTML = ''; return; }   // 未登录：不画这块
+    if (BILI_ST && !force) { pfBiliPaint(BILI_ST); return; }
+    box.innerHTML = '<div class="mnote">B 站账号读取中…</div>';
+    authFetch(BILI_BIND_PATH, null, 12000, { authorization: 'Bearer ' + authToken() }, { method: 'GET' })
+      .then(function (r) {
+        var j = r.j || {};
+        if (j.ok && j.bound) {
+          BILI_ST = { bound: true, uname: j.uname, vip_type: j.vip_type };
+          pfBiliPaint(BILI_ST);
+          return;
+        }
+        if (j.error === 'not_bound' || r.status === 404) {
+          BILI_ST = { bound: false };
+          pfBiliPaint(BILI_ST);
+          return;
+        }
+        if (r.status === 401) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
+        pfBiliFail('B 站账号状态读取失败（HTTP ' + r.status + '）');
+      }, function (e) {
+        pfBiliFail((e && e.message) || 'B 站账号状态读取失败');
+      });
+  }
+
+  /* 用户常整段粘「SESSDATA=xxx; bili_jct=yyy」：只取 SESSDATA 那一格的值，其余字段丢弃
+     （SESSDATA 本身是 URL 编码的，值里不会有裸分号/空格）。没写 key 的裸值也认，
+     过不过由后端判（expired）。 */
+  function pfBiliSess(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    var m = /(?:^|[;\s])SESSDATA\s*=\s*([^;\s"']+)/i.exec(s);
+    if (m) return m[1];
+    return s.replace(/^SESSDATA\s*=\s*/i, '').replace(/[;,"'\s]+$/, '');
+  }
+
+  function pfBiliBindMsg(r) {
+    var j = r.j || {};
+    if (r.status === 401) return '登录已失效，请重新登录后再试';
+    if (j.error === 'expired') return '这段 SESSDATA 已失效（或没复制全），请到 B 站重新复制';
+    if (j.error) return '绑定失败：' + j.error;
+    return '绑定失败（HTTP ' + r.status + '）';
+  }
+
+  function pfBiliDoBind(btn) {
+    var inp = pfNode('pfsess');
+    var sess = pfBiliSess(inp ? inp.value : '');
+    if (inp) inp.value = '';                        // 提交即清空：DOM 里不留凭证
+    if (!sess) { pfBiliMsg('请先粘贴 SESSDATA'); return; }
+    var tk = authToken();
+    if (!tk) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
+    var done = setBusy(btn, '绑定中…');
+    authFetch(BILI_BIND_PATH, { sess: sess }, 20000, { authorization: 'Bearer ' + tk }, { method: 'POST' })
+      .then(function (r) {
+        var j = r.j || {};
+        if (r.ok && j.ok) {
+          BILI_ST = { bound: true, uname: j.uname, vip_type: j.vip_type };
+          pfBiliPaint(BILI_ST, '绑定成功');
+          return;
+        }
+        done();
+        pfBiliMsg(pfBiliBindMsg(r));
+      }, function (e) {
+        done();
+        pfBiliMsg((e && e.message) || '绑定失败，请重试');
+      });
+  }
+
+  function pfBiliDoUnbind(btn) {
+    var tk = authToken();
+    if (!tk) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
+    var done = setBusy(btn, '解绑中…');
+    authFetch(BILI_BIND_PATH, null, 15000, { authorization: 'Bearer ' + tk }, { method: 'DELETE' })
+      .then(function (r) {
+        var j = r.j || {};
+        if (r.ok && j.ok) {
+          BILI_ST = { bound: false };
+          pfBiliPaint(BILI_ST, '已解绑，可随时重新绑定');
+          return;
+        }
+        done();
+        pfBiliMsg(r.status === 401 ? '登录已失效，请重新登录后再试'
+          : '解绑失败（HTTP ' + r.status + '），稍后重试');
+      }, function (e) {
+        done();
+        pfBiliMsg((e && e.message) || '解绑失败，请重试');
+      });
+  }
+
   function userHTML(u) {
     var name = userName(u) || '未登录用户';
     var mail = maskEmail(u.email || (String(u.login || '').indexOf('@') >= 0 ? u.login : ''));
@@ -108,6 +258,7 @@
       + '<button class="btn" id="pfout" type="button">退出登录</button>'
       + '<a class="btn" href="https://120.48.56.189/qr/" target="_blank" rel="noopener">绑定夸克网盘</a>'
       + '</div>'
+      + '<div class="pf-bili" id="pfbili"></div>'
       + '<div class="pf-tabs"><button class="on" type="button">我的追番</button></div>'
       + '<div class="pf-body">' + body + '</div>';
   }
@@ -148,6 +299,7 @@
          这里先切到未登录引导，别让用户盯着旧资料等网络。 */
       logoutAccount();
       USER = null;
+      BILI_ST = null;                 // 换账号后 B 站绑定状态要重新问一次
       var m = $('#main');
       if (m) { m.innerHTML = userLoginHTML(); bindUserLogin(); }
     };
@@ -166,6 +318,7 @@
     if (USER) {
       main.innerHTML = userHTML(USER);
       bindUserActions();
+      loadPfBili();
       return;
     }
     if (!main.querySelector('.pf-hero')) main.innerHTML = '<div class="loading">加载中…</div>';
@@ -173,6 +326,7 @@
       USER = u;
       main.innerHTML = userHTML(u);
       bindUserActions();
+      loadPfBili();
     }).catch(function (e) {
       main.innerHTML = '<div class="empty">' + esc((e && e.message) || '资料加载失败')
         + '</div><div class="pf-actions"><a class="btn" href="user">重试</a></div>';
