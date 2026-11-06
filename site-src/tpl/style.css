@@ -3118,7 +3118,9 @@ main {
     color: var(--accent-text);
     font-weight: 600;
   }
-  main {
+  /* 用 .wrap 而不是 main：main 带 .wrap 类，.wrap{padding:0 var(--s6)} 的特异性(0,1,0)
+     压过 main(0,0,1)，写 main 的 padding-bottom 会被静默吃掉（实测 0px）。 */
+  .wrap {
     padding-bottom: calc(52px + var(--s7));
   }
 }
