@@ -2430,14 +2430,13 @@ main {
     display: none;
   }
 
-  /* 番剧页筛选：只做容器外壳，两列网格由文件末尾的 .filters grid 规则接管
-     （这里再写 flex-direction 会被 display:grid 直接忽略，属于死属性）。
-     内边距收到 --s1-5：两行控件（2×36 + 8 行距 + 12 内边距 + 2 边框 = 94px）压进 96px 以内。 */
+  /* 番剧页筛选：容器不做白卡外壳（gamer 手机端就是把下拉直接排在页面上，
+     套一层白框会和卡片抢视觉层级）；两列网格由文件末尾的 .filters grid 规则接管。 */
   .filters {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--r);
-    padding: var(--s1-5);
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
     margin: 0 0 var(--s3);
   }
 
