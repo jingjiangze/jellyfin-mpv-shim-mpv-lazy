@@ -305,7 +305,19 @@ def build_movies():
     return douban, tmdb
 
 
-PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><script>(function(){var B=['https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/','https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/assets/','/'];function css(i){if(i>=B.length)return;var l=document.createElement('link');l.rel='stylesheet';l.href=B[i]+'style.css?v=__CV__';l.onerror=function(){l.parentNode&&l.parentNode.removeChild(l);css(i+1)};document.head.appendChild(l)}var F=['app.js?v=__JV__','magnet-eps.js'];function ld(f,i){if(f>=F.length)return;var s=document.createElement('script');s.src=B[i]+F[f];s.onload=function(){ld(f+1,0)};s.onerror=function(){s.parentNode&&s.parentNode.removeChild(s);if(i+1<B.length)ld(f,i+1);else ld(f+1,0)};document.body.appendChild(s)}css(0);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){ld(0,0)});else ld(0,0)})()</script></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header><main class=wrap id=main><div class=loading>加载中…</div></main><div class=mask id=mask><div class=modal id=modal></div></div></body></html>"""
+# 页面骨架两种模式（PAGES 的第 8 字段选）：
+#   modal  默认，弹窗预览：<main> 只有加载占位，mask + #modal 挂在 body 末尾，
+#          点卡片才由前端填充；
+#   inline 整页详情（detail.html）：mask 留空壳（不改弹窗行为时可继续用），
+#          #modal 搬进 <main> 直接当页面主体 —— id 不变，前端详情模块只认 #modal，
+#          所以两种模式共用同一套渲染代码，不用分支。
+SHELL_MODAL = ('<main class=wrap id=main><div class=loading>加载中…</div></main>'
+               '<div class=mask id=mask><div class=modal id=modal></div></div>')
+SHELL_INLINE = ('<div class="mask" id="mask"></div>'
+                '<main class="wrap" id="main"><div id="modal" class="dp"></div></main>')
+SHELLS = {"modal": SHELL_MODAL, "inline": SHELL_INLINE}
+
+PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><script>(function(){var B=['https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/','https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/assets/','/'];function css(i){if(i>=B.length)return;var l=document.createElement('link');l.rel='stylesheet';l.href=B[i]+'style.css?v=__CV__';l.onerror=function(){l.parentNode&&l.parentNode.removeChild(l);css(i+1)};document.head.appendChild(l)}var F=['app.js?v=__JV__','magnet-eps.js'];function ld(f,i){if(f>=F.length)return;var s=document.createElement('script');s.src=B[i]+F[f];s.onload=function(){ld(f+1,0)};s.onerror=function(){s.parentNode&&s.parentNode.removeChild(s);if(i+1<B.length)ld(f,i+1);else ld(f+1,0)};document.body.appendChild(s)}css(0);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){ld(0,0)});else ld(0,0)})()</script></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header>__SHELL__</body></html>"""
 
 PAGES = [
     ("index.html", "home", "番组计划 · 新番表", "搜索番剧…", 'class="is-on"', "", ""),
@@ -313,6 +325,10 @@ PAGES = [
     ("movie.html", "movie", "电影 · 番组计划", "搜索电影…", "", "", 'class="is-on"'),
     ("rank.html", "rank", "排行榜 · 番组计划", "搜索番剧…", "", "", ""),
     ("user.html", "user", "我的主页 · 番组计划", "搜索番剧…", "", "", ""),
+    # 第 8 字段 = 骨架模式（见 SHELLS）；缺省按 "modal" 处理，所以上面的行不用动。
+    # detail 走 inline：详情本身就是整页，#modal 直接当页面主体（路由 detail?id=<id>）。
+    # 仍然是同一份静态壳，不预渲染 per-id。
+    ("detail.html", "detail", "番剧详情 · 番组计划", "搜索番剧…", "", "", "", "inline"),
 ]
 
 
@@ -343,13 +359,20 @@ def main():
     import hashlib as _h
     cv = _h.sha1(css.encode("utf-8")).hexdigest()[:10]
     jv = _h.sha1(js.encode("utf-8")).hexdigest()[:10]
-    for name, page, title, ph, on_home, on_anime, on_movie in PAGES:
+    for row in PAGES:
+        name, page, title, ph, on_home, on_anime, on_movie = row[:7]
+        # 第 8 字段是骨架模式；只有一个页面走 inline，其余沿用 modal（不写第 8 字段即 modal，
+        # 所以老行不用补空串）。未知值直接报错，别静默拼出一个没有 #modal 的壳。
+        mode = row[7] if len(row) > 7 else "modal"
+        if mode not in SHELLS:
+            raise SystemExit(f"{name}: 未知骨架模式 {mode!r}")
         html = (PAGE.replace("__TITLE__", title).replace("__PAGE__", page)
                 .replace("__CV__", cv).replace("__JV__", jv)
                 .replace("__BUILD__", BUILD_TAG)
                 .replace("__PH__", ph)
                 .replace("__ON_HOME__", on_home).replace("__ON_ANIME__", on_anime)
-                .replace("__ON_MOVIE__", on_movie))
+                .replace("__ON_MOVIE__", on_movie)
+                .replace("__SHELL__", SHELLS[mode]))
         (SITE / name).write_text(html, encoding="utf-8")
         print(f"  {name}: {len(html.encode('utf-8'))/1024:.0f} KB")
     print(f"pages: {len(PAGES)} 个"

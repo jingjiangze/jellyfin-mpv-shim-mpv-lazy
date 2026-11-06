@@ -3125,3 +3125,52 @@ main {
     padding-bottom: calc(52px + var(--s7));
   }
 }
+
+/* 23 详情整页（detail.html）：主栏 + 右侧 sticky 信息栏 */
+.dp { padding: var(--s4) 0 var(--s7); }
+.dp-crumb { display: flex; gap: var(--s2); align-items: center; margin: 0 0 var(--s4);
+  font-size: var(--fs-sm); color: var(--dim); }
+.dp-crumb b { color: var(--fg); font-weight: 600; }
+.dp .mhero { grid-template-columns: 220px minmax(0,1fr); gap: var(--s6);
+  padding: var(--s5) 0 var(--s4); }
+.dp-grid { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: var(--s6); align-items: start; }
+.dp-main { min-width: 0; }
+.dp-side { position: sticky; top: calc(var(--header-h) + var(--s4));
+  max-height: calc(100vh - var(--header-h) - var(--s5)); overflow-y: auto;
+  display: grid; gap: var(--s5); }
+.dp-watch { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: var(--s4); margin: 0 0 var(--s5); }
+.dp-player { position: relative; aspect-ratio: 16/9; border-radius: var(--r); overflow: hidden; background: #000; }
+.dp .trailer { margin: 0 0 var(--s4); }
+.dp-eps { padding: 0; max-height: 520px; overflow-y: auto; }
+.dp-nav { top: var(--header-h); z-index: 19; background: var(--bg); padding: 0; }
+.dp .mbody { padding: 0; }
+.dp-rel { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.dp-src { margin: 0; font-size: var(--fs-xs); color: var(--dim); }
+@media (max-width: 1199px) { .dp-grid { grid-template-columns: minmax(0,1fr) 280px; } }
+@media (max-width: 1023px) {
+  .dp-grid, .dp-watch { grid-template-columns: 1fr; }
+  .dp-side { position: static; max-height: none; }
+  .dp-eps { max-height: none; }
+}
+@media (max-width: 760px) {
+  .dp-nav { position: static; }
+  .dp-eps { max-height: 360px; }
+  .dp .mhero { grid-template-columns: 96px minmax(0,1fr); }
+}
+
+/* 详情页播放器槽：未开播时给一个可点击的占位（不占额外高度，16:9 已有） */
+.dp-player:empty { display: grid; place-items: center; background: var(--card2);
+  border: 1px dashed var(--line-ctl); border-radius: var(--r); color: var(--dim); font-size: var(--fs-sm); }
+.dp-player:empty::after { content: '点上方「▶ 播放」开始 · 也可在下方选集里选一集'; }
+/* 播放器自带 .qp-stage 的 16:9 + 控制条 + 选集，比槽高约 130px：
+   槽必须让出比例与裁切，否则 .qp-bar 与选集会被 overflow:hidden 切掉。 */
+.dp-player:not(:empty) { border: 0; background: transparent; border-radius: 0;
+  aspect-ratio: auto; overflow: visible; }
+.dp-player:not(:empty) > .trailer { margin: 0; }
+
+/* 播放源聚合面板 */
+.dp-srcs { margin: 0 0 var(--s5); }
+.dp-srcs .qp-line-list { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.dp-srcs .qp-line-row { display: inline-flex; align-items: center; gap: var(--s1-5); }
+.dp-srcs .sec-sub { margin-left: auto; }
+@media (max-width: 760px) { .dp-srcs[data-open="0"] .qp-line-list { display: none; } }

@@ -1,3 +1,6 @@
 /library /  301
 /library.html /  301
 /magnet.html /  301
+# 整页详情页收口：/anime/<bgm id> 这类老式路径 301 到 detail?id=<id>，
+# 静态站只有一个 detail.html 壳、按 query 渲染（CF Pages 占位符 :id 全文件只能用一次）
+/anime/:id    /detail?id=:id    301

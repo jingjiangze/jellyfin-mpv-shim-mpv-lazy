@@ -97,9 +97,70 @@
       }).join('');
   }
 
+  /* 进入视口才取：整页详情里弹幕 / 评论在折叠区下方，一开页就打两个 B 站请求会拖慢首屏。
+     没有 IntersectionObserver（老浏览器）就立即取，功能不丢。 */
+  function biliWhenVisible(box, load) {
+    if (!box) return;
+    if (!window.IntersectionObserver) { load(box); return; }
+    var io = new window.IntersectionObserver(function (es) {
+      for (var i = 0; i < es.length; i++) {
+        if (!es[i].isIntersecting) continue;
+        io.disconnect();
+        load(box);
+        return;
+      }
+    }, { rootMargin: '200px' });
+    io.observe(box);
+  }
+
+  /* 弹幕取数：弹窗 tab 与整页详情共用一份。data-done 是一次性闸门 ——
+     取过就不再取（失败也记住，与旧实现一致）；占位文案先落地，避免白块。 */
+  function biliLoadDm(box, id, title, year) {
+    if (!box || box.getAttribute('data-done')) return;
+    box.setAttribute('data-done', '1');
+    box.innerHTML = '<div class="mnote">弹幕加载中…</div>';
+    biliResolve(id, title, year).then(function (v) {
+      if (!v || !v.pages || !v.pages.length) {
+        box.innerHTML = '<div class="mnote">未匹配到 B 站源</div>';
+        return;
+      }
+      var pg = v.pages[0];
+      return biliGet('dm', { cid: pg.cid }).then(function (d) {
+        renderDm(box, d, v.pages, pg.page);
+        box.querySelectorAll('[data-pg]').forEach(function (c) {
+          c.onclick = function () {
+            box.querySelectorAll('[data-pg]').forEach(function (x) { x.classList.toggle('on', x === c); });
+            box.innerHTML = '<div class="mnote">弹幕加载中…</div>';
+            biliGet('dm', { cid: c.getAttribute('data-cid') }).then(function (dd) {
+              renderDm(box, dd, v.pages, Number(c.getAttribute('data-pg')));
+            });
+          };
+        });
+      });
+    }).catch(function () { box.innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; });
+  }
+
+  /* 评论取数：与弹幕同一个形状，容器换成 #prp（详情页是 #dp-rp 里的 #prp） */
+  function biliLoadRp(box, id, title, year) {
+    if (!box || box.getAttribute('data-done')) return;
+    box.setAttribute('data-done', '1');
+    box.innerHTML = '<div class="mnote">评论加载中…</div>';
+    biliResolve(id, title, year).then(function (v) {
+      if (!v || !v.aid) { box.innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; return; }
+      return biliGet('reply', { aid: v.aid, ps: 20 }).then(function (d) { renderRp(box, d); });
+    }).catch(function () { box.innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; });
+  }
+
   function bindBili(id, title, year) {
     var m = $('#modal');
     if (!m) return;
+    /* 整页详情（detail.html）：区块靠锚点导航，页面里没有 .mtabs 的 data-p 按钮 ——
+       tab 那套 hidden 切换一旦绑上会把 .mbody 全藏起来。这里只给弹幕 / 评论挂懒加载。 */
+    if (PAGE === 'detail') {
+      biliWhenVisible(m.querySelector('#pdm'), function (box) { biliLoadDm(box, id, title, year); });
+      biliWhenVisible(m.querySelector('#prp'), function (box) { biliLoadRp(box, id, title, year); });
+      return;
+    }
     m.querySelectorAll('.mtab').forEach(function (b) {
       b.onclick = function () {
         var p = b.getAttribute('data-p');
@@ -107,35 +168,8 @@
         m.querySelectorAll('.mbody').forEach(function (x) {
           x.hidden = x.getAttribute('data-p') !== p;
         });
-        if (p === 'dm' && !m.querySelector('#pdm').dataset.done) {
-          m.querySelector('#pdm').dataset.done = '1';
-          m.querySelector('#pdm').innerHTML = '<div class="mnote">弹幕加载中…</div>';
-          biliResolve(id, title, year).then(function (v) {
-            var box = m.querySelector('#pdm');
-            if (!v || !v.pages || !v.pages.length) { box.innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; return; }
-            var pg = v.pages[0];
-            return biliGet('dm', { cid: pg.cid }).then(function (d) {
-              renderDm(box, d, v.pages, pg.page);
-              box.querySelectorAll('[data-pg]').forEach(function (c) {
-                c.onclick = function () {
-                  box.querySelectorAll('[data-pg]').forEach(function (x) { x.classList.toggle('on', x === c); });
-                  box.innerHTML = '<div class="mnote">弹幕加载中…</div>';
-                  biliGet('dm', { cid: c.getAttribute('data-cid') }).then(function (dd) {
-                    renderDm(box, dd, v.pages, Number(c.getAttribute('data-pg')));
-                  });
-                };
-              });
-            });
-          }).catch(function () { m.querySelector('#pdm').innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; });
-        }
-        if (p === 'rp' && !m.querySelector('#prp').dataset.done) {
-          m.querySelector('#prp').dataset.done = '1';
-          m.querySelector('#prp').innerHTML = '<div class="mnote">评论加载中…</div>';
-          biliResolve(id, title, year).then(function (v) {
-            if (!v || !v.aid) { m.querySelector('#prp').innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; return; }
-            return biliGet('reply', { aid: v.aid, ps: 20 }).then(function (d) { renderRp(m.querySelector('#prp'), d); });
-          }).catch(function () { m.querySelector('#prp').innerHTML = '<div class="mnote">未匹配到 B 站源</div>'; });
-        }
+        if (p === 'dm') biliLoadDm(m.querySelector('#pdm'), id, title, year);
+        if (p === 'rp') biliLoadRp(m.querySelector('#prp'), id, title, year);
       };
     });
     biliEntry(m, id, title);
@@ -150,6 +184,8 @@
      任何 QP_* 状态；失败也只落到播放器自己的 rebind / error 态，夸克源照旧可用。
      /bili/playurl 契约：ok{url,quality,size} / need_rebind(409) / not_bound(404) / 未登录 401。 */
   var BILI_PLAY_GEN = 0;      // 连点两次：只让最后一次的异步结果落地
+  /* 供外部（源聚合面板）在切换播放源时统一作废在途请求：自增后，旧响应回来会发现 gen 不符。 */
+  window.__biliAbort = function () { BILI_PLAY_GEN += 1; };
 
   /* 集号：B 站分P标题写法很杂（「第 3 话」「[03]」「E03」「S01E03」「_03」），统一抽成数字；
      抽不到返回 0，调用方退回按顺序取 pages[ep-1]。 */
@@ -199,16 +235,46 @@
      有 url 就交给 open 起播：76 的 open() 会对首条源自己 startLine，
      再调一次 QPlayer.play(url) 只会把同一个地址二次 load（addLine 按 url 去重，
      不会多出一条线路，但第一次 load 被中断会白走一次 onLoadFail），所以这里不重复调用。 */
-  function biliOpenPlayer(m, id, title, ep, cid, url) {
+  function biliOpenPlayer(m, id, title, ep, cid, url, eps) {
+    var list = eps || [];
     var ctx = {
       m: m,
       id: String(id),
       title: String(title || ''),
       ep: ep,
-      sources: url ? [{ label: 'B 站（弹幕版）', url: String(url), type: 'mp4' }] : []
+      sources: url ? [{ label: 'B 站（弹幕版）', url: String(url), type: 'mp4' }] : [],
+      /* B 站文件不在夸克网盘，fid 必须为空：/tvplay/share/progress 是按夸克 fid 定位的。
+         同集时保留上一次的 fid（与 magnet-eps.js 的既有做法一致），避免把网盘记录冲掉。
+         这里只写本地进度（__prog.report 内部回写 /tvplay/share/progress 时 fid 为空即跳过），
+         绝不在这里直接调 /tvplay/share/progress。 */
+      onProgress: function (p) {
+        if (!p) return;
+        var prev = null;
+        try { prev = window.__prog && window.__prog.get ? window.__prog.get(id) : null; } catch (e) { prev = null; }
+        var extra = prev && Number(prev.ep) === Number(p.ep)
+          ? { fid: prev.fid || '', pos: p.pos || 0, dur: p.dur || 0 }
+          : { fid: '', pos: p.pos || 0, dur: p.dur || 0 };
+        if (window.__prog && typeof window.__prog.report === 'function') {
+          try { window.__prog.report(id, p.ep, extra); } catch (e) { /* 上报失败不影响播放 */ }
+        }
+      },
+      /* 76 的 goNext(auto) 在没给 onEnded 时落到 onNext，所以 5 秒倒计时到点也走这里 */
+      onNext: function () {
+        var curEp = Number(ep);
+        if (!list.length) return;
+        var i = -1;
+        for (var k = 0; k < list.length; k++) { if (Number(list[k].ep) === curEp) { i = k; break; } }
+        if (i >= 0 && i + 1 < list.length) biliPlayEp(m, id, title, Number(list[i + 1].ep));
+      },
+      onPickEp: function (ep) { biliPlayEp(m, id, title, Number(ep) || 1); }
     };
     if (cid) ctx.dm = { cid: String(cid) };
-    return window.QPlayer.open(ctx);
+    var tok = window.QPlayer.open(ctx);
+    /* 76 的 open() 不读 ctx.eps（S.eps 恒为空，集数区停在「正在读取选集…」），
+       选集必须 open 之后再灌一次；空列表也灌，把提示从「读取中」改成「暂无选集信息」。 */
+    if (list.length) window.QPlayer.setEpisodes(list, ep, '');
+    else window.QPlayer.setEpisodes([], ep);
+    return tok;
   }
 
   function biliPlayEp(m, id, title, ep) {
@@ -218,22 +284,29 @@
     if (!m || !window.QPlayer) return;
     var want = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
     var gen = ++BILI_PLAY_GEN;
+    var eps = [];             // 分P 列表：resolve 回来才填，失败/超时路径保持空数组
     function fail(msg, state) {
-      biliOpenPlayer(m, id, title, want, 0, '');
+      biliOpenPlayer(m, id, title, want, 0, '', eps);
       window.QPlayer.state(state || 'error', { msg: msg });
     }
     biliResolve(id, title).then(function (v) {
       if (gen !== BILI_PLAY_GEN) return;
       if (!v || !v.bvid || !v.pages || !v.pages.length) { fail('没找到这部番的 B 站源，换夸克源试试'); return; }
+      /* 选集列表：分P 标题里的集号优先（biliEpNo 抽「第 3 话 / [03] / E03」等写法），
+         抽不到退回分P 序号；ep<=0 的脏数据丢掉，76 的 setEpisodes 也会再滤一遍。 */
+      eps = (v.pages || []).map(function (p) {
+        var n = biliEpNo(p.part);
+        return { ep: n || (p.page || 0), label: p.part || ('第 ' + (p.page || '') + ' 集') };
+      }).filter(function (x) { return x.ep > 0; });
       var pg = biliPickPage(v.pages, want);
       if (!pg || !pg.cid) { fail('这一集没有可用的 B 站分P'); return; }
       return biliAuth('playurl', 'POST', { bvid: v.bvid, cid: pg.cid, qn: 80 }, 20000).then(function (r) {
         if (gen !== BILI_PLAY_GEN) return;
         var j = r.j || {};
-        if (r.ok && j.ok && j.url) { biliOpenPlayer(m, id, title, want, pg.cid, j.url); return; }
+        if (r.ok && j.ok && j.url) { biliOpenPlayer(m, id, title, want, pg.cid, j.url, eps); return; }
         if (r.status === 401) { fail('站点登录已失效，请重新登录', 'login'); return; }
         if (j.error === 'need_rebind' || j.error === 'not_bound') {
-          biliOpenPlayer(m, id, title, want, 0, '');
+          biliOpenPlayer(m, id, title, want, 0, '', eps);
           /* rebind：76 的默认动作是「去扫码」指向夸克，这里换成个人主页的绑定入口 */
           window.QPlayer.state('rebind', {
             msg: 'B 站登录已失效，去个人主页重新粘贴 SESSDATA',

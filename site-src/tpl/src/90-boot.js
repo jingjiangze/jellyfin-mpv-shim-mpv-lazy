@@ -111,6 +111,8 @@
     else if (PAGE === 'movie') refreshMovie(true);
     else if (PAGE === 'rank') renderRank();
     else if (PAGE === 'user') renderUser();
+    /* 整页详情：换清晰度要重画详情（detail 走同一条 repaint，否则会落到 renderHome 把首页画进来） */
+    else if (PAGE === 'detail') renderDetail();
     else renderHome();
   }
 
@@ -600,6 +602,8 @@
     var m = /[?&]id=(\d+)/.exec(location.search || '');
     return m ? Number(m[1]) : 0;
   }
+  /* 旧深链只跳一次：后续 repaint / 事件重入都不再触发第二次导航 */
+  var DEEP_REDIRECT = false;
 
   function bootAnime() {
     return jd('anime.json').then(function (d) {
@@ -621,6 +625,8 @@
     }
     var c = e.target.closest && e.target.closest('.card');
     if (!c) return;
+    /* 整页详情里卡片（相关推荐）自己绑了换页跳转，这里再开弹窗只会盖住整页 */
+    if (PAGE === 'detail') return;
     openModal(Number(c.dataset.id));
   });
   $('#mask') && $('#mask').addEventListener('click', function (e) { if (e.target.id === 'mask') close(); });
@@ -641,11 +647,15 @@
         clearTimeout(qt);
         qt = setTimeout(applyBrowse, 220);
       });
-      /* 深链：/anime.html?id=123 启动即开详情。这里已经是 bootAnime 的 then，ANI.rows 就绪；
-         openModal 在 70-modal.js、同一 IIFE 内，函数声明提升可直接调。行不存在时它自己不动。
-         ?id= 与 ?tag= 共存：打开时 openModal 只在地址栏补 id 这一段。 */
+      /* 旧深链 /anime.html?id=123：详情已经独立成整页，这里改成跳过去。
+         ?tag= 属于列表态、详情页不用，所以只把 id 带过去（拼 ./detail?id=X 即可）。
+         用 replace 而不是 assign：列表页不该留在历史里让「后退」回到一个会自动跳走的页面。
+         DEEP_REDIRECT 保证只跳一次（repaint / 事件重入不会再触发第二次导航）。 */
       var deep = deepLinkId();
-      if (deep) openModal(deep);
+      if (deep && !DEEP_REDIRECT) {
+        DEEP_REDIRECT = true;
+        location.replace('./detail?id=' + deep);
+      }
     } else if (PAGE === 'movie') {
       initMovie();
     } else if (PAGE === 'rank') {
@@ -654,6 +664,9 @@
     } else if (PAGE === 'user') {
       /* 主页不绑搜索：搜索框在这里会让 #main 被搜索页顶掉，而主页没有「清空回主页」的语义 */
       renderUser();
+    } else if (PAGE === 'detail') {
+      /* 整页详情：自己的路由（?id=），不复用列表态的任何 renderXxx，也不绑搜索 */
+      renderDetail();
     } else {
       renderHome();
       bindSearch(renderHome);

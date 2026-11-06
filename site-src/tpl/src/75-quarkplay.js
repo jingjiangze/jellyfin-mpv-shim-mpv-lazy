@@ -23,6 +23,10 @@
   var QP_FID_TTL = 60 * 60 * 1000;       // fid 缓存 1h：文件不会每分钟改名，地址才会过期
   var QP_TIMER = 0;                      // 挂起的转码 / 转存轮询（模块级：新播放 / 关播放器都要能掐掉）
   var QP_GEN = 0;                        // 每次开播自增：异步回调据此判断自己是否已被后来的一次播放取代
+  /* 供外部（78-sources.js 的播放源面板）在切源时统一作废在途请求：
+     自增代次后，旧的 find / url / 转存轮询回调全部落到 qpAlive() === false，
+     不会再往新播放器里写状态（与 80-bili.js 的 __biliAbort 同一做法）。 */
+  window.__qpAbort = function () { QP_GEN += 1; };
 
   /* 统一取 JSON：网络失败、空体、非 JSON 一律退化成 {state:'error'}；
      后端已经带了 state 就原样用，只在缺 state 时按 HTTP 码兜底（401/409/202）。 */

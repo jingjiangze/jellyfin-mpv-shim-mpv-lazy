@@ -38,6 +38,10 @@
     var title = r[2] || r[1];
     var m = $('#modal');
     if (!m) return;                              // 页面没有 #modal 壳时别抛引用错
+    /* 播放源面板的当前集：与整页详情同一口径（有进度跟进度，否则第 1 集） */
+    var curEp = 1;
+    var prog = progressOf(id);
+    if (prog && Number(prog.ep) > 0) curEp = Math.floor(Number(prog.ep));
     var host = m, gen = ++MODAL_GEN;             // 这一代弹窗的容器引用与代号
     /* 结构契约：magnet-eps.js 靠 h3 取片名、靠 .acts 定位插入点，别改这两个。
        版式（DESIGN-SPEC §2.2）：.mhero 两栏（200px 封面 + 信息）→ 吸顶 tabs → 单栏 .sect 流。 */
@@ -70,6 +74,9 @@
       +     '</div>'
       +   '</div>'
       + '</div>'
+      /* 播放源聚合面板：放在 .mtabs 之前、.trailer.qplayer 之外（面板自带 .qp-line-list，
+         塞进播放器 root 会和 76 的 renderLines 抢同一个选择器） */
+      + srcPanelHtml(id, title, curEp)
       + '<div class="mtabs">'
       +   '<button class="mtab on" data-p="detail" type="button">详情</button>'
       +   '<button class="mtab" data-p="rt" type="button">评价</button>'
@@ -142,6 +149,8 @@
       renderTags(rec, host.querySelector('#tags'));
     });
     bindBili(id, title, r[4] || '');
+    /* 播放源面板：只探测不播放；挂载点在面板已进 DOM 之后（60s 内重开同一部不重探） */
+    srcPanelMount(m, id, title, curEp);
     var sfx = id % 64;
     var pr = shardCache[sfx];
     if (!pr) {
@@ -233,6 +242,8 @@
   /* 关弹窗要把内容一起清掉：旧实现只摘 #mask 的 on，预告 iframe 会在后台继续播放，
      下次打开还留着上一次的残留节点。容器 #modal 本身保留（openMagView 复用它当外壳）。 */
   function close() {
+    /* 整页详情里 #modal 就是页面主体：Esc / popstate / 点 #mask 都别把它清空 */
+    if (PAGE === 'detail') return;
     var m = $('#modal');
     if (m) {
       var tr = m.querySelectorAll('.trailer');
