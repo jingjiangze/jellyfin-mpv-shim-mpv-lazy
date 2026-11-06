@@ -3416,3 +3416,18 @@ main {
 .dp-srcs .qp-line-row { display: inline-flex; align-items: center; gap: var(--s1-5); }
 .dp-srcs .sec-sub { margin-left: auto; }
 @media (max-width: 760px) { .dp-srcs[data-open="0"] .qp-line-list { display: none; } }
+
+/* 手机端播放源压成一行横滑：四个源（含「绑定」按钮）换行会吃掉 170px，
+   把播放器挤到首屏外；单行 + 横向滚动既不换行也保留全部入口。 */
+@media (max-width: 760px) {
+  .dp-srcs .qp-line-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .dp-srcs .qp-line-list::-webkit-scrollbar { display: none; }
+  .dp-srcs .qp-line-row { flex: 0 0 auto; }
+}
