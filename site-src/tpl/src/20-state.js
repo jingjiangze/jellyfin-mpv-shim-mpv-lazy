@@ -169,6 +169,15 @@
 
   /* 磁力层（magnet-eps.js）是独立 IIFE、拿不到本文件的闭包：点行复制后经这个入口
      上报「看到第几集」。id 传 #modal 的 data-bgm，ep 是行上的数字集号（合集行没有）。 */
+  /* 夸克绑定页现在要站点登录（服务端 /qr 门禁，2026-11-06）：
+     把当前 token 作为 ?t= 带过去，服务端校验后种 30 分钟 cookie，页面内 XHR 免再带。
+     未登录返回裸链接 —— 调用方应先弹登录面板，别把人扔到 401 页。 */
+  function quarkBindUrl() {
+    var tk = '';
+    try { tk = (typeof authToken === 'function' && authToken()) || ''; } catch (e) { tk = ''; }
+    return 'https://120.48.56.189/qr/' + (tk ? '?t=' + encodeURIComponent(tk) : '');
+  }
+
   window.__prog = {
     report: function (id, ep, extra) { return setProgress(id, ep, extra); },
     get: function (id) { return progressOf(id); }

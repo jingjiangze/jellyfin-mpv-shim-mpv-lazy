@@ -479,7 +479,7 @@
       + '<div class="pf-actions">'
       + '<button class="btn" id="pfpw" type="button">修改密码</button>'
       + '<button class="btn" id="pfout" type="button">退出登录</button>'
-      + '<a class="btn" href="https://120.48.56.189/qr/" target="_blank" rel="noopener">绑定夸克网盘</a>'
+      + '<a class="btn" href="' + esc(quarkBindUrl()) + '" target="_blank" rel="noopener">绑定夸克网盘</a>'
       + '</div>'
       + '<div class="pf-bili" id="pfbili"></div>'
       + '<div class="mtabs pf-tabs">'

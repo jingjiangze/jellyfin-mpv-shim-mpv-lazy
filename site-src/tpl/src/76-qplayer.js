@@ -299,7 +299,7 @@
     /* ---------------- 状态机 ---------------- */
     function actionsFor(S, s) {
       if (s === 'login') return [{ label: '登录', fn: function () { if (window.__openLogin) window.__openLogin('email'); } }];
-      if (s === 'rebind') return [{ label: '去扫码', href: QP_REBIND }];
+      if (s === 'rebind') return [{ label: '去扫码', href: (typeof quarkBindUrl === 'function' ? quarkBindUrl() : QP_REBIND) }];
       if (s === 'quota') return [{ label: '重试', fn: function () { retry(S); } }];
       if (s === 'error') return [
         { label: '重试', fn: function () { retry(S); } },
