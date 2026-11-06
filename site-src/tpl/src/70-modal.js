@@ -47,7 +47,7 @@
        版式（DESIGN-SPEC §2.2）：.mhero 两栏（200px 封面 + 信息）→ 吸顶 tabs → 单栏 .sect 流。 */
     m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
       + '<div class="mhero">'
-      +   '<img class="mposter" src="' + esc(ANI.poster + id + '.jpg') + '"' + fbAttr([ex[1]]) + ' alt="">'
+      +   '<img class="mposter" src="' + esc(posterSrc(id)) + '"' + posterFb(id, ex) + ' alt="">'
       +   '<div class="mh-info">'
       +     '<h3>' + esc(title) + '</h3>'
       +     (r[1] !== title ? '<div class="orig">' + esc(r[1]) + '</div>' : '')

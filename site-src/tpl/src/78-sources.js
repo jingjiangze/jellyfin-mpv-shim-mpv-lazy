@@ -287,7 +287,7 @@
         /* B 站绑定是按站点 uid 存的（bili_bind 表 uid 主键），没登录就没有「归属」，
            直接跳 /user 只会看到一句登录引导 —— 这里先弹登录面板，登录完再回主页绑定。 */
         if (typeof authToken === 'function' && authToken()) srcOpenUrl(SRC_USER);
-        else if (typeof openAuthPanel === 'function') openAuthPanel('login');
+        else if (typeof openAuthPanel === 'function') openAuthPanel('email');
         else srcOpenUrl(SRC_USER);
       }
       return;
