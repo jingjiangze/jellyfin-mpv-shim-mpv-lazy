@@ -19,8 +19,11 @@ SITE = HERE / "site"
 PX = "http://127.0.0.1:7897"
 DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({"http": PX, "https": PX}))
+# CI 里没有本机 Clash：site-sync 一直传 NO_LOCAL_PROXY=1，但本脚本从未读过 ——
+# 结果每轮「Fill missing posters」对 TMDB 目标 2×18s 超时白等、海报永远补不上（2026-11-07 修）。
+OPENER = DIRECT if os.environ.get("NO_LOCAL_PROXY") else PROXY
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0 Safari/537.36"
-TMDB_KEY = "99bf884d2a3e8403ae8accded44ec73c"
+TMDB_KEY = os.environ.get("TMDB_KEY") or "99bf884d2a3e8403ae8accded44ec73c"
 CACHE = HERE / "poster_cache.json"
 
 NOISE = re.compile(
@@ -74,7 +77,7 @@ def tmdb_search(kw, year=None):
     for i in range(2):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
-            with PROXY.open(req, timeout=18) as x:
+            with OPENER.open(req, timeout=18) as x:
                 d = json.loads(x.read().decode("utf-8", "replace"))
             return (d.get("results") or [])
         except Exception:
@@ -85,7 +88,7 @@ def tmdb_search(kw, year=None):
 def dl(url, dest):
     if not url:
         return False
-    opener = PROXY if "tmdb" in url else DIRECT
+    opener = OPENER if "tmdb" in url else DIRECT
     try:
         req = urllib.request.Request(url, headers={"User-Agent": UA})
         with opener.open(req, timeout=20) as x:
