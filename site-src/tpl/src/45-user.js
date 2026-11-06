@@ -73,7 +73,9 @@
      明确写出「绑定要用账号归属」：B 站绑定在后端按站点 uid 存（bili_bind 表 uid 主键），
      没有账号就没有可归属的行 —— 不登录时连扫码入口都不该出现，否则绑了也无处落地。 */
   function userLoginHTML() {
-    return '<div class="pf-hero"></div>'
+    /* 不渲染 .pf-hero：那块渐变是给登录后的头像当背景的，未登录时只是一大片空白
+       （实测手机端约 300px 纯色块，把「登录 / 注册」挤出首屏）。 */
+    return '<div class="sec-h"><h2>我的</h2><span class="sec-sub">未登录</span></div>'
       + '<div class="empty">登录后查看我的主页 —— 追番、观看进度和账号设置都在这里</div>'
       + '<div class="pf-acts-note">'
       + '<p><b>B 站扫码绑定</b>：绑定结果记在你的账号下（每人对自己的绑定负责），登录后才会出现扫码按钮。</p>'

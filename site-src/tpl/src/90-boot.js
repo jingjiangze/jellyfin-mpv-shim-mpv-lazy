@@ -160,7 +160,7 @@
       + '<button class="btn pri" id="authlogin" type="button">登录</button>'
       + '<button class="btn" id="authreg" type="button">注册</button>'
       + '</div>'
-      + '<p class="authhint" id="authemailtip">邮箱只用于登录与找回，不发推广；验证码 10 分钟内有效。</p>'
+      + '<p class="authhint" id="authemailtip">邮箱只用于登录与找回，不发推广。注册会往这个邮箱发 6 位验证码（10 分钟内有效），验证通过才算注册成功；密码至少 8 位。</p>'
       + '</div>'
       + '<div class="authbody" data-t="verify" hidden>'
       + '<p class="authhint" id="authverifyhint">验证码已发到你的邮箱，10 分钟内有效。</p>'
@@ -324,7 +324,17 @@
     if (!mask) return;
     showAuthView('verify');
     var tip = document.getElementById('authverifyhint');
-    if (tip) tip.textContent = hint || '验证码已发送';
+    /* 把收件邮箱写进提示：验证码页拿不到邮箱输入框，用户需要知道自己该去哪个箱子里找 */
+    if (tip) {
+      tip.innerHTML = '';
+      tip.appendChild(document.createTextNode(hint || '验证码已发送'));
+      if (AUTH_PENDING) {
+        var b = document.createElement('b');
+        b.textContent = AUTH_PENDING;
+        tip.appendChild(document.createTextNode(' → '));
+        tip.appendChild(b);
+      }
+    }
     var code = document.getElementById('authcode');
     /* 换邮箱重来时清掉上一次的残值；dev_code 只有后端调试期才会给 */
     if (code) code.value = devCode ? String(devCode) : '';
