@@ -2961,3 +2961,59 @@ main {
 .qp-dm { position:absolute; inset:0; width:100%; height:100%; z-index:1; pointer-events:none; }
 .qp-dm-toggle { margin-left:auto; }
 .qplayer[data-dm="0"] .qp-dm { display:none; }
+
+/* ---------------------------------------------------------------- 21 弹幕设置面板（76-qplayer.js，⚙ 弹出）
+   开关 / 设置 / 关闭三个按钮靠右成组：只保留 .qp-dm-toggle 的 auto 外边距（覆盖 .qp-close 的 auto）。
+   面板挂 .trailer.qplayer 上（它本来就是 position:relative + overflow:visible），
+   **不用 position:fixed** —— .mask 的 backdrop-filter 会把 fixed 的包含块改成遮罩自身。 */
+.qp-head .qp-close { margin-left: var(--s1); }
+.qp-dmset-btn { border-color: transparent; background: none; font-size: var(--fs-md); }
+.qp-dmset {
+  position: absolute; z-index: 7; top: calc(var(--ctl-h) + var(--s4)); right: var(--s1);
+  width: min(340px, calc(100% - var(--s2))); max-height: min(68vh, 520px); overflow: auto;
+  padding: var(--s3); border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--card); color: var(--fg); box-shadow: var(--sh-2); text-align: left;
+}
+.qp-dmset[hidden] { display: none; }
+.qp-dmset-h { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s3); }
+.qp-dmset-h b { font-size: var(--fs-sm); font-weight: 600; color: var(--fg); }
+.qp-dmset-done { margin-left: auto; height: 26px; min-width: 0; padding: 0 var(--s3); font-size: var(--fs-xs); }
+.qp-dmset-sec { margin-bottom: var(--s3); }
+.qp-dmset-t { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2);
+  margin-bottom: var(--s1-5); font-size: var(--fs-xs); color: var(--dim); }
+.qp-dmset-v { font-style: normal; font-weight: 600; color: var(--accent-text); }
+
+/* 「显示类型」勾选：胶囊 + 原生 checkbox（:has 给选中态上色，不支持时仍能看清勾选） */
+.qp-dmset-chips { display: flex; flex-wrap: wrap; gap: var(--s1-5); }
+.qp-dmset-chip { display: inline-flex; align-items: center; gap: var(--s1); height: 28px;
+  padding: 0 var(--s2); border: 1px solid var(--line); border-radius: var(--r-pill);
+  background: var(--card2); color: var(--fg2); font-size: var(--fs-xs); cursor: pointer;
+  -webkit-user-select: none; user-select: none; }
+.qp-dmset-chip input { margin: 0; accent-color: var(--accent); }
+.qp-dmset-chip:has(input:checked) { border-color: var(--accent-line); background: var(--accent-soft);
+  color: var(--accent-text); font-weight: 600; }
+
+.qp-dmset-range { display: block; width: 100%; height: 24px; margin: 0; accent-color: var(--accent); }
+
+/* 显示区域：四段等宽按钮 */
+.qp-dmset-seg { display: flex; gap: var(--s1); }
+.qp-dmset-seg button { flex: 1 1 0; height: 28px; padding: 0; border: 1px solid var(--line);
+  border-radius: var(--r-ctl); background: var(--card2); color: var(--fg2); font-size: var(--fs-xs); cursor: pointer; }
+.qp-dmset-seg button:hover { border-color: var(--accent-line); color: var(--accent); }
+.qp-dmset-seg button.on { border-color: transparent; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+.qp-dmset-in, .qp-dmset-ta { display: block; width: 100%; padding: var(--s1-5) var(--s2);
+  border: 1px solid var(--line); border-radius: var(--r-ctl); background: var(--bg2); color: var(--fg);
+  font-family: inherit; font-size: var(--fs-sm); line-height: var(--lh-snug); }
+.qp-dmset-ta { min-height: 56px; resize: vertical; }
+.qp-dmset-in::placeholder, .qp-dmset-ta::placeholder { color: var(--dim2); }
+.qp-dmset-in:focus-visible, .qp-dmset-ta:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.qp-dmset-foot { display: flex; justify-content: flex-end; padding-top: var(--s2); border-top: 1px solid var(--line); }
+.qp-dmset-reset { height: 28px; font-size: var(--fs-xs); color: var(--dim); }
+
+/* 窄屏：改全宽抽屉（仍在文档流上方浮动，不 fixed）。负外边距抵掉 .trailer 在窄屏的 --s4 左右留白，
+   让抽屉真正贴到弹窗（= 屏幕）两边。 */
+@media (max-width: 760px) {
+  .qp-dmset { left: calc(-1 * var(--s4)); right: calc(-1 * var(--s4)); width: auto; max-height: 62vh; }
+}
