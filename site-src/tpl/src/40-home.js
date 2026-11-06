@@ -112,6 +112,46 @@ function block(title, list, moreHtml, gridClass) {
     + '</div></section>';
 }
 
+/* 首页 banner（gamer 的 .big_banner，整条 250px）：用当前筛选结果里评分最高的一部做单张大图。
+   列表行不带简介，简介等这一条的详情分片回来再补；拉不到就留空 <p>（空元素无高度，不撑版）。 */
+var BANNER_GEN = 0;
+
+function bannerPick(rows) {
+  for (var i = 0; i < rows.length; i++) { if (rows[i] && rows[i][7]) return rows[i]; }
+  return null;
+}
+
+function bannerHtml(r) {
+  var id = r[0], name = r[2] || r[1];
+  /* 副标题：年 · 类型 · 评分 · 话数，缺哪项就不占位（与弹窗 .mbadges 的口径一致） */
+  var sub = [r[4] || '', TYPE[r[3]] || r[3] || '',
+    r[7] ? '★' + Number(r[7]).toFixed(1) : '', r[8] ? r[8] + ' 话' : '']
+    .filter(Boolean).join(' · ');
+  return '<a class="bigbanner" href="./detail?id=' + id + '">'
+    + '<img class="bigbanner-bg" src="' + esc(posterSrc(id)) + '" alt="">'
+    + '<div class="bigbanner-in">'
+    + '<span class="bigbanner-tag">本季推荐</span>'
+    + '<h2>' + titleHTML(name) + '</h2>'
+    + '<p class="bigbanner-sub">' + esc(sub) + '</p>'
+    + '<p class="bigbanner-plot"></p>'
+    + '</div></a>';
+}
+
+/* gen：renderHome 每次重画自增，异步回来的简介只落最后一代（否则切筛选后会写进新 DOM） */
+function fillBannerPlot(main, r, gen) {
+  detailShard(r[0]).then(function (list) {
+    if (gen !== BANNER_GEN || !list) return;
+    var box = main.querySelector('.bigbanner-plot');
+    if (!box) return;
+    var rec = null;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].id === r[0]) { rec = list[i]; break; }
+    }
+    var txt = String((rec && rec.overview) || '').replace(/\s+/g, ' ').trim();
+    if (txt) box.textContent = txt.slice(0, 80) + (txt.length > 80 ? '…' : '');
+  }, function () { /* 分片拉不到：banner 其余部分照常，简介留空 */ });
+}
+
 function renderHome() {
   if (!HOME.y) homeDefaults();
   var rows = homeRows();
@@ -123,8 +163,14 @@ function renderHome() {
   if (!today) today = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
   var top = block('本季高分', topRows(8), '<a class="morelink" href="rank">排行榜 ›</a>', 'rankgrid');
 
-  main.innerHTML = '<div class="home-cols">' + renderLevels()
+  /* banner 全宽，放在 .home-cols 之前；一条可用的都没有就不出 banner */
+  var pick = bannerPick(rows);
+  var gen = ++BANNER_GEN;
+
+  main.innerHTML = (pick ? bannerHtml(pick) : '')
+    + '<div class="home-cols">' + renderLevels()
     + '<div class="home-main">' + today + top + '</div></div>';
+  if (pick) fillBannerPlot(main, pick, gen);
 
   /* 交互 */
   main.querySelectorAll('[data-q]').forEach(function (b) {

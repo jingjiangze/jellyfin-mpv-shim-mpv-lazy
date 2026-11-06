@@ -26,21 +26,23 @@
  * 与 prefers-color-scheme: dark 两处覆盖同一组变量名；html 未设 data-theme 时跟随系统。
  * 规则里一律用 token，不再写死色值（含 mask / 占位块 / 空星条这些灰阶）。 */
 :root {
-  /* 2026-11 改版：色板换成 bgm.tv 口径（白底页 + 细灰线 + 蓝色主色 #02A3FB）。
-     变量名不变，只换取值；组件规则继续只吃 token。 */
-  --bg: #FFFFFF;
-  --bg2: #FCFCFC;
+  /* 2026-11 改版：色板换成 ani.gamer.com.tw 口径（--anime-background-base 灰底 + 白顶栏
+     + 主色 #00B4D8 / --anime-primary-color）。变量名不变，只换取值；组件规则继续只吃 token。 */
+  --bg: #F6F6FA;
+  --bg2: #FFFFFF;
   --card: #FFFFFF;
-  --card2: #F9F9F5;
-  --line: #EEEEEE;
-  --line-hi: #DDDDDD;
-  --fg: #000000;
-  --fg2: #555555;
-  --dim: #888888;
-  --dim2: #AAAAAA;
-  --accent: #02A3FB;
-  --accent-soft: rgba(2, 163, 251, .10);
-  --accent-line: rgba(2, 163, 251, .38);
+  --card2: #F2F2F5;
+  --line: #D1D1D1;
+  --line-hi: #C4C4C8;
+  --fg: #2E2F31;
+  --fg2: #55575C;
+  /* gamer 的 --dim / --dim2 是 rgba(46,47,49,.67)/.45)：这里取同视觉的不透明等价色，
+     深色主题下换 #9E9EA6 / #7A7A82。 */
+  --dim: #6B6D72;
+  --dim2: #9A9CA1;
+  --accent: #00B4D8;
+  --accent-soft: rgba(0, 180, 216, .10);
+  --accent-line: rgba(0, 180, 216, .38);
   --danger: #d03050;
   --star: #FFB027;
   --overlay: rgba(0, 0, 0, .46);
@@ -68,13 +70,14 @@
   --r: 8px;
   --r-lg: 20px;
 
-  --header-h: 56px;
+  /* 两层顶栏（.sky 55 + .mainmenu 45）的兜底高度；脚本 syncHeaderH() 量完会写回实测值 */
+  --header-h: 100px;
   --wrap: 1600px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   /* 2026-11 结构与布局重构新增：控件尺寸 / 行高 / 字距 / 圆角阴影与动效档位。
      新规则一律引这里，不再写字号、阴影、动画时长的字面量。 */
-  --line-ctl:#8C9298; --accent-text:#0187C5; --accent-ink:#14141A;
+  --line-ctl:#8C9298; --accent-text:#00718A; --accent-ink:#14141A;
   --fs-xl:20px;
   --lh-tight:1.25; --lh-snug:1.4; --lh-base:1.6; --lh-prose:1.8;
   --ls-tight:-.01em; --ls-caps:.08em;
@@ -88,25 +91,25 @@
 
 /* 深色（手动切换：主题脚本往 <html> 写 data-theme="light" | "dark"） */
 [data-theme="dark"] {
-  --bg: #2D2E2F;
-  --bg2: #37393B;
-  --card: #37393B;
-  --card2: #3A3C3E;
-  --line: #3A3C3E;
-  --line-hi: #4A4C4F;
-  --fg: #FFFFFF;
-  --fg2: #EBEBF5;
-  --dim: #B0B0B8;
-  --dim2: #8A8A92;
-  --accent: #02A3FB;
-  --accent-soft: rgba(2, 163, 251, .18);
-  --accent-line: rgba(2, 163, 251, .45);
+  --bg: #111111;
+  --bg2: #222526;
+  --card: #222526;
+  --card2: #2A2D2E;
+  --line: #4D4D4D;
+  --line-hi: #5A5A5A;
+  --fg: #EBEBF5;
+  --fg2: #C9C9D1;
+  --dim: #9E9EA6;
+  --dim2: #7A7A82;
+  --accent: #00B4D8;
+  --accent-soft: rgba(0, 180, 216, .18);
+  --accent-line: rgba(0, 180, 216, .45);
   --danger: #d03050;
   --star: #f5c451;
   --overlay: rgba(0, 0, 0, .62);
   /* 深色下控件边框要更亮一点才看得见；文字蓝与阴影同步加深 */
   --line-ctl:#6B7178;
-  --accent-text:#4CC3EC;
+  --accent-text:#4CC9E4;
   --sh-1:0 2px 8px rgba(0,0,0,.45);
   --sh-2:0 8px 24px rgba(0,0,0,.55);
   --sh-3:0 24px 64px rgba(0,0,0,.70);
@@ -118,25 +121,25 @@
 /* 深色（未手动切换：跟随系统）——与上面同一组取值 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #2D2E2F;
-    --bg2: #37393B;
-    --card: #37393B;
-    --card2: #3A3C3E;
-    --line: #3A3C3E;
-    --line-hi: #4A4C4F;
-    --fg: #FFFFFF;
-    --fg2: #EBEBF5;
-    --dim: #B0B0B8;
-    --dim2: #8A8A92;
-    --accent: #02A3FB;
-    --accent-soft: rgba(2, 163, 251, .18);
-    --accent-line: rgba(2, 163, 251, .45);
+    --bg: #111111;
+    --bg2: #222526;
+    --card: #222526;
+    --card2: #2A2D2E;
+    --line: #4D4D4D;
+    --line-hi: #5A5A5A;
+    --fg: #EBEBF5;
+    --fg2: #C9C9D1;
+    --dim: #9E9EA6;
+    --dim2: #7A7A82;
+    --accent: #00B4D8;
+    --accent-soft: rgba(0, 180, 216, .18);
+    --accent-line: rgba(0, 180, 216, .45);
     --danger: #d03050;
     --star: #f5c451;
     --overlay: rgba(0, 0, 0, .62);
     /* 与手动深色同一组取值 */
     --line-ctl:#6B7178;
-    --accent-text:#4CC3EC;
+    --accent-text:#4CC9E4;
     --sh-1:0 2px 8px rgba(0,0,0,.45);
     --sh-2:0 8px 24px rgba(0,0,0,.55);
     --sh-3:0 24px 64px rgba(0,0,0,.70);
@@ -234,22 +237,47 @@ main {
 }
 
 /* ---------------------------------------------------------------- 4 顶栏 */
+/* 两层（照 ani.gamer.com.tw 实测）：.sky 55px = logo + 搜索（300×30，圆角 8px）+ 右侧工具；
+   .mainmenu 45px = 菜单（16px，选中项主色块）。总高 ≈100px 由内容自然撑起 ——
+   .site-head 不再写死 height，页面脚本 syncHeaderH() 量完实际高度写回 --header-h
+   （.filters-bar 的 top 吃这个变量）。 */
 .site-head {
   position: sticky;
   top: 0;
   z-index: 30;
-  height: var(--header-h);
   background: var(--bg2);
-  border-bottom: 1px solid #DDDDDD;
+  border-bottom: 1px solid var(--line-hi);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
 }
 
-.site-head .wrap {
+.sky {
+  height: 55px;
   display: flex;
   align-items: center;
-  gap: var(--s5);
-  height: 100%;
+}
+
+.mainmenu {
+  height: 45px;
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--line);
+}
+
+/* 两层共用的内层容器：与内容区同宽居中（gamer 里它比内容区略窄；我们的内容区已定宽，
+   取同一个 --wrap，避免两套宽度在窄屏互相打架） */
+.hd-wrap {
+  width: 100%;
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 0 var(--s6);
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+}
+
+.mainmenu .hd-wrap {
+  gap: var(--s1);
 }
 
 .brand {
@@ -267,7 +295,7 @@ main {
   height: 18px;
   border-radius: 2px;
   background: var(--accent);
-  box-shadow: 0 0 12px rgba(2, 163, 251, .45);
+  box-shadow: 0 0 12px var(--accent-line);
 }
 
 .brand b {
@@ -275,40 +303,30 @@ main {
   color: var(--accent);
 }
 
-.mainnav {
-  display: flex;
-  align-items: center;
-  gap: var(--s1);
-}
-
-/* 导航项改成 bgm 式胶囊（100px 圆角 = 药丸），字号/行高按 5px 12px 内边距配平到 35px 高；
-   选中态是主色填充 + 白字（对应 bgm 的 .chl.focus） */
-.mainnav a {
+/* 菜单项（gamer .mainmenu a）：16px / 行高 32px / 4px 圆角；选中项 = 主色实心块。
+   nav 上同时挂着 .mainnav，两个选择器都写上，其它模块按老类名取值也不会掉样式。 */
+.mainnav a, .mainmenu a {
   display: inline-flex;
   align-items: center;
-  padding: 5px 12px;
-  line-height: 25px;
-  border-radius: 100px;
-  font-size: var(--fs-md);
-  color: var(--dim);
+  padding: 0 12px;
+  line-height: 32px;
+  border-radius: 4px;
+  font-size: 16px;
+  color: var(--fg);
   white-space: nowrap;
   transition: color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
 }
 
-.mainnav a:hover {
+.mainnav a:hover, .mainmenu a:hover {
   color: var(--fg);
   background: var(--card2);
 }
 
-.mainnav a.is-on {
-  color: var(--accent-ink);
+/* 白字压 #00B4D8 只有 2.2:1，选中项用深墨字（gamer 的选中菜单也是深字压亮底） */
+.mainnav a.is-on, .mainmenu a.is-on {
+  color: #0B1E23;
   background: var(--accent);
   font-weight: 600;
-}
-
-.head-spacer {
-  flex: 1 1 auto;
-  min-width: var(--s2);
 }
 
 .searchbox {
@@ -316,13 +334,15 @@ main {
   display: flex;
   justify-content: flex-end;
   min-width: 120px;
+  /* 搜索紧跟 logo，后面的 #cnt / .thm / .psz 被推到最右（.sky 里没有 spacer 元素） */
+  margin-right: auto;
 }
 
 .searchbox input {
   width: 100%;
-  height: var(--ctl-h);
+  height: 30px;
   padding: 0 var(--s4);
-  border-radius: var(--r-ctl);
+  border-radius: var(--r);
   font-size: var(--fs-sm);
   color: var(--fg);
   background: var(--card2);
@@ -410,63 +430,87 @@ main {
 .thm:hover { border-color: var(--accent-line); color: var(--accent); }
 
 /* ---------------------------------------------------------------- 5 区块标题（全站统一） */
-/* 结构抄 gamer：标题在左、看更多在右两端对齐，整块上方 32px / 下方 12px，
-   底边一条通栏细线（bgm 的 1px #eee，不用主色粗线） */
+/* 结构抄 gamer 的 .theme-title-block：标题左、计数/看更多右两端对齐，上方 32px / 下方 12px，
+   底边一条 **2px 主色通栏线**（gamer 的核心特征；之前那版 1px #eee 细线是错的）。 */
 .sec-h, .bhead, .mhead {
   display: flex;
-  align-items: baseline;
-  gap: var(--s3);
-  padding: var(--s6) 0 var(--s3);
-  border-bottom: 1px solid #eee;
-  margin: 0 0 var(--s4);
-}
-
-/* 字与色抄 bgm：18px / 400 细体 / #555 */
-.sec-h h2, .bhead h2, .mhead h2 {
-  position: relative;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 32px 0 12px;
+  border-bottom: 0;
   margin: 0;
-  padding-left: 0;
-  font-size: 18px;
-  font-weight: 400;
-  line-height: var(--lh-tight);
-  letter-spacing: var(--ls-tight);
-  color: #555;
+  position: relative;
 }
 
-.sec-h h2::before, .bhead h2::before, .mhead h2::before {
-  display: none;
+.sec-h h2, .bhead h2, .mhead h2 {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 34px;
+  letter-spacing: 0;
+  color: var(--fg);
 }
 
-.sec-sub, .bhead > span, .mhead > span {
-  margin-left: auto;
-  font-size: var(--fs-sm);
+.sec-h::after, .bhead::after, .mhead::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 4px;
+}
+
+/* 标题条本身 margin 归零（gamer 口径），正文/网格与 2px 线之间留 12px，
+   否则简介段落与卡片会直接贴在那条线上（gamer 的 .theme-title-block 底部也有这段间距） */
+.sec-h + *, .bhead + *, .mhead + * {
+  margin-top: var(--s3);
+}
+
+/* 标题右侧的计数 / 副标题 */
+.sec-h .sec-sub, .bhead span, .mhead span {
+  font-size: 16px;
   color: var(--dim);
+  line-height: 24px;
+  padding-bottom: 1px;
   text-align: right;
   white-space: nowrap;
 }
 
-/* 「看更多」：bgm 的正文内链口径 —— 默认 #444，hover 主色蓝 */
+/* 「看更多」：贴右、16px、hover 主色（不再加下划线，gamer 的更多链接只有变色） */
 .sec-sub .morelink, .bhead .morelink, .mhead .morelink {
-  color: #444;
-  font-size: 14px;
+  margin-left: auto;
+  padding-left: var(--s3);
+  font-size: 16px;
+  color: var(--dim);
+  white-space: nowrap;
 }
 
 .sec-sub .morelink:hover, .bhead .morelink:hover, .mhead .morelink:hover {
   color: var(--accent);
-  text-decoration: underline;
+  text-decoration: none;
 }
 
-/* 首页「每天更新」分组标题：降一档到正文大小，靠次要色区分层级；
-   它是区块内的子标题，不吃 5 节的分块留白与通栏线 */
+/* 子标题（首页「每天更新」这类分组标题）：18px / 600，**不画**主色通栏线 */
 .bhead.lv2 {
   margin: var(--s5) 0 var(--s3);
   padding: 0;
   border-bottom: 0;
 }
 
+.bhead.lv2::after {
+  display: none;
+}
+
+/* 子标题自己带 margin-bottom，不需要再吃上面那条「+ *」的 12px */
+.bhead.lv2 + * {
+  margin-top: 0;
+}
+
 .bhead.lv2 h2 {
-  font-size: var(--fs-md);
-  color: var(--fg2);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 26px;
 }
 
 .bhead.lv2 > span {
@@ -475,8 +519,8 @@ main {
 
 /* ---------------------------------------------------------------- 6 筛选栏 / 选择面板 */
 /* 番剧页外层容器（DOM 里由 JS 包一层 .filters-bar）：滚动时整条筛选吸在顶栏下沿。
-   --header-h = 56px 的顶栏高度（1 节 :root 已定义，不是新字面量）；≤760 顶栏因搜索框换行会变高，
-   这里仍取 --header-h，若后续要精确贴合，可在 JS 侧把实测高度写回 --header-h，不动选择器。 */
+   --header-h = 两层顶栏（.sky 55 + .mainmenu 45）的高度，1 节 :root 给的是兜底值；
+   页面脚本量完实际高度会写回这个变量（≤760 搜索框换行后更高），选择器不用动。 */
 .filters-bar {
   position: sticky;
   top: var(--header-h);
@@ -531,6 +575,9 @@ main {
   color: var(--dim);
 }
 
+/* 计数只在标题行 #hint2 显示，筛选条内的 #hint 隐藏以免重复（gamer 筛选条无计数） */
+.filters .f-hint { display: none; }
+
 .filters .chip {
   height: 30px;
   border-radius: var(--r);
@@ -543,6 +590,83 @@ main {
 
 .home-main {
   min-width: 0;
+}
+
+/* 首页 banner（gamer 的 .big_banner）：整条 250px 大图 + 左侧渐变压暗 + 推荐文案。
+   放在 .home-cols 之前，占内容区全宽；图用海报放大裁切，文字恒为白（不受主题影响）。 */
+.bigbanner {
+  position: relative;
+  display: block;
+  height: 250px;
+  border-radius: var(--r);
+  overflow: hidden;
+  margin: var(--s4) 0 var(--s5);
+  background: var(--card2);
+}
+
+.bigbanner-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.05);
+}
+
+/* 左侧压暗：保证白字在亮海报上也读得清 */
+.bigbanner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(10, 10, 14, .86) 0%, rgba(10, 10, 14, .55) 45%, transparent 78%);
+}
+
+.bigbanner-in {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s2);
+  padding: 0 var(--s7);
+  max-width: 720px;
+  color: #fff;
+}
+
+.bigbanner-tag {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #0B1E23;
+  font-weight: 600;
+}
+
+.bigbanner-in h2 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+.bigbanner-sub {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, .86);
+}
+
+/* 简介：详情分片回来后异步填入，最多两行；没拉到就保持空元素（无高度） */
+.bigbanner-plot {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, .72);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* 首页筛选条：不画成白卡面板，而是内容上方的一条工具条（只留底部分隔线） */
@@ -682,7 +806,7 @@ main {
  * 实测这套取值在 1360 / 1200 / 1000 / 768 自然落到 6 / 5 / 4 / 3 列，只有末两档写死兜底（见 19 节）。 */
 .grid, .mgrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: var(--s4) var(--s4);
 }
 
@@ -693,8 +817,9 @@ main {
   gap: var(--s4) var(--s3);
 }
 
-/* .card 去盒中盒：无底色无描边，只剩封面 + 文字；.mcard 是外链卡（JS 里 <a> 包着
- * .pw/.t/.sub2），保留白底与描边。两者共用布局，外观分开写。 */
+/* .card 换成 gamer 的 B 类卡：整张白底（图下留白块）+ 6px 圆角 + 双层软阴影；
+ * .mcard 是外链卡（JS 里 <a> 包着 .pw/.t/.sub2），保持原样不动。
+ * 两者共用布局，外观分开写。 */
 .card, .mcard {
   position: relative;
   display: flex;
@@ -707,10 +832,9 @@ main {
 }
 
 .card {
-  padding-bottom: var(--s2);
-  background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
+  background: var(--card);
   box-shadow: 0 1px 3px rgba(0, 0, 0, .1), 0 4px 8px rgba(0, 0, 0, .03);
 }
 
@@ -738,6 +862,8 @@ main {
 .card > .pw {
   position: relative;
   overflow: hidden;
+  /* 圆角交给 .card 统管，封面自己不再切角（gamer 的竖图是上方两个圆角） */
+  border-radius: 0;
 }
 
 .card > .pw img {
@@ -843,12 +969,16 @@ main {
   color: var(--accent);
 }
 
-/* 番组卡标题（gamer 口径）：一行 14px，行高固定 20px，超出省略；
+/* 番组卡标题（gamer 口径）：一行 14px，行高固定 20px，图下白块里 6px/8px 内边距，超出省略；
    .mcard 仍是原来的两行 15px（外链卡多一行信息，且自有白底描边） */
 .card .t {
+  margin: 0;
+  padding: 6px 8px 0;
   min-height: 20px;
   font-size: 14px;
+  font-weight: 400;
   line-height: 20px;
+  color: var(--fg);
   display: block;
   -webkit-line-clamp: 1;
   line-clamp: 1;
@@ -865,7 +995,14 @@ main {
   color: var(--dim);
 }
 
-/* .mcard 还有外框，文字需要内缩；.card 的左右内边距已归零（文字对齐封面） */
+.card .sub2 {
+  padding: 0 8px 8px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dim);
+}
+
+/* .mcard 还有外框，文字需要内缩；.card 的白块内边距在 .card .t / .card .sub2 里各自写 */
 .mcard .t, .mcard .sub2 {
   padding-left: var(--s3);
   padding-right: var(--s3);
@@ -1561,12 +1698,12 @@ main {
   min-height: 4px;
   border-radius: 4px 4px 0 0;
   border-top: 1px solid var(--accent-line);
-  background: linear-gradient(180deg, var(--accent), rgba(2, 163, 251, .45));
+  background: linear-gradient(180deg, var(--accent), rgba(0, 180, 216, .45));
   transition: background .15s ease;
 }
 
 .rdist i:hover {
-  background: linear-gradient(180deg, #45c8f2, rgba(2, 163, 251, .30));
+  background: linear-gradient(180deg, #45c8f2, rgba(0, 180, 216, .30));
 }
 
 .rdist i b {
@@ -1978,6 +2115,24 @@ main {
 
 /* 栅格列数仍由 7 节的 auto-fill 自适应，这里只固定末两档：≤768 三列、≤480 两列，
    与 gamer 的 7/6/5/4/3 收尾对齐 */
+@media (max-width: 1360px) {
+  .grid, .mgrid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1200px) {
+  .grid, .mgrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1000px) {
+  .grid, .mgrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 768px) {
   .grid, .mgrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2069,7 +2224,30 @@ main {
     height: auto;
   }
 
-  .site-head .wrap {
+  /* 窄屏：.sky 让搜索框换到第二行（高度交给内容），.mainmenu 变成可横滑的一条 */
+  .sky {
+    height: auto;
+    padding: 8px 0;
+  }
+
+  .mainmenu {
+    height: auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .mainmenu::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mainmenu .hd-wrap {
+    width: max-content;
+    padding: 0 12px;
+  }
+
+  .hd-wrap {
     flex-wrap: wrap;
     height: auto;
     align-content: center;
@@ -2081,38 +2259,16 @@ main {
     font-size: var(--fs-md);
   }
 
-  /* 顶栏第一行固定：品牌 + 导航 + 主题 + 登录；搜索框仍独占第二行 */
-  .mainnav {
-    flex: 1 1 0;
-    min-width: 0;
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .mainnav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .mainnav a {
+  /* 第一行：品牌 + 登录 + 主题；搜索框仍独占第二行（order 9） */
+  .mainnav a, .mainmenu a {
     flex: 0 0 auto;
-    padding: 0 10px;
-    font-size: var(--fs-sm);
-  }
-
-  .head-spacer {
-    display: none;
   }
 
   .searchbox {
     flex: 1 0 100%;
     order: 9;
     min-width: 0;
+    margin-right: 0;
   }
 
   .searchbox input {
@@ -2167,10 +2323,34 @@ main {
 
   .sec-h, .bhead, .mhead {
     flex-wrap: wrap;
+    padding: var(--s4) 0 var(--s2);
+  }
+
+  /* 手机端区块间距同步收到 16px（桌面仍是 32px） */
+  .block, .msect, .rank-block {
+    margin: 0 0 var(--s4);
   }
 
   .sec-h h2, .bhead h2, .mhead h2 {
-    font-size: var(--fs-lg);
+    font-size: 20px;
+    line-height: 28px;
+  }
+
+  /* banner 收窄：图矮 60px，文字贴边，简介在窄屏不显示（放不下两行会压掉片名） */
+  .bigbanner {
+    height: 190px;
+  }
+
+  .bigbanner-in {
+    padding: 0 var(--s4);
+  }
+
+  .bigbanner-in h2 {
+    font-size: 20px;
+  }
+
+  .bigbanner-plot {
+    display: none;
   }
 
   /* 手机端筛选条压缩：季度/星期各占一行横滑，避免 3 组×2 行把首屏吃掉 */
@@ -2191,9 +2371,8 @@ main {
   .levels .chips.chips--wd {
     display: flex;
     flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
+    flex-wrap: wrap;
+    overflow: visible;
     gap: 6px;
     padding-bottom: 2px;
     scrollbar-width: none;
@@ -2417,10 +2596,7 @@ main {
     font-size: var(--fs-sm);
   }
 
-  .mainnav a {
-    padding: 0 7px;
-    font-size: var(--fs-xs);
-  }
+  /* 菜单字号不再降档：5 × 16px 在 360px 里刚好排得下，超了由 .mainmenu 横滑接管 */
 
   /* .psz 在 ≤760 已 display:none；.thm 尺寸沿用 760 块。这里只收紧登录按钮左右内边距，给导航让出 4px */
   #cnt .login {

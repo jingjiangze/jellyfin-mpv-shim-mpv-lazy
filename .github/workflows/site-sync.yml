@@ -415,7 +415,9 @@ jobs:
 
       # 部署只认 build-out/ 快照
       - name: Deploy to Cloudflare Pages
-        if: steps.ms.outcome == 'success'
+        # 镜像同步（ModelScope）失败不该挡住站点上线：数据集只是兜底源，站点本身在 CF Pages。
+        # 之前 MS 一冲突就整轮不部署，线上连续多次停在旧版（2026-11-06 实测）。
+        if: ${{ !cancelled() }}
         timeout-minutes: 10
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -546,13 +546,15 @@
     var P = PAGE;
     /* 首页 / 番剧 / 排行榜都搜番剧，电影页搜电影 */
     var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
-    var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'],
-      ['movie', 'movie', '电影'], ['rank', 'rank', '排行榜']]
+    /* 菜单 5 项（照 ani.gamer.com.tw 的 .mainmenu）：选中项只加 .is-on，
+       主色块由 CSS 画（白字压 #00B4D8 对比度不够，用深墨字）。 */
+    var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['movie', 'movie', '电影'],
+      ['rank', 'rank', '排行榜'], ['user', 'user', '我的']]
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');
-    /* 移动底部导航（≤760 由 CSS 显示，桌面 display:none 不占位）。复用同一个 P 做高亮。
-       桌面导航里的「排行榜」换成「我的」——榜单入口在宽屏已在首页侧栏，窄屏留给个人页。 */
+    /* 移动底部导航（≤760 由 CSS 显示，桌面 display:none 不占位）。复用同一个 P 做高亮；
+       桌面 .mainmenu 是 5 项（含排行榜），窄屏底部条只留 4 项，把位置让给个人页。 */
     var tabbar = document.getElementById('tabbar');
     if (!tabbar) {
       tabbar = document.createElement('nav');
@@ -570,20 +572,25 @@
       }).join('');
     var host = document.getElementById('topbar');
     if (!host) return;
-    host.innerHTML = '<div class="wrap"><a class="brand" href="./"><i></i>番组<b>计划</b></a>'
-      + '<nav class="mainnav">' + nav + '</nav><div class="head-spacer"></div>'
+    /* 两层顶栏（照 ani.gamer.com.tw 实测）：.sky 55px 放 logo / 搜索 / 右侧工具，
+       .mainmenu 45px 放菜单，总高 100px 由内容自然撑起 —— 不给 .site-head 写死高度，
+       --header-h 由下面的 syncHeaderH() 量完写回（.filters-bar 的 top 吃这个变量）。
+       nav 同时保留 .mainnav 类：CSS 的菜单规则与其它模块的取值都还认它。 */
+    host.innerHTML = '<div class="sky"><div class="hd-wrap">'
+      + '<a class="brand" href="./"><i></i>番组<b>计划</b></a>'
       + '<div class="searchbox"><input id="q" type="search" placeholder="' + ph + '" autocomplete="off"></div>'
-      + '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
-      + '<button class="thm" id="thm" type="button" aria-label="切换主题">☀</button>'
       + '<span class="cnt" id="cnt"></span>'
-      + '<span class="build" id="build">' + (document.body.dataset.build || '') + '</span></div>';
+      + '<button class="thm" id="thm" type="button" aria-label="切换主题">☀</button>'
+      + '<button class="psz" id="psz" type="button" aria-pressed="false">高清</button>'
+      + '</div></div>'
+      + '<nav class="mainmenu mainnav"><div class="hd-wrap">' + nav + '</div></nav>';
     paintAuth();
     /* 按钮此刻才存在：补一次主题落地，保证图标/aria 与当前主题一致，再绑切换 */
     applyTheme(currentTheme());
     var thm = $('#thm');
     if (thm) thm.onclick = toggleTheme;
-    /* 吸顶筛选条（.filters-bar）的 top 取 --header-h：≤760 顶栏 height:auto，搜索框换行后比
-       :root 的 56px 高，所以这里把实测高度写回变量；窗口尺寸变化（换行数变了）再量一次。 */
+    /* 吸顶筛选条（.filters-bar）的 top 取 --header-h：两层顶栏桌面约 100px，≤760 搜索框换行
+       后更高，所以这里把实测高度写回变量；窗口尺寸变化（换行数变了）再量一次。 */
     syncHeaderH();
     if (window.addEventListener) window.addEventListener('resize', syncHeaderH);
   }
