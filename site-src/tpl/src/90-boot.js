@@ -551,6 +551,21 @@
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');
+    /* 移动底部导航（≤760 由 CSS 显示，桌面 display:none 不占位）。复用同一个 P，
+       所以 ?fav=1 时高亮「追番」、「番剧」不高亮，与顶部导航同一口径。
+       桌面导航里的「排行榜」换成「我的」——榜单入口在宽屏已在首页侧栏，窄屏留给个人页。 */
+    var tabbar = document.getElementById('tabbar');
+    if (!tabbar) {
+      tabbar = document.createElement('nav');
+      tabbar.className = 'tabbar';
+      tabbar.id = 'tabbar';
+      document.body.appendChild(tabbar);
+    }
+    tabbar.innerHTML = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['anime?fav=1', 'fav', '追番'],
+      ['movie', 'movie', '电影'], ['user', 'user', '我的']]
+      .map(function (x) {
+        return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
+      }).join('');
     var host = document.getElementById('topbar');
     if (!host) return;
     host.innerHTML = '<div class="wrap"><a class="brand" href="./"><i></i>番组<b>计划</b></a>'
@@ -565,6 +580,25 @@
     applyTheme(currentTheme());
     var thm = $('#thm');
     if (thm) thm.onclick = toggleTheme;
+    /* 吸顶筛选条（.filters-bar）的 top 取 --header-h：≤760 顶栏 height:auto，搜索框换行后比
+       :root 的 56px 高，所以这里把实测高度写回变量；窗口尺寸变化（换行数变了）再量一次。 */
+    syncHeaderH();
+    if (window.addEventListener) window.addEventListener('resize', syncHeaderH);
+  }
+
+  /* 吸顶条偏移：量一次顶栏实际高度写回 --header-h（CSS 里 .filters-bar 的 top 用它）。 */
+  function syncHeaderH() {
+    var head = document.querySelector('header.site-head');
+    if (!head || !head.getBoundingClientRect) return;
+    var h = Math.round(head.getBoundingClientRect().height);
+    var st = document.documentElement && document.documentElement.style;
+    if (st && st.setProperty) st.setProperty('--header-h', h + 'px');
+  }
+
+  /* ?id=123 深链：bgm id 全是数字，非法值（?id=abc）不当深链处理 */
+  function deepLinkId() {
+    var m = /[?&]id=(\d+)/.exec(location.search || '');
+    return m ? Number(m[1]) : 0;
   }
 
   function bootAnime() {
@@ -591,6 +625,11 @@
   });
   $('#mask') && $('#mask').addEventListener('click', function (e) { if (e.target.id === 'mask') close(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+  /* 浏览器后退/前进：历史里的地址变了就把详情收起来（close 在 70-modal.js，同 IIFE）。
+     只在弹窗确实开着时动作，普通翻历史不会被无端打断。 */
+  window.addEventListener('popstate', function () {
+    if (document.querySelector('#mask.on')) close();
+  });
 
   bootHeader();
   bootAnime().then(function () {
@@ -602,6 +641,11 @@
         clearTimeout(qt);
         qt = setTimeout(applyBrowse, 220);
       });
+      /* 深链：/anime.html?id=123 启动即开详情。这里已经是 bootAnime 的 then，ANI.rows 就绪；
+         openModal 在 70-modal.js、同一 IIFE 内，函数声明提升可直接调。行不存在时它自己不动。
+         ?id= 与 ?tag= / ?fav=1 共存：打开时 openModal 只在地址栏补 id 这一段。 */
+      var deep = deepLinkId();
+      if (deep) openModal(deep);
     } else if (PAGE === 'movie') {
       initMovie();
     } else if (PAGE === 'rank') {

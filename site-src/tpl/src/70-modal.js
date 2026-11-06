@@ -1,6 +1,23 @@
   /* 弹窗代号：每次 openModal 自增，异步回调拿它判断自己这一代是否已被后来打开的番取代 */
   var MODAL_GEN = 0;
 
+  /* 深链写地址栏：只改 id 这一个参数，其它（?tag= / ?fav=1）原样保留 ——
+     pushState/replaceState 换的是整条 URL，直接传 '?id=x' 会把筛选条件弄丢。 */
+  function urlWithId(id) {
+    var parts = location.search.replace(/^\?/, '').split('&');
+    var out = [], put = false;
+    for (var i = 0; i < parts.length; i++) {
+      if (!parts[i]) continue;
+      if (/^id=/.test(parts[i])) {
+        if (put) continue;
+        out.push('id=' + encodeURIComponent(id));
+        put = true;
+      } else out.push(parts[i]);
+    }
+    if (!put) out.push('id=' + encodeURIComponent(id));
+    return location.pathname + '?' + out.join('&');
+  }
+
   /* 标签胶囊：分片里的 tag 会重复（如《攻壳机动队 SSS》的「神山健治」同时带/不带计数出现），
      先去重再截 12 个，否则重复项会挤掉真实标签。计数表可能晚到（见 ensureTagCounts），
      所以抽成函数，供首次渲染与计数到位后的重绘共用。 */
@@ -108,6 +125,15 @@
       };
     }
 
+    /* 深链：详情打开后把 id 写进地址栏，刷新/分享都能回到同一部。
+       地址栏已经是同一个 id 就不再 push —— 「磁力视图 → ‹ 返回详情」会重跑 openModal，
+       否则历史里会叠出一条一模一样的记录。 */
+    try {
+      if (history.pushState && !new RegExp('[?&]id=' + id + '(?:&|$)').test(location.search)) {
+        history.pushState({ id: String(id) }, '', urlWithId(id));
+      }
+    } catch (e) { /* 沙箱/隐私模式里 pushState 受限：深链只是增强，不影响弹窗本身 */ }
+
     /* 计数表首次可能晚到：数据到位后若这一代弹窗还活着就用它重绘标签。
        rec 由下面的 pr.then 填；还没到位时直接跳过（那时的首次渲染会读到已就绪的 TAGCNT）。 */
     var rec = null;
@@ -214,6 +240,15 @@
       m.innerHTML = '';
     }
     $('#mask').classList.remove('on');
+    /* 关掉详情就把地址栏的 ?id= 摘掉。用 replaceState 而不是 pushState：
+       否则每关一次弹窗就多一条历史，用户按后退会又弹回来。
+       ?tag= / ?fav=1 等其它参数原位保留（正则只吃 id 这一段）。 */
+    try {
+      if (/[?&]id=/.test(location.search)) {
+        var rest = location.search.replace(/([?&])id=[^&]*&?/, '$1').replace(/[?&]$/, '');
+        history.replaceState(null, '', location.pathname + rest);
+      }
+    } catch (e) { /* 同上：地址栏清理失败不影响关闭 */ }
   }
 
   /* ---------------- 详情内磁力视图（「磁力详情」按钮进来，不跳首页标签） ----------------

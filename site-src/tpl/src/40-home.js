@@ -93,44 +93,73 @@ function mountRanks() {
   blocks.forEach(function (b) { io.observe(b); });
 }
 
+/* 首页推荐位：1 大 + 4 小（不做 banner 轮播——素材里有 banner 的只有 0.6%）。
+   全部取自当前筛选结果 rows，不发新请求；少于 2 条时整块不渲染，避免一张大卡 + 空洞侧栏。 */
+function heroBlock(rows) {
+  if (!rows || rows.length < 2) return '';
+
+  /* 主位：评分最高（rows 来自 homeRows()，已限当年）；全无评分则退回第一条 */
+  var best = null;
+  rows.forEach(function (r) {
+    if (r[7] && (!best || r[7] > best[7])) best = r;
+  });
+  if (!best) best = rows[0];
+
+  /* 副位：跳过主位，按评分降序取 4 条 */
+  var side = rows.filter(function (r) { return r !== best; })
+    .sort(function (a, b) { return (b[7] || 0) - (a[7] || 0); })
+    .slice(0, 4);
+
+  var id = best[0];
+  /* 海报地址与常态卡同一套（sd 档 + alCover 兜底），取法见 30-view.js 的 animeCard */
+  var alCover = (ANI.extra[id] || [])[1] || '';
+  var fb = PSZ.mode === 'sd' ? [alCover, ANI.poster + id + '.jpg'] : [alCover];
+  var sub = [best[4] || '', TYPE[best[3]] || best[3] || '',
+    best[7] ? '★' + Number(best[7]).toFixed(1) : ''].filter(Boolean).join(' · ');
+
+  return '<section class="hero" aria-label="本季推荐">'
+    + '<a class="card hero-main" data-id="' + id + '"><div class="pw">'
+    + '<img src="' + esc(posterSrc(id)) + '"' + fbAttr(fb) + ' loading="eager" decoding="async" alt="">'
+    + '</div><div class="hero-txt"><h2 class="t">' + titleHTML(best[2] || best[1]) + '</h2>'
+    + '<p class="sub2">' + esc(sub) + '</p></div></a>'
+    + '<div class="hero-side">'
+    + side.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('')
+    + '</div></section>';
+}
+
+/* 全站高分：给「本季高分」用。无评分（r[7] 空 / 0）的条目跳过。
+   filter 已产出新数组，这里的 sort 不会动 ANI.rows。 */
+function topRows(n) {
+  return ANI.rows.filter(function (r) { return r[7]; })
+    .sort(function (a, b) { return b[7] - a[7]; })
+    .slice(0, n || 8);
+}
+
+/* 首页区块：标题 + 计数（+ 可选的「更多」链接）+ 卡片网格。
+   list 为空时整块返回空串，由调用方决定是否补空态。 */
+function block(title, list, moreHtml, gridClass) {
+  if (!list || !list.length) return '';
+  return '<section class="block"><div class="sec-h"><h2>' + title + '</h2><span class="sec-sub">'
+    + list.length + ' 部 ' + (moreHtml || '') + '</span></div>'
+    + '<div class="grid' + (gridClass ? ' ' + gridClass : '') + '">'
+    + list.map(function (r) { return animeCard(r, { showYear: 0 }); }).join('')
+    + '</div></section>';
+}
+
 function renderHome() {
   if (!HOME.y) homeDefaults();
   var rows = homeRows();
   var main = $('#main');
 
-  var head = '<div class="bhead"><h2>'
-    + (HOME.q ? '第' + HOME.q + '季度' : '全部季度')
-    + (HOME.wd ? ' · ' + WD[HOME.wd - 1] : '')
-    + '</h2><span>' + rows.length + ' 部</span></div>';
+  /* 三段：推荐位（1 大 + 4 小）→ 今天更新 → 本季高分。全部由内存里的 ANI.rows 算出，
+     不发新请求；hero 与「今天更新」都吃 homeRows() 的当前筛选结果。 */
+  var hero = heroBlock(rows);
+  var today = block('今天更新', rows, '');
+  if (!today) today = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
+  var top = block('本季高分', topRows(8), '<a class="morelink" href="rank">排行榜 ›</a>', 'rankgrid');
 
-  var body = '';
-  if (rows.length && !HOME.wd) {
-    /* 没指定星期：按周一到周日分组，周一~周日固定顺序（和 bgm 一致） */
-    for (var w = 1; w <= 7; w++) {
-      var g = rows.filter(function (r) { return r[6] === w; });
-      if (!g.length) continue;
-      body += '<section class="block"><div class="bhead lv2"><h2>' + WD[w - 1] + '</h2><span>'
-        + g.length + ' 部</span></div><div class="grid">'
-        + g.map(function (r) { return animeCard(r, { showYear: 0 }); }).join('') + '</div></section>';
-    }
-    var unknown = rows.filter(function (r) { return !r[6]; });
-    if (unknown.length) {
-      body += '<section class="block"><div class="bhead lv2"><h2>放送日未知</h2><span>'
-        + unknown.length + ' 部</span></div><div class="grid">'
-        + unknown.map(function (r) { return animeCard(r); }).join('') + '</div></section>';
-    }
-  } else if (rows.length) {
-    body = '<div class="grid">' + rows.map(function (r) {
-      return animeCard(r, { showYear: 0 });
-    }).join('') + '</div>';
-  } else {
-    body = '<div class="empty">这个筛选没有作品 —— 换季度或点「全部」试试</div>';
-  }
-
-  /* 排行已搬到独立页（rank.html）：首页只放本周分组网格。 */
   main.innerHTML = '<div class="home-cols">' + renderLevels()
-    + '<div class="home-main"><div class="home-head">' + head + '</div>' + body
-    + '</div></div>';
+    + '<div class="home-main">' + hero + today + top + '</div></div>';
 
   /* 交互 */
   main.querySelectorAll('[data-q]').forEach(function (b) {

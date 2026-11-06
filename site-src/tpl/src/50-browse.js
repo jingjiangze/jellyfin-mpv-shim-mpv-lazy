@@ -1,12 +1,14 @@
   /* ---------------- 番剧：全量目录 ---------------- */
-  var BROWSE = { view: [], shown: 0, page: 120 };
+  /* busy：无限滚动的重入闸门。IO 进入视口时会连续回调，按钮点击也可能同时进来，
+     置位后在 renderBrowse 收尾统一复位（reset / more / repaint 三条路都经过那里）。 */
+  var BROWSE = { view: [], shown: 0, page: 120, busy: false };
   /* 追番列表：复用本页，URL 带 fav=1 就只看已追番（导航项见 90-boot.js）。
      追番集不缓存 —— applyBrowse 每次现读 favList()，详情里取消追番回来能立刻反映。 */
   var FAV_ONLY = /[?&]fav=1\b/.test(location.search);
   /* mode: 'reset' 清空回第一页 | 'more' 追加一页 | 'repaint' 按已显示条数重画（换清晰度等原地刷新） */
   function renderBrowse(mode) {
     var grid = $('#grid');
-    if (!grid) return;
+    if (!grid) { BROWSE.busy = false; return; }
     var want;
     if (mode === 'more') {
       want = Math.min(BROWSE.shown + BROWSE.page, BROWSE.view.length);
@@ -30,9 +32,16 @@
     var left = BROWSE.view.length - BROWSE.shown;
     $('#morewrap').hidden = left <= 0;
     if (left > 0) $('#morebtn').textContent = '加载更多 · 还剩 ' + left + ' 部';
-    $('#hint').textContent = FAV_ONLY
+    /* 同一句文案落两处：#hint 在筛选条里（桌面可见，老逻辑一直在读，保持不动）；
+       #hint2 在标题行 .sec-sub 上——≤760 时 .f-hint 被隐藏，计数改用这一份。 */
+    var hintText = FAV_ONLY
       ? '我的追番 · ' + BROWSE.view.length + ' 部'
       : '筛出 ' + BROWSE.view.length + ' 部，已显示 ' + BROWSE.shown;
+    $('#hint').textContent = hintText;
+    var hint2 = $('#hint2');
+    if (hint2) hint2.textContent = hintText;
+    /* 收尾复位：本次重绘结束，IO 可以再次触发追加（见 initBrowse 末尾的观察器） */
+    BROWSE.busy = false;
   }
   function applyBrowse(reset) {
     var q = nrm(($('#q').value || '').trim());
@@ -148,7 +157,10 @@
     var years = {};
     ANI.rows.forEach(function (r) { if (r[4]) years[r[4]] = (years[r[4]] || 0) + 1; });
     var ys = Object.keys(years).map(Number).sort(function (a, b) { return b - a; });
-    $('#main').innerHTML = '<div class="filters">'
+    /* 结构：标题行（≤760 只有它带计数）→ 吸顶筛选条 .filters-bar（CSS 负责 sticky，
+       top 取 --header-h）→ 网格 → 加载更多哨兵。 */
+    $('#main').innerHTML = '<div class="sec-h"><h2>番剧</h2><span class="sec-sub" id="hint2"></span></div>'
+      + '<div class="filters-bar"><div class="filters">'
       + '<label class="f-label">年份 <select id="f-year"><option value="">全部</option>'
       + ys.map(function (v) { return '<option value="' + v + '">' + v + '（' + years[v] + '）</option>'; }).join('')
       + '</select></label>'
@@ -160,7 +172,7 @@
       + '<option value="rank">排名（前→后）</option>'
       + '<option value="name">标题</option></select></label>'
       + '<label class="f-label">标签 <select id="f-tag"><option value="">全部</option></select></label>'
-      + '<span class="f-hint" id="hint"></span></div>'
+      + '<span class="f-hint" id="hint"></span></div></div>'
       + '<div class="grid" id="grid"></div>'
       + '<div class="morewrap" id="morewrap" hidden><button class="morebtn" id="morebtn" type="button"></button></div>';
     $('#f-year').value = ys[0] ? String(ys[0]) : '';
@@ -183,5 +195,23 @@
           wasOpen = open;
         }).observe(maskEl, { attributes: true, attributeFilter: ['class'] });
       }
+    }
+    /* 无限滚动：滚到离底部 600px 就自动追加一页，同时保留「加载更多」按钮。
+       只观察这一颗 #morewrap —— 筛选变化走 reset 原地重画，节点没换，不用重绑。
+       两处拦截：wrap.hidden（已加载完 / 空结果时 IO 也不该补页）与 BROWSE.busy
+       （IO 连续回调 + 用户手点按钮的重入）。busy 由 renderBrowse 收尾复位。
+       没有 IntersectionObserver 的老浏览器只剩按钮这条路，功能不丢。 */
+    var wrap = $('#morewrap');
+    if (wrap && window.IntersectionObserver) {
+      var io = new IntersectionObserver(function (es) {
+        for (var i = 0; i < es.length; i++) {
+          if (!es[i].isIntersecting) continue;
+          if (wrap.hidden || BROWSE.busy) return;
+          BROWSE.busy = true;
+          renderBrowse('more');
+          return;
+        }
+      }, { rootMargin: '600px' });
+      io.observe(wrap);
     }
   }

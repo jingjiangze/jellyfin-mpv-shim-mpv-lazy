@@ -459,6 +459,24 @@ main {
 }
 
 /* ---------------------------------------------------------------- 6 筛选栏 / 选择面板 */
+/* 番剧页外层容器（DOM 里由 JS 包一层 .filters-bar）：滚动时整条筛选吸在顶栏下沿。
+   --header-h = 56px 的顶栏高度（1 节 :root 已定义，不是新字面量）；≤760 顶栏因搜索框换行会变高，
+   这里仍取 --header-h，若后续要精确贴合，可在 JS 侧把实测高度写回 --header-h，不动选择器。 */
+.filters-bar {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 20;
+  padding: var(--s2) 0;
+  margin: 0 0 var(--s4);
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+/* 吸顶条已承担上下间距，栏内不再叠 --s5 的底边距（作用域限定，不影响未包容器的旧页面） */
+.filters-bar > .filters {
+  margin: 0;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;
@@ -644,11 +662,19 @@ main {
 }
 
 /* ---------------------------------------------------------------- 7 栅格 / 卡片 */
-/* 显式列数：≥1360 七列 → 1200 六列 → 1000 五列 → 760 四列 → 手机两列（断点见 19 节）。
- * 列数与 gap 解耦后，1440→1200 之间不再出现「8 列掉 7 列」的抖动。 */
+/* 列数交给容器宽度：卡片最小 168px，由 auto-fill 自己决定一行放几张，
+ * 一套规则取代原来的「≥1360 七列 / ≥1200 六列 / ≥1000 五列 / 桌面四列」四段断点，
+ * 窗口缩放时不再整档跳列。只有 ≤420 窄屏落回固定两列（见 19 节），避免 1fr 把卡片压成一条。 */
 .grid, .mgrid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: var(--s4) var(--s3);
+}
+
+/* 排行榜入口格：固定 6 列（≤760 三列，见 22 节），不跟 .grid 的 auto-fill 走 */
+.rankgrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--s4) var(--s3);
 }
 
@@ -1913,28 +1939,18 @@ main {
 }
 
 /* ---------------------------------------------------------------- 19 响应式 */
-/* 栅格列数只在这里改（主规则在 7 节：≥1360 七列）；gap 全站一套，不再随断点变 */
+/* 栅格列数由 7 节的 auto-fill 自适应，不再逐档改列数；这里只兜最窄一档 */
 @media (max-width: 1400px) {
   .wrap {
     padding: 0 var(--s5);
   }
 }
 
-@media (max-width: 1359px) {
+/* ≤420：auto-fill 会把卡片压成一条，落回固定两列 */
+@media (max-width: 420px) {
   .grid, .mgrid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1199px) {
-  .grid, .mgrid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 999px) {
-  .grid, .mgrid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s3) var(--s2);
   }
 }
 
@@ -2083,11 +2099,6 @@ main {
     padding: var(--s4) 0 var(--s7);
   }
 
-  .grid, .mgrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--s4) var(--s3);
-  }
-
   .t {
     font-size: var(--fs-sm);
     line-height: var(--lh-snug);
@@ -2156,12 +2167,13 @@ main {
   }
 
   /* 番剧页筛选：只做容器外壳，两列网格由文件末尾的 .filters grid 规则接管
-     （这里再写 flex-direction 会被 display:grid 直接忽略，属于死属性） */
+     （这里再写 flex-direction 会被 display:grid 直接忽略，属于死属性）。
+     内边距收到 --s1-5：两行控件（2×36 + 8 行距 + 12 内边距 + 2 边框 = 94px）压进 96px 以内。 */
   .filters {
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: var(--r);
-    padding: var(--s3);
+    padding: var(--s1-5);
     margin: 0 0 var(--s3);
   }
 
@@ -2197,10 +2209,12 @@ main {
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23a8a8b4' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   }
 
-  /* 弹窗整屏；hero 两栏：封面 120×180 靠左、信息在右 */
+  /* 弹窗整屏；hero 两栏：封面 120×180 靠左、信息在右。
+     滚动只留在 .modal 一层（.mask 关掉），避免 iOS 上两层滚动互相吞手势。 */
   .mask {
     align-items: stretch;
     padding: 0;
+    overflow: hidden;
   }
 
   .modal {
@@ -2208,6 +2222,7 @@ main {
     max-height: none;
     min-height: 100vh;
     padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: calc(var(--s5) + env(safe-area-inset-bottom));
     border: 0;
     border-radius: 0;
   }
@@ -2231,6 +2246,11 @@ main {
 
   .mposter {
     max-width: 120px;
+  }
+
+  /* 海报跨满信息列的三行：原来只占第 1 行，下方两行在左列留白 */
+  .mhero > .mposter {
+    grid-row: 1 / span 3;
   }
 
   .mhero h3, .mhd h3, .mb h3 {
@@ -2631,9 +2651,9 @@ main {
 }
 
 @media (max-width: 560px) {
-  /* 列宽 96px 已在 19 节声明，这里只管海报独占首行 + 按钮通栏 */
+  /* 列宽 96px 已在 19 节声明，这里只管海报固定在第 1 列（跨行由 19 节的 grid-row 负责）+ 按钮通栏 */
   .mhero, .mhd { gap: var(--s2) var(--s3); }
-  .mhero > .mposter, .mhd > .mposter { grid-column: 1; grid-row: 1; }
+  .mhero > .mposter, .mhd > .mposter { grid-column: 1; }
   .mhero > .mh-info, .mhd > .mh-info { display: contents; }
   .mhero > .mh-info > *, .mhd > .mh-info > * { grid-column: 2; }
   .mhero > .mh-info > .mcollect, .mhd > .mh-info > .mcollect,
@@ -2656,6 +2676,9 @@ main {
 }
 
 @media (max-width: 760px) {
+  /* 4 个下拉排 2×2（原来是「标签下拉独占一行 + .f-hint 通栏」共 4 行）：
+     控件的触控高度仍是 --ctl-h-lg，靠行距与内边距压缩，整条可见高度 94px。
+     .f-hint 的计数文案改由 JS 侧放到页面标题旁，这里直接隐藏。 */
   .filters {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2663,9 +2686,7 @@ main {
   }
   .filters > .f-label { min-width: 0; }
   .filters > .f-label > select { width: 100%; min-width: 0; }
-  /* 标签下拉的选项文字最长，独占一行 */
-  .filters > .f-label:nth-child(4) { grid-column: 1 / -1; }
-  .filters > .f-hint { grid-column: 1 / -1; }
+  .filters > .f-hint { display: none; }
 }
 
 .f-label.on > select {
@@ -2725,6 +2746,11 @@ main {
   margin-bottom: calc(-1 * var(--s6));
 }
 
+/* 没有 .pf-id 紧随（未登录 / 空态）时，渐变条不再上探，负边距归零 */
+.pf-hero:not(:has(+ .pf-id)) {
+  margin-bottom: 0;
+}
+
 .pf-id {
   display: flex;
   align-items: flex-end;
@@ -2764,9 +2790,11 @@ main {
   color: var(--dim);
 }
 
+/* 统计格按内容数量铺满：死 3 列时只渲染 2 格会空出 1/3；
+   auto-fit + 96px 下限让 2 格时各占一半，以后加到 3 格也不用改 */
 .pf-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: var(--s6);
   padding: var(--s3) 0;
   border-top: 1px solid var(--line);
@@ -2793,23 +2821,18 @@ main {
   margin-bottom: var(--s4);
 }
 
-/* 只有一个 tab 也保留条带：以后加「最近看过」不用改结构 */
-.pf-tabs {
-  display: flex;
-  gap: var(--s1);
-  border-bottom: 1px solid var(--line);
-  margin-bottom: var(--s4);
+/* 空态（只有一排按钮、没有追番格子）时居中，不留一条左对齐的孤行 */
+.pf-actions:only-child,
+.pf-actions.is-empty {
+  justify-content: center;
 }
 
-.pf-tabs .on {
-  height: var(--tab-h);
-  padding: 0 var(--s3);
-  background: none;
-  border: 0;
-  border-bottom: 2px solid var(--accent);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--accent);
+/* 追番区块：与 .block 同节奏——上分隔线 + 顶部内边距，底部 --s5 */
+.pf-body,
+.pf-bili {
+  margin: 0 0 var(--s5);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line);
 }
 
 @media (max-width: 760px) {
@@ -2820,7 +2843,7 @@ main {
     text-align: center;
   }
   .pf-id h1 { white-space: normal; }
-  /* .pf-stats 已是三列等宽网格，这里只需居中文字 */
+  /* .pf-stats 已是 auto-fit 网格（列数随格子数量），这里只需居中文字 */
   .pf-stats > div { text-align: center; }
 }
 
@@ -3016,4 +3039,86 @@ main {
    让抽屉真正贴到弹窗（= 屏幕）两边。 */
 @media (max-width: 760px) {
   .qp-dmset { left: calc(-1 * var(--s4)); right: calc(-1 * var(--s4)); width: auto; max-height: 62vh; }
+}
+
+/* ---------------------------------------------------------------- 22 首页三段 / 移动底栏（2026-11 布局重构）
+   .hero 对应 JS 侧新结构：左 .hero-main（本周推荐，海报 200px + 文案，1.55fr）、
+   右 .hero-side（榜单入口 .rankgrid，1fr）。≤1199 上下堆叠、side 改 4 列；
+   ≤760 side 整块隐藏（榜单入口交给页面内区块），底栏改由 .tabbar 承担。 */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: var(--s3);
+  margin: 0 0 var(--s5);
+}
+
+.hero-main {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--s5);
+  padding: var(--s5);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.hero-main .pw {
+  aspect-ratio: 2 / 3;
+}
+
+.hero-side {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s3);
+}
+
+@media (max-width: 1199px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+  .hero-side {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* 移动底栏：桌面完全不占位；≤760 固定贴底（z 40 压在顶栏 30 之上、遮罩 60 之下），
+   主内容底部让出 52px 导航高 + --s7，滚到底不被遮挡 */
+.tabbar {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .hero-side {
+    display: none;
+  }
+  .rankgrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    background: var(--bg2);
+    border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tabbar a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 52px;
+    font-size: var(--fs-xs);
+    color: var(--dim);
+  }
+  .tabbar a.is-on {
+    color: var(--accent-text);
+    font-weight: 600;
+  }
+  main {
+    padding-bottom: calc(52px + var(--s7));
+  }
 }

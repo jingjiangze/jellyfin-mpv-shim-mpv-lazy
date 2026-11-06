@@ -239,7 +239,7 @@
       body = '<div class="empty">番剧数据还没加载好 —— 稍后刷新看看</div>';
     } else if (!rows.length) {
       body = '<div class="empty">还没有追番 —— 打开一部番剧，点详情里的「☆ 追番」</div>'
-        + '<div class="pf-actions"><a class="btn" href="anime">去番剧页</a></div>';
+        + '<div class="pf-actions is-empty"><a class="btn" href="anime">去番剧页</a></div>';
     } else {
       body = '<div class="grid">' + rows.map(function (r) {
         return animeCard(r, { showYear: 1 });
@@ -259,7 +259,7 @@
       + '<a class="btn" href="https://120.48.56.189/qr/" target="_blank" rel="noopener">绑定夸克网盘</a>'
       + '</div>'
       + '<div class="pf-bili" id="pfbili"></div>'
-      + '<div class="pf-tabs"><button class="on" type="button">我的追番</button></div>'
+      + '<div class="mtabs"><button class="mtab on" type="button">我的追番</button></div>'
       + '<div class="pf-body">' + body + '</div>';
   }
 
