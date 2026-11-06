@@ -2,9 +2,6 @@
   /* busy：无限滚动的重入闸门。IO 进入视口时会连续回调，按钮点击也可能同时进来，
      置位后在 renderBrowse 收尾统一复位（reset / more / repaint 三条路都经过那里）。 */
   var BROWSE = { view: [], shown: 0, page: 120, busy: false };
-  /* 追番列表：复用本页，URL 带 fav=1 就只看已追番（导航项见 90-boot.js）。
-     追番集不缓存 —— applyBrowse 每次现读 favList()，详情里取消追番回来能立刻反映。 */
-  var FAV_ONLY = /[?&]fav=1\b/.test(location.search);
   /* mode: 'reset' 清空回第一页 | 'more' 追加一页 | 'repaint' 按已显示条数重画（换清晰度等原地刷新） */
   function renderBrowse(mode) {
     var grid = $('#grid');
@@ -23,9 +20,7 @@
     for (var i = BROWSE.shown; i < want; i++) html += animeCard(BROWSE.view[i], { showYear: 1 });
     /* 空结果不再白屏：给一句可执行的提示 */
     if (!BROWSE.view.length) {
-      html = FAV_ONLY
-        ? '<div class="empty favhint">还没有追番 —— 去「番剧」点卡片或详情里的 ☆ 追番</div>'
-        : '<div class="empty">这个组合没有作品 —— 换个年份/类型，或点「全部」再试</div>';
+      html = '<div class="empty">这个组合没有作品 —— 换个年份/类型，或点「全部」再试</div>';
     }
     grid.insertAdjacentHTML('beforeend', html);
     BROWSE.shown = want;
@@ -34,9 +29,7 @@
     if (left > 0) $('#morebtn').textContent = '加载更多 · 还剩 ' + left + ' 部';
     /* 同一句文案落两处：#hint 在筛选条里（桌面可见，老逻辑一直在读，保持不动）；
        #hint2 在标题行 .sec-sub 上——≤760 时 .f-hint 被隐藏，计数改用这一份。 */
-    var hintText = FAV_ONLY
-      ? '我的追番 · ' + BROWSE.view.length + ' 部'
-      : '筛出 ' + BROWSE.view.length + ' 部，已显示 ' + BROWSE.shown;
+    var hintText = '筛出 ' + BROWSE.view.length + ' 部，已显示 ' + BROWSE.shown;
     $('#hint').textContent = hintText;
     var hint2 = $('#hint2');
     if (hint2) hint2.textContent = hintText;
@@ -49,23 +42,12 @@
     var t = ($('#f-type') || {}).value || '';
     var sort = ($('#f-sort') || {}).value || 'year';
     var tg = ($('#f-tag') || {}).value || '';
-    /* 追番列表：现读 localStorage（不缓存），并强制跳过年份——年份下拉默认落最新年，
-       否则追番里的老番会被整片挡掉。同时清空下拉，免得看起来还在按年份筛。 */
-    var favSet = null;
-    if (FAV_ONLY) {
-      favSet = {};
-      favList().forEach(function (id) { favSet[String(id)] = 1; });
-      y = '';
-      var fy = $('#f-year');
-      if (fy) fy.value = '';
-    }
     var tgSet = null;
     if (tg && TAGS && TAGS[tg]) {
       tgSet = {};
       TAGS[tg].forEach(function (id) { tgSet[id] = 1; });
     }
     BROWSE.view = ANI.rows.filter(function (r) {
-      if (favSet && !favSet[String(r[0])]) return false;
       if (tgSet && !tgSet[r[0]]) return false;
       // 有搜索词时不套年份筛选，否则搜老番会被默认年份挡成 0 结果
       if (!q && y && String(r[4] || '') !== y) return false;
@@ -183,19 +165,6 @@
     var deepTag = pickTagFromUrl();
     if (deepTag && TAGS && TAGS[deepTag]) { $('#f-tag').value = deepTag; $('#f-year').value = ''; }
     applyBrowse();
-    /* 追番列表：详情弹窗里点「★ 已追」取消后，关弹窗要能立刻看到那条消失。
-       #mask 的 .on 是弹窗开关信号，这里只监听它从开到关，其他页面不装这个观察器。 */
-    if (FAV_ONLY) {
-      var maskEl = $('#mask');
-      if (maskEl && window.MutationObserver) {
-        var wasOpen = maskEl.classList.contains('on');
-        new MutationObserver(function () {
-          var open = maskEl.classList.contains('on');
-          if (wasOpen && !open) applyBrowse();
-          wasOpen = open;
-        }).observe(maskEl, { attributes: true, attributeFilter: ['class'] });
-      }
-    }
     /* 无限滚动：滚到离底部 600px 就自动追加一页，同时保留「加载更多」按钮。
        只观察这一颗 #morewrap —— 筛选变化走 reset 原地重画，节点没换，不用重绑。
        两处拦截：wrap.hidden（已加载完 / 空结果时 IO 也不该补页）与 BROWSE.busy

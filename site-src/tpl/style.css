@@ -3101,7 +3101,8 @@ main {
     bottom: 0;
     z-index: 40;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    /* 列数由 JS 写在 tabbar 的 --tabn 上（去掉「追番」后是 4 项） */
+    grid-template-columns: repeat(var(--tabn, 5), 1fr);
     background: var(--bg2);
     border-top: 1px solid var(--line);
     padding-bottom: env(safe-area-inset-bottom);

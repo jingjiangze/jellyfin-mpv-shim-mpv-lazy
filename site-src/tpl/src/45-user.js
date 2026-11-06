@@ -77,39 +77,73 @@
   }
 
   /* ---------------- B 站账号（详情弹窗的「弹幕版」播放要用） ----------------
-     契约（已部署）：GET /bili/bind → {ok,bound,uname,vip_type,status}，未绑定 {ok:false,error:'not_bound'}；
-     POST /bili/bind {sess} → {ok,uname,vip_type,ignored:[…]}，SESSDATA 失效 {ok:false,error:'expired'}；
-     DELETE /bili/bind → {ok,deleted:true}。全部带 Authorization: Bearer <站点 token>。
-     只收 SESSDATA（浏览器 DevTools 里 SESSDATA=… 的值），不收 bili_jct：它等于 B 站账号的
+     绑定以扫码为主，粘贴 SESSDATA 兜底（老接口保留）。
+     扫码契约（已部署）：
+       POST /bili/qr/start {} → {ok,key_id,png:'data:image/png;base64,…'}；未登录 401 / 限流 429 / 缺组件 503；
+       GET  /bili/qr/poll?key=<key_id> → {ok,state:'ok|waiting|scanned|expired|error',uname,vip_type}。
+       state=ok 时后端已经自动落库（同一条 binding），前端只做刷新，不碰任何 cookie。
+     绑定契约：GET /bili/bind → {ok,bound,uname,vip_type,status}，未绑定 {ok:false,error:'not_bound'}；
+       POST /bili/bind {sess} → {ok,uname,vip_type,ignored:[…]}，SESSDATA 失效 {ok:false,error:'expired'}；
+       DELETE /bili/bind → {ok,deleted:true}。全部带 Authorization: Bearer <站点 token>。
+     兜底路径只收 SESSDATA（浏览器 DevTools 里 SESSDATA=… 的值），不收 bili_jct：它等于 B 站账号的
      登录凭证，所以只在提交的那一条请求里出现一次 —— 不进 localStorage、不回显进 DOM
-     （输入框提交后立刻清空，失败也不回填）。未登录时整块不渲染，走 userLoginHTML 的登录引导。 */
+     （输入框提交后立刻清空，失败也不回填）。扫码路径前端从头到尾不接触 cookie。
+     未登录时整块不渲染，走 userLoginHTML 的登录引导。 */
   var BILI_BIND_PATH = '/bili/bind';
+  var BILI_QR_START = '/bili/qr/start';
+  var BILI_QR_POLL = '/bili/qr/poll';
+  var BILI_QR_MS = 2000;       // 轮询间隔
+  var BILI_QR_MAX = 90;        // 90 × 2s = 180s，与后端二维码有效期对齐
   var BILI_ST = null;          // 上次读到的绑定状态：null=没问过；{bound:true,uname,vip_type} / {bound:false}
+  var QR_TIMER = 0;            // 扫码轮询定时器（模块级：切后台/卡片被替换都要清掉）
+  var QR_KEY = '';             // 当前二维码 key_id；空 = 没有在跑的扫码流程
+  var QR_TRIES = 0;            // 已发出的轮询次数
+  var QR_GEN = 0;              // 流程代号：重新生成/停止后，旧回调不再落地
+  var QR_BUSY = false;         // 上一轮请求还没回来时跳过这一拍，避免请求堆叠
+  var QR_PASTE_OPEN = false;   // 兜底粘贴框是否展开（重画卡片后保持）
 
   function pfNode(id) { return document.getElementById(id); }
 
   /* 卡片内容。用 authfield / authhint / mnote / pf-actions 这些既有样式，
-     不新增 class 依赖（style.css 不在本次改动范围）。错误行放最上面，重画时一并清掉。 */
+     不新增 class 依赖（style.css 不在本次改动范围）。错误行放最上面，重画时一并清掉。
+     未绑定态：扫码为主（#pfbili-qr 是二维码挂载点），粘贴 SESSDATA 收进下面的折叠块兜底。
+     已绑定态：昵称 + VIP + 解绑，另给「重新扫码」——成功后直接覆盖原绑定。 */
   function pfBiliCard(st) {
     var head = '<div class="mnote" id="pfbili-msg" role="status" aria-live="polite"></div>';
     if (st && st.bound) {
       return head
         + '<p class="authhint">B 站：<b>' + esc(st.uname || '未知昵称') + '</b>'
         + '（会员 VIP' + (Number(st.vip_type) || 0) + '）</p>'
-        + '<div class="pf-actions"><button class="btn" id="pfunbind" type="button">解绑</button></div>';
+        + '<div class="pf-actions">'
+        + '<button class="btn" id="pfreque" type="button">重新扫码</button>'
+        + '<button class="btn" id="pfunbind" type="button">解绑</button>'
+        + '</div>'
+        + '<div id="pfbili-qr"></div>';
     }
     return head
+      + '<div id="pfbili-qr"></div>'
+      + '<div class="pf-actions">'
+      + '<button class="btn pri" id="pfbind-qr" type="button">扫码绑定 B 站账号</button>'
+      + '</div>'
+      + '<div id="pfbili-paste"' + (QR_PASTE_OPEN ? '' : ' style="display:none"') + '>'
       + '<label class="authfield"><span>B 站 SESSDATA</span>'
       + '<input type="password" id="pfsess" placeholder="粘贴 SESSDATA" autocomplete="off" spellcheck="false"></label>'
       + '<div class="pf-actions"><button class="btn pri" id="pfbind" type="button">绑定</button></div>'
       + '<p class="authhint">只用于读取你账号的播放地址与弹幕；只收 SESSDATA，不收 bili_jct。'
-      + 'SESSDATA 等于你 B 站账号的登录凭证，绑定后如不放心可随时解绑。</p>';
+      + 'SESSDATA 等于你 B 站账号的登录凭证，绑定后如不放心可随时解绑。</p>'
+      + '</div>'
+      + '<p class="authhint">扫码在 B 站官方完成，站点不接触你的密码；绑定后随时可解绑。'
+      + '<button class="mnote-btn" id="pfsess-open" type="button">'
+      + (QR_PASTE_OPEN ? '收起粘贴框' : '改用粘贴 SESSDATA') + '</button></p>';
   }
 
-  /* 只重画这一块（主页追番列表不跟着重排）。节点已被换页/重绘摘掉就静默放弃。 */
+  /* 只重画这一块（主页追番列表不跟着重排）。节点已被换页/重绘摘掉就静默放弃。
+     重画会把里面的二维码 DOM 一起换掉，先停轮询，别对着不存在的节点白打接口。 */
   function pfBiliPaint(st, msg) {
     var box = pfNode('pfbili');
     if (!box) return;
+    pfBiliQrStop();
+    if (st && st.bound) QR_PASTE_OPEN = false;   // 绑上以后收起兜底框，下次解绑仍以扫码为主
     box.innerHTML = pfBiliCard(st);
     pfBiliWire();
     if (msg) pfBiliMsg(msg);
@@ -129,6 +163,12 @@
   }
 
   function pfBiliWire() {
+    var q = pfNode('pfbind-qr');                    // 未绑定：主按钮走扫码
+    if (q) q.onclick = function () { pfBiliQrStart(); };
+    var rq = pfNode('pfreque');                     // 已绑定：重新扫码覆盖
+    if (rq) rq.onclick = function () { pfBiliQrStart(); };
+    var so = pfNode('pfsess-open');                 // 兜底：展开/收起粘贴框
+    if (so) so.onclick = function () { pfBiliTogglePaste(); };
     var b = pfNode('pfbind');
     if (b) b.onclick = function () { pfBiliDoBind(b); };
     var u = pfNode('pfunbind');
@@ -136,6 +176,175 @@
     var r = pfNode('pfbili-re');
     if (r) r.onclick = function () { loadPfBili(true); };
   }
+
+  /* ---------------- 扫码绑定（后端 state=ok 时已自己落库，前端只刷新卡片） ---------------- */
+
+  /* 停掉正在跑的流程：gen++ 让在途请求的回调失效，别往换了内容的卡片里写旧状态。 */
+  function pfBiliQrStop() {
+    QR_GEN += 1;
+    if (QR_TIMER) { clearInterval(QR_TIMER); QR_TIMER = 0; }
+    QR_KEY = '';
+    QR_TRIES = 0;
+    QR_BUSY = false;
+  }
+
+  /* 只挂起不换代号：切后台时用，回来还能接着同一条 key 轮询。 */
+  function pfBiliQrPause() {
+    if (QR_TIMER) { clearInterval(QR_TIMER); QR_TIMER = 0; }
+    QR_BUSY = false;
+  }
+
+  function pfBiliQrText(msg) {
+    var el = pfNode('pfbili-qrmsg');
+    if (el) el.textContent = msg || '';       // textContent：状态文案不当 HTML 解析
+  }
+
+  function pfBiliQrRetryBtn() {
+    var box = pfNode('pfbili-qractions');
+    if (!box) return;
+    box.innerHTML = '<button class="mnote-btn" id="pfqr-re" type="button">重新生成二维码</button>';
+    var b = pfNode('pfqr-re');
+    if (b) b.onclick = function () { pfBiliQrStart(); };
+  }
+
+  /* 二维码区只放一句话（生成失败/限流/缺组件）：可选带一个重新生成按钮。 */
+  function pfBiliQrNote(msg, retry) {
+    var box = pfNode('pfbili-qr');
+    pfBiliQrStop();
+    if (!box) return;
+    box.innerHTML = '<p class="authhint">' + esc(msg) + '</p>'
+      + (retry ? '<div class="pf-actions"><button class="mnote-btn" id="pfqr-re" type="button">重新生成</button></div>' : '');
+    var b = pfNode('pfqr-re');
+    if (b) b.onclick = function () { pfBiliQrStart(); };
+  }
+
+  function pfBiliQrExpired() {
+    var box = pfNode('pfbili-qr');
+    pfBiliQrStop();
+    if (!box) return;
+    box.innerHTML = '<div class="pf-actions">'
+      + '<button class="mnote-btn" id="pfqr-re" type="button">二维码已过期，点这里重新生成</button></div>';
+    var b = pfNode('pfqr-re');
+    if (b) b.onclick = function () { pfBiliQrStart(); };
+  }
+
+  /* 画二维码。png 只认 base64 图片 data URL —— 后端字段直接进 img src，别的形态不当图渲染。 */
+  function pfBiliQrShow(png) {
+    var box = pfNode('pfbili-qr');
+    if (!box) return;
+    var src = String(png || '');
+    if (!/^data:image\/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=\s]+$/i.test(src)) {
+      pfBiliQrNote('二维码数据格式不对，可改用粘贴 SESSDATA', true);
+      return;
+    }
+    box.innerHTML = '<img class="pf-qr" id="pfqrimg" alt="B站登录二维码" src="' + esc(src) + '"'
+      + ' style="width:180px;height:180px;display:block;margin:0 auto 8px;border-radius:8px;background:#fff">'
+      + '<p class="authhint" id="pfbili-qrmsg" role="status" aria-live="polite"></p>'
+      + '<div id="pfbili-qractions"></div>';
+    pfBiliQrText('用 B 站 App 扫码 · 180 秒内有效');
+  }
+
+  /* 一拍 2 秒；网络失败只跳过这一拍，不终止；QR_TRIES 到 90（≈180s）按过期收尾。
+     定时器 id 存在闭包里：旧流程的自清理不会误清新流程的 QR_TIMER。 */
+  function pfBiliQrPoll() {
+    if (QR_TIMER) { clearInterval(QR_TIMER); QR_TIMER = 0; }
+    var gen = QR_GEN;
+    var timer = setInterval(function () {
+      if (gen !== QR_GEN) { clearInterval(timer); return; }   // 已重新生成/停止
+      if (!pfNode('pfbili') || !pfNode('pfqrimg')) { pfBiliQrStop(); return; }  // 卡片被换页摘掉
+      if (QR_BUSY) return;                                     // 上一拍还没回来，跳过
+      if (!QR_KEY) { pfBiliQrStop(); return; }
+      if (QR_TRIES >= BILI_QR_MAX) { pfBiliQrExpired(); return; }
+      var tk = authToken();
+      if (!tk) { pfBiliQrStop(); pfBiliFail('登录已失效，请重新登录后再试'); return; }
+      QR_TRIES += 1;
+      QR_BUSY = true;
+      authFetch(BILI_QR_POLL + '?key=' + encodeURIComponent(QR_KEY), null, 12000,
+        { authorization: 'Bearer ' + tk }, { method: 'GET' })
+        .then(function (r) {
+          QR_BUSY = false;
+          if (gen !== QR_GEN) return;
+          var j = r.j || {};
+          if (r.status === 401) { pfBiliQrStop(); pfBiliFail('登录已失效，请重新登录后再试'); return; }
+          if (r.status === 404 || r.status === 410 || j.error === 'expired') { pfBiliQrExpired(); return; }
+          if (!r.ok || !j.ok || !j.state) return;               // 其它失败：下一拍再试
+          pfBiliQrState(j.state, j);
+        }, function () {
+          QR_BUSY = false;                                      // 网络抖动：不终止
+        });
+    }, BILI_QR_MS);
+    QR_TIMER = timer;
+  }
+
+  function pfBiliQrState(state, j) {
+    if (state === 'ok') {
+      pfBiliQrStop();
+      BILI_ST = { bound: true, uname: j.uname, vip_type: j.vip_type };
+      pfBiliPaint(BILI_ST, '扫码绑定成功');       // 重画即清掉二维码 DOM
+      return;
+    }
+    if (state === 'scanned') { pfBiliQrText('已扫码，请在手机上确认'); return; }
+    if (state === 'expired') { pfBiliQrExpired(); return; }
+    if (state === 'error') {
+      pfBiliQrStop();
+      pfBiliQrText('扫码状态异常，可重新生成二维码');
+      pfBiliQrRetryBtn();
+      return;
+    }
+    pfBiliQrText('等待扫码…');                    // waiting（及未知态）
+  }
+
+  /* 生成二维码并立刻开始轮询。限流/缺组件给可重试文案，不把用户卡在扫码上。 */
+  function pfBiliQrStart() {
+    var tk = authToken();
+    if (!tk) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
+    pfBiliQrStop();                                // 重开时先停旧流程（gen++）
+    var gen = QR_GEN;
+    var box = pfNode('pfbili-qr');
+    if (box) box.innerHTML = '<p class="authhint">二维码生成中…</p>';
+    pfBiliMsg('');
+    var done = setBusy(pfNode('pfbind-qr'), '生成中…');
+    authFetch(BILI_QR_START, {}, 15000, { authorization: 'Bearer ' + tk }, { method: 'POST' })
+      .then(function (r) {
+        done();
+        if (gen !== QR_GEN) return;                // 期间又点了生成/离开页面
+        var j = r.j || {};
+        if (r.status === 401) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
+        if (r.status === 429) { pfBiliQrNote('操作太频繁，等一分钟再试', true); return; }
+        if (r.status === 503) { pfBiliQrNote('服务端缺少二维码组件，可改用粘贴 SESSDATA', true); return; }
+        if (!r.ok || !j.ok || !j.key_id || !j.png) {
+          pfBiliQrNote('二维码生成失败（HTTP ' + r.status + '），可改用粘贴 SESSDATA', true);
+          return;
+        }
+        QR_KEY = String(j.key_id);
+        QR_TRIES = 0;
+        pfBiliQrShow(j.png);
+        pfBiliQrPoll();
+      }, function (e) {
+        done();
+        if (gen !== QR_GEN) return;
+        pfBiliQrNote((e && e.message) || '二维码生成失败，请重试', true);
+      });
+  }
+
+  /* 兜底粘贴框：展开时聚焦输入框；展开态记在 QR_PASTE_OPEN，重画卡片后仍保持。 */
+  function pfBiliTogglePaste() {
+    QR_PASTE_OPEN = !QR_PASTE_OPEN;
+    var box = pfNode('pfbili-paste');
+    if (box) box.style.display = QR_PASTE_OPEN ? '' : 'none';
+    var btn = pfNode('pfsess-open');
+    if (btn) btn.textContent = QR_PASTE_OPEN ? '收起粘贴框' : '改用粘贴 SESSDATA';
+    if (QR_PASTE_OPEN) {
+      var inp = pfNode('pfsess');
+      if (inp) { try { inp.focus(); } catch (e) { /* 老浏览器忽略 */ } }
+    }
+  }
+
+  /* 切后台/关标签页就停轮询（省请求也避免拿着过期码空转），回来还有剩余次数就续上。 */
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') { pfBiliQrPause(); return; }
+    if (!QR_TIMER && QR_KEY && QR_TRIES < BILI_QR_MAX && pfNode('pfqrimg')) pfBiliQrPoll();
+  });
 
   function loadPfBili(force) {
     var box = pfNode('pfbili');

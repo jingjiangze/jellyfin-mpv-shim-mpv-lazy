@@ -541,18 +541,15 @@
   }
 
   function bootHeader() {
-    /* 追番列表复用番剧页（anime.html?fav=1）：把页标识派生成 fav，
-       让「追番」高亮、「番剧」不高亮（FAV_ONLY 定义在 50-browse.js）。 */
-    var P = PAGE === 'anime' && FAV_ONLY ? 'fav' : PAGE;
+    var P = PAGE;
     /* 首页 / 番剧 / 排行榜都搜番剧，电影页搜电影 */
     var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
-    var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['anime?fav=1', 'fav', '追番'],
+    var nav = [['./', 'home', '首页'], ['anime', 'anime', '番剧'],
       ['movie', 'movie', '电影'], ['rank', 'rank', '排行榜']]
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');
-    /* 移动底部导航（≤760 由 CSS 显示，桌面 display:none 不占位）。复用同一个 P，
-       所以 ?fav=1 时高亮「追番」、「番剧」不高亮，与顶部导航同一口径。
+    /* 移动底部导航（≤760 由 CSS 显示，桌面 display:none 不占位）。复用同一个 P 做高亮。
        桌面导航里的「排行榜」换成「我的」——榜单入口在宽屏已在首页侧栏，窄屏留给个人页。 */
     var tabbar = document.getElementById('tabbar');
     if (!tabbar) {
@@ -561,8 +558,11 @@
       tabbar.id = 'tabbar';
       document.body.appendChild(tabbar);
     }
-    tabbar.innerHTML = [['./', 'home', '首页'], ['anime', 'anime', '番剧'], ['anime?fav=1', 'fav', '追番'],
-      ['movie', 'movie', '电影'], ['user', 'user', '我的']]
+    var items = [['./', 'home', '首页'], ['anime', 'anime', '番剧'],
+      ['movie', 'movie', '电影'], ['user', 'user', '我的']];
+    /* 列数跟项数走，增删导航项不用再改 CSS */
+    tabbar.style.setProperty('--tabn', String(items.length));
+    tabbar.innerHTML = items
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');
@@ -643,7 +643,7 @@
       });
       /* 深链：/anime.html?id=123 启动即开详情。这里已经是 bootAnime 的 then，ANI.rows 就绪；
          openModal 在 70-modal.js、同一 IIFE 内，函数声明提升可直接调。行不存在时它自己不动。
-         ?id= 与 ?tag= / ?fav=1 共存：打开时 openModal 只在地址栏补 id 这一段。 */
+         ?id= 与 ?tag= 共存：打开时 openModal 只在地址栏补 id 这一段。 */
       var deep = deepLinkId();
       if (deep) openModal(deep);
     } else if (PAGE === 'movie') {
