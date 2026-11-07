@@ -97,8 +97,12 @@ def pick_best(rs, name, year=""):
 
 
 def main():
-    data = json.loads((pathlib.Path(__file__).with_name("site") / "data.json")
-                      .read_text(encoding="utf-8"))
+    # 2026-11-07：data.json 已被 anime.json 取代（rows 行形一致：[id,name,cn,format,year,…]）。
+    # 只搜「剧场版/电影 + 当季新番」—— 全量 8,851 部每周也搜不完，且旧番 B 站未必有正片。
+    src = pathlib.Path(__file__).with_name("site") / "anime.json"
+    payload = json.loads(src.read_text(encoding="utf-8"))
+    data = [r for r in (payload.get("rows") or [])
+            if (len(r) > 3 and r[3] in ("movie", "tv")) or (len(r) > 4 and (r[4] or 0) >= payload.get("year", 0))]
     cookie = get_buvid()
     print("buvid:", cookie[:30])
     cache = {}
@@ -128,8 +132,8 @@ def main():
             hit += 1
             continue
         kw = field(it, "name", 1) or ""
-        year = field(it, "year", 3) or ""
-        orig = it.get("orig") if isinstance(it, dict) else None
+        year = field(it, "year", 4) or ""
+        orig = (it[2] if len(it) > 2 and it[2] else None) if isinstance(it, list) else it.get("orig")
         rs = search(kw, cookie)
         best = pick_best(rs, kw, year)
         if not best and orig:
