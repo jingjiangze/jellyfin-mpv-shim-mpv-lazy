@@ -195,6 +195,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python -u site-src/push_shards.py
 
+      # 官方频道正片索引（木棉花 / Ani-One / 回歸線 的 YouTube RSS，免 key）。
+      # 每频道只给最新 15 条 —— 覆盖「追当季」；整季回填要 YouTube Data API（等 key）。
+      - name: Fetch official YouTube episodes
+        timeout-minutes: 4
+        continue-on-error: true
+        working-directory: site-src
+        run: python -u fetch_yt_rss.py
+
       - name: Build pages
         timeout-minutes: 6
         working-directory: site-src
@@ -407,6 +415,7 @@ jobs:
                      site-src/site/magnet.json site-src/site/magnet-eps.json \
                      site-src/site/fresh.json \
                      site-src/site/tmdb.json \
+                     site-src/site/yt.json \
                      site-src/site/years_state.json site-src/site/movies-intro.json 2>/dev/null || true
           if git diff --cached --quiet; then echo "nothing to publish (post-reset)"; exit 0; fi
           git commit -m "data: site payloads + state [skip ci]"

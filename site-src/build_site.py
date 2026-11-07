@@ -92,9 +92,78 @@ def load_shards():
     return out
 
 
+# 官方 YouTube 正片（木棉花 / Ani-One / 回歸線 RSS）：标题多为繁体，
+# 用一张高频繁→简小映射做归一，再按「片名包含」匹配。命中偏少的常见原因
+# 就是简繁不一致 —— 别急着改匹配算法，先看映射表。
+_T2S_PAIRS = (
+    "藥药 啰啰 蘭兰 灣湾 們们 兒儿 動动 畫画 話话 劇剧 場场 見见"
+    "聽听 實实 國国 會会 來来 後后 間间 開开 關关 門门 問问 時时"
+    "東东 無无 為为 與与 業业 當当 處处 歸归 還还 這这 裡里 個个"
+    "學学 體体 氣气 電电 機机 護护 衛卫 靈灵 夢梦 銀银 戰战 劍剑"
+    "傳传 說说 讀读 變变 讓让 認认 態态 藝艺 歷历 觸触 麗丽 織织"
+    "終终 結结 絕绝 習习 龍龙 獅狮 獵猎 貴贵 異异 類类 轉转 訊讯"
+    "員员 壞坏 壓压 廢废 嬌娇 蘇苏 聖圣 陰阴 陽阳 雙双 隊队 禍祸"
+    "頁页 驅驱 鬥斗 寶宝 築筑 鐵铁 隨随 險险 隱隐 雲云 術术 廳厅"
+    "備备 傑杰 僅仅 傷伤 構构 樸朴 歡欢 滅灭 潛潜 燒烧 獨独 環环"
+    "療疗 監监 確确 稱称 筆笔 節节 級级 紀纪 約约 紅红 純纯 細细"
+    "組组 緒绪 續续 維维 總总 義义 聯联 腦脑 臨临 舉举 葉叶 融融"
+    "衝冲 複复 親亲 覺觉 觀观 記记 識识 負负 財财 貨货 質质 費费"
+    "車车 軍军 輕轻 較较 輪轮 輸输 辦办 遠远 適适 選选 遺遗 邊边"
+    "鄉乡 醫医 錄录 錢钱 閃闪 陸陆 際际 雖虽 難难 雜杂 顧顾 飛飞"
+    "養养 樂乐 齊齐 點点 頻频 麽么 齣出 週周 給给 語语 誰谁 課课"
+    "論论 請请 談谈 應应 愛爱 戲戏 戰战 擁拥 過过 道道 達达 遊游"
+    "運运 配配 鄭郑 醸酿 重重 鈴铃 錯错 鍵键 鎖锁 鏡镜 關关 闇暗"
+    "靜静 響响 頭头 類类 飆飙 香香 驗验 魔魔 麗丽 黑黑"
+)
+_T2S = {ord(a): b for pair in _T2S_PAIRS.split() for a, b in [(pair[0], pair[1])] if a != b}
+
+def _t2s(s):
+    return (s or "").translate(_T2S)
+
+def _t2s(s):
+    return (s or "").translate(_T2S)
+
+
+def load_yt_videos():
+    """官方频道 RSS 视频（fetch_yt_rss.py 产出）；缺失/坏数据一律当空。"""
+    fp = SITE / "yt.json"
+    if not fp.is_file():
+        return []
+    try:
+        return json.loads(fp.read_text(encoding="utf-8")).get("videos") or []
+    except (ValueError, OSError):
+        return []
+
+
+def yt_for(norm_title, videos):
+    """片名包含匹配（双向都试），只收带集数标记的视频（第N話/集/EP）。
+
+    视频按时间倒序排，一部番最多挂 30 条 —— 太长会让 anime.json 膨胀。
+    """
+    if not norm_title or len(norm_title) < 2:
+        return []
+    ep_re = re.compile(r"第\s*\d+\s*[話话集期]|EP?\.?\s*\d{1,3}", re.I)
+    out, seen = [], set()
+    for v in videos:
+        vid = str(v.get("v") or "")
+        vt = norm(_t2s(str(v.get("t") or "")))     # 双侧都过 norm：繁体、空格、标点统一
+        if vid in seen:
+            continue
+        if norm_title not in vt and vt not in norm_title:
+            continue
+        if not ep_re.search(vt):
+            continue
+        seen.add(vid)
+        out.append([str(v.get("t") or "")[:80],
+                    "https://www.youtube.com/watch?v=" + vid])
+    return out[:30]
+
+
 def build_anime():
     cat = json.loads((DATA / "catalog.json").read_text(encoding="utf-8"))
     shards = load_shards()
+    YT_VIDEOS = load_yt_videos()
+    print(f"  yt: 官方频道视频 {len(YT_VIDEOS)} 条")
 
     # AniList 补充/回退：按标题归一化对齐到 Bangumi 条目
     al = {}
@@ -172,11 +241,18 @@ def build_anime():
         # 实测 32 条（名侦探柯南 / 海贼王等）把 next_at 时间戳当成了 YouTube id。
         a = al.get(norm(cn)) or al.get(norm(name))
         if a:
+            # 第 5 槽 = 官方 YouTube 正片分集 [[标题, 链接], …]。
+            # 两路来源：RSS 频道匹配（主）+ AniList streamingEpisodes（新番数据已近枯竭，保底）。
+            # 空数组也写入：前端据 ex[4] 区分「无官方片源」与「还没探测」。
+            _yt = yt_for(norm(cn or name), YT_VIDEOS) or (a.get("yt") or [])
             ex = [a.get("banner") or None, a.get("img") or None,
-                  a.get("trailer") or None, a.get("next_at") or None]
+                  a.get("trailer") or None, a.get("next_at") or None,
+                  _yt]
             if any(v is not None for v in ex):
                 extra[str(sid)] = ex
 
+    _yt_n = sum(1 for v in extra.values() if isinstance(v, list) and len(v) > 4 and v[4])
+    print(f"  yt 匹配: {_yt_n} 部挂上官方正片（RSS {len(YT_VIDEOS)} 条）")
     rows.sort(key=lambda r: (-(r[4] or 0), -(r[7] or 0)))
     payload = {"built": BUILD_TAG, "poster": f"{MODELSCOPE}/posters/bgm-",
                "posterSd": f"{MODELSCOPE}/posters-c/bgm-",
