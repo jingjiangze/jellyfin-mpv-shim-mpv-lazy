@@ -91,12 +91,12 @@
 
 /* 深色（手动切换：主题脚本往 <html> 写 data-theme="light" | "dark"） */
 [data-theme="dark"] {
-  --bg: #111111;
-  --bg2: #222526;
-  --card: #222526;
-  --card2: #2A2D2E;
-  --line: #4D4D4D;
-  --line-hi: #5A5A5A;
+  --bg: #101013;
+  --bg2: #17171B;
+  --card: #1B1B21;
+  --card2: #232329;
+  --line: #33333B;
+  --line-hi: #45454F;
   --fg: #EBEBF5;
   --fg2: #C9C9D1;
   --dim: #9E9EA6;
@@ -121,12 +121,12 @@
 /* 深色（未手动切换：跟随系统）——与上面同一组取值 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #111111;
-    --bg2: #222526;
-    --card: #222526;
-    --card2: #2A2D2E;
-    --line: #4D4D4D;
-    --line-hi: #5A5A5A;
+      --bg: #101013;
+    --bg2: #17171B;
+    --card: #1B1B21;
+    --card2: #232329;
+    --line: #33333B;
+    --line-hi: #45454F;
     --fg: #EBEBF5;
     --fg2: #C9C9D1;
     --dim: #9E9EA6;
@@ -3458,7 +3458,7 @@ html::-webkit-scrollbar-thumb:hover { background: var(--ark); }
 [data-theme="dark"] html::-webkit-scrollbar-thumb,
 html[data-theme="dark"]::-webkit-scrollbar-thumb {
   background: #4a4a52;
-  border-color: var(--bg, #111114);
+  border-color: var(--bg, #101013);
 }
 .modal, .dp-eps, .qp-eps, .qp-lines, .mupd {
   scrollbar-width: thin;
@@ -3527,3 +3527,48 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
 /* 方舟式海报阴影：比原来的 28px 大投影更平、更硬，贴近军武风 */
 .mposter { box-shadow: 0 8px 20px rgba(0, 0, 0, .30); }
 [data-theme="dark"] .mposter { box-shadow: 0 8px 20px rgba(0, 0, 0, .55); }
+
+/* ================================================================ 25 页面切换动画（照 B 站）
+   跨文档 View Transitions：Chrome/Edge 下页面切换整体淡入淡出（MPA 也能有 SPA 手感）；
+   不支持的浏览器自动退回瞬时切换（现状）。prefers-reduced-motion 一律关闭。 */
+@view-transition { navigation: auto; }
+@keyframes vt-out { to { opacity: 0; } }
+@keyframes vt-in { from { opacity: 0; } }
+::view-transition-old(root) { animation: vt-out 120ms ease-in both; }
+::view-transition-new(root) { animation: vt-in 200ms ease-out both; }
+
+/* 内容入场：主体淡入 + 轻微上浮（transform 只在 260ms 动画期存在，不影响 fixed/sticky） */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+#main { animation: page-in .26s var(--ease-out) both; }
+
+/* 卡片浮入（B 站的卡片是逐张弹出的；纯 CSS 先统一 60ms 延迟，够顺不抢戏） */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+#main .card, #main .mcard { animation: card-in .3s var(--ease-out) .05s both; }
+/* 提升首批 12 张的节奏感：60ms 步进 */
+#main .grid > .card:nth-child(1), #main .grid > .mcard:nth-child(1) { animation-delay: .02s; }
+#main .grid > .card:nth-child(2), #main .grid > .mcard:nth-child(2) { animation-delay: .05s; }
+#main .grid > .card:nth-child(3), #main .grid > .mcard:nth-child(3) { animation-delay: .08s; }
+#main .grid > .card:nth-child(4), #main .grid > .mcard:nth-child(4) { animation-delay: .11s; }
+#main .grid > .card:nth-child(5), #main .grid > .mcard:nth-child(5) { animation-delay: .14s; }
+#main .grid > .card:nth-child(6), #main .grid > .mcard:nth-child(6) { animation-delay: .17s; }
+#main .grid > .card:nth-child(7), #main .grid > .mcard:nth-child(7) { animation-delay: .20s; }
+#main .grid > .card:nth-child(8), #main .grid > .mcard:nth-child(8) { animation-delay: .23s; }
+#main .grid > .card:nth-child(9), #main .grid > .mcard:nth-child(9) { animation-delay: .26s; }
+#main .grid > .card:nth-child(10), #main .grid > .mcard:nth-child(10) { animation-delay: .29s; }
+#main .grid > .card:nth-child(11), #main .grid > .mcard:nth-child(11) { animation-delay: .32s; }
+#main .grid > .card:nth-child(12), #main .grid > .mcard:nth-child(12) { animation-delay: .35s; }
+
+/* 锚点跳转也顺滑（详情页的章节导航走 scrollIntoView，这里管 URL hash） */
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+  #main, #main .card, #main .mcard { animation: none; }
+  html { scroll-behavior: auto; }
+}

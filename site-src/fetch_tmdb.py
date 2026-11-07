@@ -53,6 +53,30 @@ def fetch_page(path, page):
     return json.loads(get(url, "application/json").decode("utf-8")).get("results") or []
 
 
+def pick_trailer(mid):
+    """官方预告（YouTube key）：official Trailer 优先，其次任意 Trailer/Teaser。
+
+    失败返回空串（条目照常入库，只是没有预告按钮）。
+    """
+    try:
+        body = json.loads(get(
+            f"https://api.tmdb.org/3/movie/{mid}/videos?api_key={TMDB_KEY}&language=zh-CN",
+            "application/json").decode("utf-8"))
+    except Exception:
+        return ""
+    yt = [v for v in (body.get("results") or [])
+          if v.get("site") == "YouTube" and v.get("key")]
+
+    def rank(v):
+        return (1 if v.get("official") else 0,
+                1 if v.get("type") == "Trailer" else 0,
+                1 if v.get("iso_639_1") == "zh" else 0,
+                v.get("published_at") or "")
+
+    yt.sort(key=rank, reverse=True)
+    return yt[0]["key"] if yt else ""
+
+
 def grab_poster(mid, poster_path):
     """下载 w342 海报，成功（含已存在）返回 True。"""
     if not poster_path:
@@ -102,6 +126,8 @@ def main():
     for m in raw[:LIMIT]:
         mid = m["id"]
         ok = grab_poster(mid, m.get("poster_path") or "")
+        time.sleep(0.12)                 # videos 接口限速：60 部 ≈ 8s，换官方预告键
+        tr = pick_trailer(mid)
         if ok:
             with_poster += 1
         rel = m.get("release_date") or ""
@@ -112,7 +138,8 @@ def main():
                "r": round(float(m.get("vote_average") or 0), 1),
                "y": int(rel[:4]) if rel[:4].isdigit() else None,
                "ov": (m.get("overview") or "").strip(),
-               "ot": (m.get("original_title") or "").strip()}
+               "ot": (m.get("original_title") or "").strip(),
+               "tr": tr}
         if not ok:
             rec.pop("img")          # 没下到海报就不给 URL，省得前端全挂空图
         items.append(rec)
