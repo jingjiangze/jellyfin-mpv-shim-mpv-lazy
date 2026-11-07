@@ -204,7 +204,7 @@ jobs:
         continue-on-error: true
         working-directory: site-src
         run: |
-          curl -sf -m 30 "http://120.48.56.189/ytdata/yt.json" -o site/yt.json || true
+          curl -sfk -m 30 "https://120.48.56.189/ytdata/yt.json" -o site/yt.json || true
           python - <<'PYEOF' 2>/dev/null || rm -f site/yt.json
           import json, pathlib
           d = json.loads(pathlib.Path("site/yt.json").read_text(encoding="utf-8"))
