@@ -122,7 +122,6 @@ jobs:
         working-directory: site-src
         env:
           TMDB_KEY: ${{ secrets.TMDB_KEY }}
-        env:
           NO_LOCAL_PROXY: "1"
           POSTER_MAX: "150"
         run: python -u fill_posters.py
