@@ -61,7 +61,7 @@ def pick_trailer(mid):
     """
     try:
         body = json.loads(get(
-            f"https://api.tmdb.org/3/movie/{mid}/videos?api_key={TMDB_KEY}&language=zh-CN",
+            f"https://api.tmdb.org/3/movie/{mid}/videos?api_key={TMDB_KEY}&language=zh-CN&include_video_language=en,null,zh",
             "application/json").decode("utf-8"))
     except Exception:
         return ""
