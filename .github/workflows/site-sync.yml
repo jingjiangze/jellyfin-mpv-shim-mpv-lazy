@@ -121,6 +121,8 @@ jobs:
         timeout-minutes: 20
         working-directory: site-src
         env:
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
+        env:
           NO_LOCAL_PROXY: "1"
           POSTER_MAX: "150"
         run: python -u fill_posters.py
@@ -153,6 +155,7 @@ jobs:
         working-directory: site-src
         env:
           POSTER_DIR: ../media/posters
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
         run: python -u fetch_tmdb.py
 
       # 豆瓣剧情简介：电影页点开卡片要显示简介。
@@ -161,6 +164,8 @@ jobs:
       - name: Fetch Douban intros
         timeout-minutes: 15
         continue-on-error: true
+        env:
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
         working-directory: site-src
         run: python -u fetch_douban_intro.py
 

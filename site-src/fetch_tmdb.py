@@ -34,7 +34,7 @@ POSTER_DIR = pathlib.Path(os.environ.get("POSTER_DIR", "site/posters"))
 MODELSCOPE = os.environ.get(
     "MODELSCOPE_BASE",
     "https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master")
-TMDB_KEY = "99bf884d2a3e8403ae8accded44ec73c"
+TMDB_KEY = os.environ.get("TMDB_KEY") or "99bf884d2a3e8403ae8accded44ec73c"
 UA = "jellyfin-mpv-shim-mpv-lazy/anime-tmdb"
 LIMIT = int(os.environ.get("TMDB_MAX", "60"))
 
