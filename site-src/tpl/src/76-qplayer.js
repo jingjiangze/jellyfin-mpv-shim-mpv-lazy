@@ -1,1694 +1,193 @@
-  /* ---------------- 自研播放器（零依赖原生 <video>，76-qplayer.js） ----------------
-     为什么不用第三方播放器：要放的东西只有两类直链 —— 盒子签发的夸克 CDN 地址，
-     以及用户自己粘贴的 m3u8 / mp4。只需要 <video> 加一层控件；引 hls.js / CDN
-     反而多一个失败点，也违背「不引入第三方」的约束。
-
-     DOM 外壳必须是 .trailer.qplayer：70-modal.js 的 close() 与预告 iframe 共用
-     .trailer 的清理逻辑（先 pause + 断源，再摘节点），换外壳会让关闭时视频继续出声。
-
-     契约（75-quarkplay.js 调用）：
-       QPlayer.open(ctx) → token
-         ctx = {m, id, title, ep, sources:[{label,url,type}], startAt,
-                dm: {cid, items},          // 可选：给了 items 直接用，只给 cid 则播放器自己拉 /bili/dm
-                onProgress, onEnded, onNext, onPickEp, onRetry}
-       QPlayer.state(s, extra)   s ∈ loading|transcoding|none|login|quota|rebind|error|ready
-       QPlayer.play(url, label, opt)   切一条直链并播放（opt = {fid, startAt}）
-       QPlayer.setSources(list)        替换「官方源」部分（用户自备线路不受影响）
-       QPlayer.setEpisodes(list, cur, hint)
-       QPlayer.setFid(fid)             进度上报要带的网盘文件 id
-       QPlayer.setDanmaku(items)       装/换一集弹幕（空数组 = 关闭），切换集时调用即重置
-       QPlayer.toggleDanmaku(on) / QPlayer.danmakuOn()   弹幕开关（偏好存 qp_dm_on，同时写进 qp_dm_cfg.on）
-       QPlayer.clearDanmaku()          清空并停 rAF（close() 内部也会调）
-       QPlayer.close()                 幂等
-
-     弹幕设置存 localStorage['qp_dm_cfg']（⚙ 面板改的就是它，缺省值见 DM_CFG_DEF）：
-       不透明度 / 速度 / 字号 / 显示区域 / 屏蔽等级 / 屏蔽词 / 屏蔽用户 / 各类弹幕开关。
-     过滤只在装载时做一次（dmFilter），改设置不重拉接口，用缓存的原始列表重新过滤再装。
-
-     BYO 线路存 localStorage['qp_lines']：{"<bgm id>":[{label,url,type}]}。
-     不内置任何第三方解析线路，也不替用户向任何站点取流。 */
-  var QP_LINES_KEY = 'qp_lines';
-  var QP_LINE_MAX = 20;                       // 单番最多存 20 条自备线路，防 localStorage 膨胀
-  var QP_RATES = [2, 1.5, 1.25, 1, 0.75];     // 倍速循环（初始 1.0×，按钮按数组顺序轮转）
-  var QP_REBIND = 'https://120.48.56.189/qr/';
-
-  /* ---------------- 弹幕常量 ----------------
-     DM_BASE 是盒子自己的地址（弹幕接口 /bili/dm?cid=… 挂在同域），写常量而不是相对路径，
-     是因为 76 也会被 app.js 拼接进别的路径下（/bili/xxx 这类），相对路径会指错地方。 */
-  var DM_BASE = 'https://120.48.56.189';
-  var QP_DM_KEY = 'qp_dm_on';                    // 弹幕开关偏好：'1' / '0'（旧键，仍写，兼容老数据）
-  var QP_DM_CFG = 'qp_dm_cfg';                   // 弹幕设置（JSON；缺省值见 DM_CFG_DEF）
-  var DM_SPEED = 144;                            // 滚动弹幕速度 px/s（B 站量级；舞台变窄也不会挤成一团）
-  var DM_FIX_S = 4;                              // 顶部 / 底部固定弹幕停留秒数
-  var DM_LATE = 1;                               // 晚于这个秒数的弹幕直接丢（切后台 / 卡顿后不补投）
-  var DM_MAX_ITEMS = 20000;                      // 单集最多装 2 万条，防脏数据把内存撑爆
-  var DM_TEXT_MAX = 120;                         // 单条文本上限（B 站单条 100 字）
-  var DM_FONT = 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-  var DM_AREAS = [25, 50, 75, 100];              // 显示区域档位（占可用行数的百分比）
-  var DM_BLOCK_MAX = 200;                        // 屏蔽词 / 屏蔽用户各最多 200 条，防 localStorage 被刷爆
-  var DM_CFG_DEF = {
-    on: true, opacity: 0.9, speedplus: 1, fontsize: 1, dmarea: 100,
-    blockscroll: false, blocktop: false, blockbottom: false,
-    blockcolor: false, blockspecial: false,
-    aiLevel: 0, blockWords: [], blockUsers: []
-  };
-
+  /* ---------------- 原生播放器宿主（76，2026-11-07 重写） ----------------
+     用户决定：删掉自研播放器皮肤（自绘控制条 + canvas 弹幕），改用原生样式——
+       · 有 sources（夸克 / B 站直链）→ 原生 <video controls>，控制条用浏览器自带；
+       · 没有直链 → 一条状态行（加载 / 转码 / 登录 / 需要重新绑定 / 错误 + 动作按钮）；
+       · 选集 = 视频下方一排集数按钮（回调 ctx.onPickEp，与旧版一致）。
+     对外接口与旧 QPlayer 完全一致（open/state/setEpisodes/setFid/pause/play/
+     isCurrent/close）——75（夸克/磁力）与 80（B 站弹幕版）零改动。
+     弹幕层随自研皮肤一起删除：B 站源用官方嵌入播放器自带弹幕；夸克源不再有弹幕。 */
   var QPlayer = (function () {
-    /* 静态骨架：不含任何用户数据，动态内容一律 textContent / 事件绑定 */
-    var TPL = '<div class="qp-head"><b class="qp-title"></b><span class="qp-sub"></span>'
-      + '<button class="qp-btn qp-dm-toggle" type="button" aria-label="弹幕开关">弹幕 开</button>'
-      + '<button class="qp-btn qp-dmset-btn" type="button" aria-label="弹幕设置" aria-expanded="false"'
-      + ' title="弹幕设置">⚙</button>'
-      + '<button class="qp-btn qp-close" type="button" aria-label="关闭播放器">×</button></div>'
-      + '<section class="qp-dmset" hidden aria-label="弹幕设置">'
-      + '<div class="qp-dmset-h"><b>弹幕设置</b>'
-      + '<button class="qp-btn qp-dmset-done" type="button">完成</button></div>'
-      + '<div class="qp-dmset-sec"><div class="qp-dmset-t">显示类型</div>'
-      + '<div class="qp-dmset-chips">'
-      + '<label class="qp-dmset-chip"><input type="checkbox" data-k="scroll"><span>滚动</span></label>'
-      + '<label class="qp-dmset-chip"><input type="checkbox" data-k="top"><span>顶部</span></label>'
-      + '<label class="qp-dmset-chip"><input type="checkbox" data-k="bottom"><span>底部</span></label>'
-      + '<label class="qp-dmset-chip"><input type="checkbox" data-k="color"><span>彩色</span></label>'
-      + '<label class="qp-dmset-chip"><input type="checkbox" data-k="special"><span>特殊</span></label>'
-      + '</div></div>'
-      + '<div class="qp-dmset-sec"><div class="qp-dmset-t"><span>不透明度</span>'
-      + '<i class="qp-dmset-v" data-for="opacity"></i></div>'
-      + '<input class="qp-dmset-range" type="range" data-k="opacity" min="0.2" max="1" step="0.05"'
-      + ' aria-label="弹幕不透明度"></div>'
-      + '<div class="qp-dmset-sec"><div class="qp-dmset-t"><span>速度</span>'
-      + '<i class="qp-dmset-v" data-for="speedplus"></i></div>'
-      + '<input class="qp-dmset-range" type="range" data-k="speedplus" min="0.5" max="2" step="0.1"'
-      + ' aria-label="弹幕速度"></div>'
-      + '<div class="qp-dmset-sec"><div class="qp-dmset-t"><span>字号</span>'
-      + '<i class="qp-dmset-v" data-for="fontsize"></i></div>'
-      + '<input class="qp-dmset-range" type="range" data-k="fontsize" min="0.6" max="1.6" step="0.1"'
-      + ' aria-label="弹幕字号"></div>'
-      + '<div class="qp-dmset-sec"><div class="qp-dmset-t"><span>显示区域</span></div>'
-      + '<div class="qp-dmset-seg" data-k="dmarea">'
-      + '<button type="button" data-v="25">25%</button>'
-      + '<button type="button" data-v="50">50%</button>'
-      + '<button type="button" data-v="75">75%</button>'
-      + '<button type="button" data-v="100">100%</button></div></div>'
-      + '<div class="qp-dmset-sec"><div class="qp-dmset-t"><span>屏蔽等级</span>'
-      + '<i class="qp-dmset-v" data-for="aiLevel"></i></div>'
-      + '<input class="qp-dmset-range" type="range" data-k="aiLevel" min="0" max="10" step="1"'
-      + ' aria-label="屏蔽等级"></div>'
-      + '<div class="qp-dmset-sec"><div class="qp-dmset-t">屏蔽词（每行一个，或逗号分隔）</div>'
-      + '<textarea class="qp-dmset-ta" data-k="blockWords" rows="3"'
-      + ' placeholder="命中即隐藏，不区分大小写"></textarea></div>'
-      + '<div class="qp-dmset-sec"><div class="qp-dmset-t">屏蔽用户（uid 前 8 位，逗号分隔）</div>'
-      + '<input class="qp-dmset-in" type="text" data-k="blockUsers" placeholder="如 a1b2c3d4"></div>'
-      + '<div class="qp-dmset-foot">'
-      + '<button class="qp-btn qp-dmset-reset" type="button">恢复默认</button></div>'
-      + '</section>'
-      + '<div class="qp-stage"><video class="qp-video" playsinline preload="metadata"></video>'
-      + '<canvas class="qp-dm" aria-hidden="true"></canvas>'
-      + '<button class="qp-bigplay" type="button" hidden>▶</button>'
-      + '<div class="qp-overlay"><div class="qp-spinner"></div><p class="qp-msg"></p>'
-      + '<div class="qp-actions" hidden></div></div></div>'
-      + '<div class="qp-bar">'
-      + '<button class="qp-btn qp-play" type="button" aria-label="播放 / 暂停">⏸</button>'
-      + '<input class="qp-seek" type="range" min="0" max="1000" value="0" aria-label="播放进度">'
-      + '<span class="qp-time"><i class="qp-cur">00:00</i>/<i class="qp-dur">00:00</i></span>'
-      + '<button class="qp-btn qp-mute" type="button" aria-label="静音">🔊</button>'
-      + '<input class="qp-vol" type="range" min="0" max="100" value="100" aria-label="音量">'
-      + '<button class="qp-btn qp-rate" type="button" aria-label="倍速">1.0×</button>'
-      + '<button class="qp-btn qp-pip" type="button">画中画</button>'
-      + '<button class="qp-btn qp-fs" type="button">全屏</button>'
-      + '</div>'
-      + '<div class="qp-nextbar" hidden><button class="qp-next" type="button">下一集 →</button>'
-      + '<span class="qp-autonext"></span><button class="qp-cancel" type="button">取消</button></div>'
-      + '<section class="qp-eps" data-open="1">'
-      + '<div class="qp-eps-h"><h4>选集</h4><span class="qp-eps-hint"></span>'
-      + '<button class="qp-eps-toggle" type="button">收起</button></div>'
-      + '<div class="qp-eps-list" role="listbox" aria-label="选集"></div>'
-      + '</section>'
-      + '<section class="qp-lines" data-open="0">'
-      + '<div class="qp-lines-h"><h4>线路</h4><button class="qp-lines-toggle" type="button">展开</button></div>'
-      + '<div class="qp-lines-body">'
-      + '<input class="qp-line-url" type="url" placeholder="粘贴 m3u8 / mp4 直链（自备源）" aria-label="线路地址">'
-      + '<input class="qp-line-label" type="text" placeholder="线路名称（可选）" aria-label="线路名称">'
-      + '<button class="qp-btn qp-line-add" type="button">添加并播放</button>'
-      + '<div class="qp-line-list"></div>'
-      + '</div></section>';
+    var CUR = null;                            // {gen, m, ctx, ep, fid, last}
+    var GEN = 0;
+    var REPORT_EVERY = 8000;                   // timeupdate 节流：8s 上报一次进度
 
-    var STATES = {
-      loading: { msg: '正在准备播放…' },
-      transcoding: { msg: '转码中… 约 1 分钟' },
-      none: { msg: '没有找到可播放的视频源' },
-      login: { msg: '登录后才能使用网盘播放' },
-      quota: { msg: '网盘空间不足，清理后再试' },
-      rebind: { msg: '夸克登录已失效，请重新扫码' },
-      error: { msg: '播放失败，请重试或换源' },
-      ready: { msg: '' }
-    };
-
-    var SEQ = 0;
-    var cur = null;              // 同一时刻只有一个播放器（弹窗是单例）
-
-    function pad2(n) { return (n < 10 ? '0' : '') + n; }
-
-    function fmtTime(t) {
-      t = Math.max(0, Math.floor(Number(t) || 0));
-      var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
-      return (h ? h + ':' + pad2(m) : pad2(m)) + ':' + pad2(s);
+    function slot() {
+      var m = CUR && CUR.m;
+      return (m && m.querySelector) ? (m.querySelector('#dpPlayer') || m) : null;
     }
-
-    function rateLabel(r) { return (r % 1 === 0 ? r.toFixed(1) : String(r)) + '×'; }
-
-    function isUrl(u) {
-      u = String(u || '');
-      return /^(https?:|blob:)/i.test(u) || /^data:video\//i.test(u);
-    }
-
-    function typeOf(u) { return /\.m3u8(?:[?#]|$)/i.test(String(u || '')) ? 'hls' : 'mp4'; }
-
-    /* Safari / iOS 原生支持 HLS；Chrome / Firefox 的 canPlayType 一律返回空串。
-       不支持时不偷偷降级（不引 hls.js），直接给用户一句明确的话。 */
-    function hlsSupported(v) {
-      try { return !!(v && v.canPlayType && v.canPlayType('application/vnd.apple.mpegurl')); }
-      catch (e) { return false; }
-    }
-
-    function labelOf(u) {
-      try { return new URL(u).hostname || '直链'; } catch (e) { return '直链'; }
-    }
-
-    /* ---------------- BYO 线路存储 ---------------- */
-    function readStore() {
-      try {
-        var v = JSON.parse(localStorage.getItem(QP_LINES_KEY) || '{}');
-        return v && typeof v === 'object' && Object.prototype.toString.call(v) !== '[object Array]' ? v : {};
-      } catch (e) { return {}; }
-    }
-    function writeStore(obj) {
-      try { localStorage.setItem(QP_LINES_KEY, JSON.stringify(obj)); } catch (e) { /* 隐私模式 / 配额满：静默 */ }
-    }
-    function byoOf(id) {
-      var arr = readStore()[String(id)];
-      return Object.prototype.toString.call(arr) === '[object Array]' ? arr : [];
-    }
-    function cleanLine(x) {
-      if (!x || !isUrl(x.url)) return null;
-      var u = String(x.url);
-      return { label: String(x.label || ''), url: u, type: x.type === 'hls' ? 'hls' : typeOf(u) };
-    }
-    function saveByo(id, rec) {
-      var all = readStore(), k = String(id), arr = byoOf(k), out = [];
-      for (var i = 0; i < arr.length; i++) {
-        var x = cleanLine(arr[i]);
-        if (!x || x.url === rec.url) continue;      // 同 URL 去重：新记录排最前
-        out.push(x);
-      }
-      out.unshift({ label: String(rec.label || ''), url: rec.url, type: rec.type === 'hls' ? 'hls' : typeOf(rec.url) });
-      all[k] = out.slice(0, QP_LINE_MAX);
-      writeStore(all);
-    }
-    function delByo(id, url) {
-      var all = readStore(), k = String(id), arr = byoOf(k), out = [];
-      for (var i = 0; i < arr.length; i++) {
-        var x = cleanLine(arr[i]);
-        if (x && x.url !== url) out.push(x);
-      }
-      all[k] = out;
-      writeStore(all);
-    }
-
-    /* ---------------- 实例 ---------------- */
-    function alive(S) { return !!(S && !S.dead && S.root && S.root.isConnected); }
-
-    function addLine(S, src) {
-      if (!src || !isUrl(src.url)) return -1;
-      var url = String(src.url);
-      for (var i = 0; i < S.lines.length; i++) {
-        if (S.lines[i].url === url) {
-          if (src.label) S.lines[i].label = String(src.label).trim() || S.lines[i].label;
-          return i;                                 // 同地址只留一条（换 label 不必重开）
-        }
-      }
-      S.lines.push({
-        label: String(src.label || '').trim() || labelOf(url),
-        url: url,
-        type: src.type === 'hls' || src.type === 'mp4' ? src.type : typeOf(url),
-        kind: src.kind === 'byo' ? 'byo' : 'official',
-        fid: String(src.fid || ''),
-        tried: false,
-        err: ''
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
       });
-      return S.lines.length - 1;
     }
-
-    function renderLines(S) {
-      var box = S.root.querySelector('.qp-line-list');
-      if (!box) return;
-      box.innerHTML = S.lines.map(function (l, i) {
-        var on = i === S.lineIdx;
-        var cls = 'qp-line' + (on ? ' on' : '') + (l.tried && !on ? ' is-bad' : '');
-        return '<span class="qp-line-row">'
-          + '<button class="' + cls + '" type="button" data-i="' + i + '" title="'
-          + esc(l.err || l.url) + '">' + esc(l.label) + '</button>'
-          + (l.kind === 'byo'
-            ? '<button class="qp-line-del" type="button" data-i="' + i + '" aria-label="删除线路">×</button>'
-            : '')
-          + '</span>';
+    function clear() {
+      var s = slot();
+      if (s) s.innerHTML = '';
+    }
+    function report(pos, dur, final) {
+      if (!CUR || !CUR.ctx || typeof CUR.ctx.onProgress !== 'function') return;
+      try {
+        CUR.ctx.onProgress({ ep: CUR.ep, fid: CUR.fid, pos: Math.max(0, pos || 0), dur: Math.max(0, dur || 0), final: !!final });
+      } catch (e) { /* 上报失败不影响播放 */ }
+      CUR.last = Date.now();
+    }
+    function status(html) {
+      var s = slot();
+      if (!s) return;
+      s.innerHTML = '<div class="nv-status">' + html + '</div>';
+    }
+    function stHtml(kind, opt) {
+      opt = opt || {};
+      var msg = esc(opt.msg || '');
+      var btns = '';
+      if (kind === 'login') {
+        btns = '<button class="btn pri" id="nvLogin" type="button">登录</button>';
+      } else if (kind === 'rebind') {
+        btns = '<button class="btn pri" id="nvRebind" type="button">重新绑定夸克</button>';
+      } else if (kind === 'error' && CUR && CUR.ctx && typeof CUR.ctx.onRetry === 'function') {
+        btns = '<button class="btn" id="nvRetry" type="button">重试</button>';
+      }
+      var acts = (opt.actions || []).map(function (a, i) {
+        return '<button class="btn' + (i === 0 ? ' pri' : '') + '" data-nv-act="' + i + '" type="button">' + esc(a.label || '') + '</button>';
       }).join('');
+      return '<p class="nv-msg">' + msg + '</p>' + (acts || btns ? '<div class="nv-acts">' + acts + btns + '</div>' : '');
     }
-
-    function renderEps(S, hint) {
-      if (hint !== undefined) S.epsHint = String(hint || '');
-      var list = S.root.querySelector('.qp-eps-list');
-      if (!list) return;
-      list.innerHTML = S.eps.map(function (e) {
-        var on = Number(e.ep) === Number(S.ep);
-        return '<button class="qp-ep' + (on ? ' on' : '') + '" type="button" role="option" data-ep="'
-          + e.ep + '" aria-selected="' + (on ? 'true' : 'false') + '">' + esc(e.label) + '</button>';
+    function wireStatus(kind, opt) {
+      var s = slot();
+      if (!s) return;
+      if (kind === 'login') {
+        var l = s.querySelector('#nvLogin');
+        if (l) l.onclick = function () { if (typeof window.__openLogin === 'function') window.__openLogin('email'); };
+      } else if (kind === 'rebind') {
+        var r = s.querySelector('#nvRebind');
+        if (r) r.onclick = function () {
+          if (typeof quarkBindUrl === 'function') { window.open(quarkBindUrl(), '_blank', 'noopener'); return; }
+          window.location.href = '/user';
+        };
+      } else if (kind === 'error' && opt && !opt.actions) {
+        var t = s.querySelector('#nvRetry');
+        if (t && CUR && CUR.ctx && typeof CUR.ctx.onRetry === 'function') t.onclick = function () { CUR.ctx.onRetry(); };
+      }
+      var acts = (opt && opt.actions) || [];
+      if (acts.length) {
+        [].forEach.call(s.querySelectorAll('[data-nv-act]'), function (b) {
+          b.onclick = function () { var a = acts[Number(b.getAttribute('data-nv-act'))]; if (a && typeof a.fn === 'function') a.fn(); };
+        });
+      }
+    }
+    function renderEps() {
+      var s = slot();
+      if (!s || !CUR) return;
+      var row = s.querySelector('.nv-eps');
+      var list = CUR.eps || [];
+      if (!row || !list.length) return;
+      row.innerHTML = list.map(function (x) {
+        var on = Number(x.ep) === Number(CUR.ep) ? ' on' : '';
+        return '<button class="nv-ep' + on + '" type="button" data-ep="' + Number(x.ep) + '">' + Number(x.ep) + '</button>';
       }).join('');
-      var h = S.root.querySelector('.qp-eps-hint');
-      if (h) h.textContent = S.epsHint;
-    }
-
-    function defaultEpsHint(list) {
-      return list.length ? list.length + ' 集' : '暂无选集信息';
-    }
-
-    function updateSub(S) {
-      var sub = S.root.querySelector('.qp-sub');
-      if (!sub) return;
-      var bits = [];
-      if (S.ep > 0) bits.push('第 ' + S.ep + ' 集');
-      var l = S.lines[S.lineIdx];
-      if (l) bits.push(l.label);
-      sub.textContent = bits.join(' · ');
-    }
-
-    /* 关闭选集 / 线路的折叠面板；按钮文案跟着翻 */
-    function toggleSec(sec, btnSel) {
-      if (!sec) return;
-      var open = sec.getAttribute('data-open') !== '1';
-      sec.setAttribute('data-open', open ? '1' : '0');
-      var b = sec.querySelector(btnSel);
-      if (b) b.textContent = open ? '收起' : '展开';
-    }
-    function setSecOpen(sec, btnSel, open) {
-      if (!sec) return;
-      sec.setAttribute('data-open', open ? '1' : '0');
-      var b = sec.querySelector(btnSel);
-      if (b) b.textContent = open ? '收起' : '展开';
-    }
-
-    /* ---------------- 状态机 ---------------- */
-    function actionsFor(S, s) {
-      if (s === 'login') return [{ label: '登录', fn: function () { if (window.__openLogin) window.__openLogin('email'); } }];
-      if (s === 'rebind') return [{ label: '去扫码', href: (typeof quarkBindUrl === 'function' ? quarkBindUrl() : QP_REBIND) }];
-      if (s === 'quota') return [{ label: '重试', fn: function () { retry(S); } }];
-      if (s === 'error') return [
-        { label: '重试', fn: function () { retry(S); } },
-        { label: '换源', fn: function () { setSecOpen(S.root.querySelector('.qp-lines'), '.qp-lines-toggle', true); } }
-      ];
-      if (s === 'none') return [{ label: '换源', fn: function () { setSecOpen(S.root.querySelector('.qp-lines'), '.qp-lines-toggle', true); } }];
-      return [];
-    }
-
-    function setState(S, s, extra) {
-      if (!alive(S)) return;
-      var def = STATES[s] || STATES.loading;
-      var x = extra || {};
-      S.state = s;
-      S.root.setAttribute('data-state', s);
-      var msg = S.root.querySelector('.qp-msg');
-      if (msg) msg.textContent = x.msg || def.msg || '';
-      var box = S.root.querySelector('.qp-actions');
-      if (box) {
-        var acts = x.actions || actionsFor(S, s);
-        box.textContent = '';
-        if (!acts.length) box.hidden = true;
-        else {
-          box.hidden = false;
-          acts.forEach(function (a) {
-            var b;
-            if (a && a.href) {
-              b = document.createElement('a');
-              b.className = 'btn qp-act';
-              b.href = a.href;
-              b.target = '_blank';
-              b.rel = 'noopener';
-            } else {
-              b = document.createElement('button');
-              b.className = 'btn qp-act';
-              b.type = 'button';
-              b.onclick = function () { if (alive(S) && typeof a.fn === 'function') a.fn(); };
-            }
-            b.textContent = (a && a.label) || '';
-            box.appendChild(b);
-          });
-        }
-      }
-      if (s !== 'loading' && s !== 'transcoding') hideBigPlay(S);
-    }
-
-    function state(s, extra) {
-      if (!cur) return;
-      setState(cur, s, extra);
-    }
-
-    /* ---------------- 播放控制 ---------------- */
-    function showBigPlay(S) {
-      var b = S.root && S.root.querySelector('.qp-bigplay');
-      if (b) b.hidden = false;
-    }
-    function hideBigPlay(S) {
-      var b = S.root && S.root.querySelector('.qp-bigplay');
-      if (b) b.hidden = true;
-    }
-
-    function nextUntried(S) {
-      var n = S.lines.length;
-      if (!n) return -1;
-      var from = S.lineIdx;
-      for (var k = 1; k <= n; k++) {
-        var i = (from + k + n) % n;
-        if (i === from) continue;
-        if (!S.lines[i].tried && S.lines[i].url) return i;
-      }
-      return -1;
-    }
-
-    function retry(S) {
-      if (!alive(S)) return;
-      var l = S.lines[S.lineIdx];
-      /* 用户自备源没有「重新取地址」这一说，就地重试同一条；
-         官方签名直链会过期，只能交给 75 重新 find + url。 */
-      if (!l || l.kind !== 'byo') {
-        if (typeof S.ctx.onRetry === 'function') { S.ctx.onRetry(); return; }
-      }
-      for (var i = 0; i < S.lines.length; i++) S.lines[i].tried = false;
-      renderLines(S);
-      if (S.lineIdx >= 0) startLine(S, S.lineIdx);
-      else if (S.lines.length) startLine(S, 0);
-    }
-
-    function onLoadFail(S, line) {
-      if (!alive(S)) return;
-      clearStall(S);
-      if (line) { line.tried = true; line.err = '加载失败'; }
-      renderLines(S);
-      var next = nextUntried(S);
-      if (next >= 0) { startLine(S, next); return; }       // 失败回退：自动切下一条线路
-      setState(S, 'error', { msg: '播放失败，试试换一条线路' });
-    }
-
-    function startLine(S, idx) {
-      var line = S.lines[idx];
-      if (!alive(S) || !line) return false;
-      if (line.type === 'hls' && !S.hlsOk) {
-        line.tried = true;
-        line.err = '此浏览器不支持 HLS';
-        renderLines(S);
-        var nx = nextUntried(S);
-        if (nx >= 0) return startLine(S, nx);
-        setState(S, 'error', { msg: '此浏览器不支持 HLS，请用 Safari 或换 mp4 源' });
-        return false;
-      }
-      S.lineIdx = idx;
-      S.fid = String(line.fid || '');          // 换到自备源 / 另一条官方源时，进度不能记到上一条的 fid 上
-      S.resumeDone = !(S.resumeAt > 0);
-      renderLines(S);
-      updateSub(S);
-      setState(S, 'loading', { msg: '正在加载 ' + line.label + '…' });
-      clearStall(S);
-      try { S.v.pause(); } catch (e) { /* 未加载时 pause 会抛，忽略 */ }
-      S.v.setAttribute('src', line.url);       // 签名直链带 & ?：属性赋值不经 HTML 转义
-      try { if (S.v.load) S.v.load(); } catch (e) { /* 忽略 */ }
-      var p = null;
-      try { p = S.v.play(); } catch (e) { p = null; }
-      if (p && typeof p.then === 'function') {
-        p.then(null, function (err) {
-          if (!alive(S)) return;
-          if (err && err.name === 'NotAllowedError') {      // 自动播放被拦：给大字按钮，不当作失败
-            setState(S, 'ready');
-            showBigPlay(S);
-            return;
-          }
-          onLoadFail(S, line);
-        });
-      } else if (!p) {
-        onLoadFail(S, line);
-      }
-      return true;
-    }
-
-    function play(url, label, opt) {
-      var S = cur;
-      if (!alive(S)) return false;
-      if (!isUrl(url)) { setState(S, 'error', { msg: '视频地址无效' }); return false; }
-      var o = opt || {};
-      if (o.startAt != null) S.resumeAt = Math.max(0, Number(o.startAt) || 0);
-      if (o.fid) S.fid = String(o.fid);
-      var idx = addLine(S, { url: url, label: label || '直链', kind: 'official', fid: o.fid });
-      for (var i = 0; i < S.lines.length; i++) S.lines[i].tried = false;   // 新地址 = 重新开始一轮回退
-      renderLines(S);
-      return startLine(S, idx);
-    }
-
-    function setSources(list) {
-      var S = cur;
-      if (!alive(S)) return;
-      S.lines = S.lines.filter(function (l) { return l.kind === 'byo'; });
-      (list || []).forEach(function (src) { if (src && src.url) addLine(S, src); });
-      if (S.lineIdx >= S.lines.length) S.lineIdx = -1;
-      renderLines(S);
-      updateSub(S);
-    }
-
-    function setEpisodes(list, curEp, hint) {
-      var S = cur;
-      if (!alive(S)) return;
-      var out = [];
-      (list || []).forEach(function (it) {
-        if (it == null) return;
-        var ep = Number(it.ep != null ? it.ep : it);
-        if (!(ep > 0) || ep !== Math.floor(ep)) return;
-        out.push({
-          ep: ep,
-          label: String((it && it.label) || pad2(ep)),
-          fid: String((it && it.fid) || ''),
-          magnet: String((it && it.magnet) || '')
-        });
-      });
-      S.eps = out;
-      var n = Number(curEp);
-      if (n > 0) S.ep = n;
-      renderEps(S, hint !== undefined ? hint : defaultEpsHint(out));
-      updateSub(S);
-    }
-
-    function setFid(fid) {
-      if (cur) cur.fid = String(fid == null ? '' : fid);
-    }
-
-    /* 换集 / 换源前先停：旧视频的 pause 事件会把「旧集 + 旧 fid」的进度落盘，
-       必须在改写 ep / fid 之前调用，否则会把上一集的秒数记到新集头上。 */
-    function pause() {
-      if (!alive(cur)) return;
-      try { cur.v.pause(); } catch (e) { /* 忽略 */ }
-    }
-
-    /* ---------------- 进度上报 ---------------- */
-    /* 纯函数便于离线核对：位移 ≥5s 且距上次 ≥5s 才上报（timeupdate 触发很密，不节流等于每帧一次请求） */
-    function gate(prevPos, pos, lastMs, nowMs) {
-      var dp = Math.abs(Number(pos) - Number(prevPos));
-      var dt = Number(nowMs) - Number(lastMs);
-      if (!lastMs) return { send: true, dp: dp, dt: 0 };
-      return { send: dt >= 5000 && dp >= 5, dp: dp, dt: dt };
-    }
-
-    function report(S, final, atEnd) {
-      if (!alive(S)) return;
-      var v = S.v;
-      var dur = Number(v.duration) || 0;
-      var pos = atEnd ? dur : Number(v.currentTime) || 0;
-      if (!(dur > 0) || !(pos >= 0)) return;
-      S.lastMs = Date.now();
-      S.lastPos = pos;
-      var payload = {
-        ep: S.ep,
-        fid: S.fid,
-        pos: Math.round(pos * 10) / 10,
-        dur: Math.round(dur * 10) / 10
-      };
-      if (final) payload.final = true;
-      if (typeof S.ctx.onProgress === 'function') {
-        try { S.ctx.onProgress(payload); } catch (e) { /* 上报失败不影响播放 */ }
-      }
-    }
-
-    /* ---------------- 进度条 / 时间 / 音量：rAF 合并，避免每次 timeupdate 都重排 ---------------- */
-    function paint(S) {
-      if (!alive(S)) return;
-      var v = S.v, d = Number(v.duration) || 0, p = Number(v.currentTime) || 0;
-      var seek = S.root.querySelector('.qp-seek');
-      if (seek && !S.seekDrag) seek.value = String(d > 0 ? Math.round(p / d * 1000) : 0);
-      var curEl = S.root.querySelector('.qp-cur');
-      var durEl = S.root.querySelector('.qp-dur');
-      if (curEl) curEl.textContent = fmtTime(p);
-      if (durEl) durEl.textContent = fmtTime(d);
-      var btn = S.root.querySelector('.qp-play');
-      if (btn) btn.textContent = v.paused ? '▶' : '⏸';
-      var mute = S.root.querySelector('.qp-mute');
-      if (mute) mute.textContent = (v.muted || !v.volume) ? '🔇' : '🔊';
-      var rate = S.root.querySelector('.qp-rate');
-      if (rate) rate.textContent = rateLabel(Number(v.playbackRate) || 1);
-      var fs = S.root.querySelector('.qp-fs');
-      if (fs) {
-        var full = !!(document.fullscreenElement || document.webkitFullscreenElement);
-        fs.textContent = full ? '退出全屏' : '全屏';
-      }
-    }
-
-    function schedule(S) {
-      if (!alive(S) || S.pending) return;
-      S.pending = true;
-      var raf = window.requestAnimationFrame || function (cb) { return setTimeout(cb, 16); };
-      raf(function () { S.pending = false; paint(S); });
-    }
-
-    /* ---------------- 卡死看门狗 ---------------- */
-    function armStall(S) {
-      if (!alive(S) || S.stallTimer) return;
-      S.stallTimer = setTimeout(function () {
-        S.stallTimer = 0;
-        if (!alive(S)) return;
-        if (S.v.readyState >= 2) return;            // 已经有数据，只是短暂缓冲
-        onLoadFail(S, S.lines[S.lineIdx]);
-      }, 15000);
-    }
-    function clearStall(S) {
-      if (S.stallTimer) { clearTimeout(S.stallTimer); S.stallTimer = 0; }
-    }
-
-    /* ---------------- 下一集倒计时 ---------------- */
-    function cancelNext(S) {
-      if (S.nextTimer) { clearInterval(S.nextTimer); S.nextTimer = 0; }
-      var bar = S.root && S.root.querySelector('.qp-nextbar');
-      if (bar) bar.hidden = true;
-    }
-    function goNext(S, auto) {
-      cancelNext(S);
-      if (!alive(S)) return;
-      if (auto) {
-        if (typeof S.ctx.onEnded === 'function') { S.ctx.onEnded(); return; }
-      }
-      if (typeof S.ctx.onNext === 'function') { S.ctx.onNext(); return; }
-      if (typeof S.ctx.onEnded === 'function') S.ctx.onEnded();
-    }
-    function showNext(S) {
-      var bar = S.root.querySelector('.qp-nextbar');
-      if (!bar) return;
-      var hint = S.root.querySelector('.qp-autonext');
-      S.nextLeft = 5;
-      bar.hidden = false;
-      if (hint) hint.textContent = S.nextLeft + ' 秒后自动播放下一集';
-      if (S.nextTimer) clearInterval(S.nextTimer);
-      S.nextTimer = setInterval(function () {
-        if (!alive(S)) { cancelNext(S); return; }
-        S.nextLeft -= 1;
-        if (S.nextLeft > 0) {
-          if (hint) hint.textContent = S.nextLeft + ' 秒后自动播放下一集';
-          return;
-        }
-        goNext(S, true);
-      }, 1000);
-    }
-
-    /* ---------------- 全屏 / 画中画 ---------------- */
-    function toggleFs(S) {
-      var d = document, root = S.root, v = S.v;
-      if (d.fullscreenElement || d.webkitFullscreenElement) {
-        try {
-          if (d.exitFullscreen) d.exitFullscreen();
-          else if (d.webkitExitFullscreen) d.webkitExitFullscreen();
-        } catch (e) { /* 忽略 */ }
-        return;
-      }
-      try {
-        if (root.requestFullscreen) root.requestFullscreen();
-        else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();     // iOS 只允许 video 元素
-        else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen();
-        else if (v.requestFullscreen) v.requestFullscreen();
-      } catch (e) { /* 用户拒绝 / 不支持：保持原状 */ }
-    }
-
-    function togglePip(S) {
-      var v = S.v;
-      try {
-        if (document.pictureInPictureElement) { document.exitPictureInPicture(); return; }
-        if (v.requestPictureInPicture) v.requestPictureInPicture();
-      } catch (e) { /* 忽略 */ }
-    }
-
-    /* ---------------- 弹幕层（纯 canvas，零依赖） ----------------
-       轨道分配抄 weizhenye/Danmaku 的思路，不引库：按行高分轨，每轨记「上一条的起点时间 / 宽度 / 速度」，
-       用宽度与速度换算的时间差判断新条会不会追尾（新条的左边缘追上前条的右边缘之前，前条是否已飞出左边界）；
-       放不下就换下一轨，全轨放不下直接丢（B 站也丢）。
-
-       时间全部落在「媒体时间」域：位置 = 用 video.currentTime 现算。
-       于是暂停天然不推进、倍速天然跟随（乘 playbackRate 会把倍速算两次）。
-
-       层在 .qp-stage 里 z-index:1，压在视频上、在 .qp-overlay(2) / .qp-bigplay(3) 之下：
-       loading 时被状态遮罩盖住，不会出现「遮罩后面还在飘字」。 */
-
-    /* rAF 句柄做成对象：浏览器没有 rAF（极老环境 / 离线桩）时退回 setTimeout 也能被正确取消 */
-    function dmRaf(cb) {
-      var f = window.requestAnimationFrame;
-      if (f) return { id: f(cb), raf: true };
-      return { id: setTimeout(function () { cb(Date.now()); }, 16), raf: false };
-    }
-    function dmCaf(h) {
-      if (!h) return;
-      try {
-        if (h.raf) window.cancelAnimationFrame(h.id);
-        else clearTimeout(h.id);
-      } catch (e) { /* 忽略 */ }
-    }
-
-    /* ---------------- 弹幕设置（localStorage['qp_dm_cfg']） ----------------
-       面板、过滤、渲染参数都从这一份配置读；写盘只在用户改设置时发生。
-       归一化（dmCfgNorm）兜住所有脏值：手改 localStorage、旧版本字段缺失、
-       数组里塞非字符串都能安全退回缺省。 */
-    function dmLegacyOn() {
-      try { return localStorage.getItem(QP_DM_KEY) !== '0'; } catch (e) { return true; }
-    }
-    function dmSavePref(on) {
-      try { localStorage.setItem(QP_DM_KEY, on ? '1' : '0'); } catch (e) { /* 隐私模式：静默 */ }
-    }
-
-    function dmNum(v, lo, hi, dv) {
-      var n = Number(v);
-      if (!isFinite(n)) return dv;
-      return Math.max(lo, Math.min(hi, n));
-    }
-
-    /* 屏蔽词 / 用户：数组或「每行一个 / 逗号分隔」的字符串都吃；去空白、去重（不区分大小写）、限长 */
-    function dmCfgList(v, max) {
-      var arr = Object.prototype.toString.call(v) === '[object Array]' ? v
-        : (typeof v === 'string' ? v.split(/[\n,，;；]/) : []);
-      var out = [], seen = {}, i, s, low;
-      for (i = 0; i < arr.length && out.length < max; i++) {
-        s = String(arr[i] == null ? '' : arr[i]).replace(/\s+/g, ' ').trim().slice(0, 64);
-        if (!s) continue;
-        low = s.toLowerCase();
-        if (seen[low]) continue;
-        seen[low] = 1;
-        out.push(s);
-      }
-      return out;
-    }
-
-    function dmCfgNorm(raw) {
-      var r = raw && typeof raw === 'object' && Object.prototype.toString.call(raw) !== '[object Array]' ? raw : {};
-      var area = Number(r.dmarea), dmarea = DM_CFG_DEF.dmarea, i;
-      for (i = 0; i < DM_AREAS.length; i++) { if (area === DM_AREAS[i]) dmarea = area; }
-      return {
-        on: typeof r.on === 'boolean' ? r.on : dmLegacyOn(),
-        opacity: Math.round(dmNum(r.opacity, 0.2, 1, DM_CFG_DEF.opacity) * 100) / 100,
-        speedplus: Math.round(dmNum(r.speedplus, 0.5, 2, DM_CFG_DEF.speedplus) * 10) / 10,
-        fontsize: Math.round(dmNum(r.fontsize, 0.6, 1.6, DM_CFG_DEF.fontsize) * 10) / 10,
-        dmarea: dmarea,
-        blockscroll: !!r.blockscroll,
-        blocktop: !!r.blocktop,
-        blockbottom: !!r.blockbottom,
-        blockcolor: !!r.blockcolor,
-        blockspecial: !!r.blockspecial,
-        aiLevel: Math.round(dmNum(r.aiLevel, 0, 10, DM_CFG_DEF.aiLevel)),
-        blockWords: dmCfgList(r.blockWords, DM_BLOCK_MAX),
-        /* uid 是 midHash 前 8 位：粘贴整段 mid 也按前 8 位比 */
-        blockUsers: dmCfgList(r.blockUsers, DM_BLOCK_MAX).map(function (s) { return s.slice(0, 8); })
-      };
-    }
-
-    /* 读：每次现读 localStorage（几微秒，且不影响 data-state 与播放状态机） */
-    function dmCfg() {
-      var raw = null;
-      try { raw = JSON.parse(localStorage.getItem(QP_DM_CFG) || 'null'); } catch (e) { raw = null; }
-      return dmCfgNorm(raw);
-    }
-    function dmCfgSave(cfg) {
-      try { localStorage.setItem(QP_DM_CFG, JSON.stringify(cfg)); } catch (e) { /* 配额满 / 隐私模式：静默 */ }
-      dmSavePref(!!cfg.on);                          // 旧键同步，老版本读到的开关不会回弹
-    }
-
-    /* 过滤：装载时一次做完（不在每帧判断）。返回清洗后的条目，脏数据一并洗掉。 */
-    function dmFilter(list, cfg) {
-      var arr = Object.prototype.toString.call(list) === '[object Array]' ? list : [];
-      var c0 = cfg || dmCfgNorm(null);
-      var ai = Number(c0.aiLevel) || 0;
-      var lowWords = [], lowUsers = [], i;
-      var words = c0.blockWords || [], users = c0.blockUsers || [];
-      for (i = 0; i < words.length; i++) lowWords.push(String(words[i]).toLowerCase());
-      for (i = 0; i < users.length; i++) lowUsers.push(String(users[i]).toLowerCase());
-      var out = [];
-      for (i = 0; i < arr.length && out.length < DM_MAX_ITEMS; i++) {
-        var x = arr[i];
-        if (!x) continue;
-        var t = Number(x.t);
-        var m = String(x.m == null ? '' : x.m).replace(/\s+/g, ' ').trim();
-        if (!isFinite(t) || t < 0 || !m) continue;
-        var c = Math.round(Number(x.c) || 1);
-        if (!(c >= 1 && c <= 5)) c = 1;
-        if (c0.blockscroll && c !== 4 && c !== 5) continue;        // 只留固定弹幕
-        if (c0.blocktop && c === 5) continue;
-        if (c0.blockbottom && c === 4) continue;
-        /* 接口的 c 只有 1..5（4 底部 / 5 顶部），没有独立的高级弹幕位：
-           「特殊」按这两类固定弹幕处理，比滚动更"重"的那一档。 */
-        if (c0.blockspecial && (c === 4 || c === 5)) continue;
-        var w = Number(x.w);
-        var wv = isFinite(w) ? w : 0;                              // 缺权重按最低档
-        if (ai > 0 && wv < ai) continue;
-        var col = Number(x.color);
-        if (c0.blockcolor && isFinite(col) && col !== 16777215) continue;   // 非白色 = 彩色
-        if (lowWords.length) {
-          var low = m.toLowerCase(), hitWord = false;
-          for (var a = 0; a < lowWords.length; a++) {
-            if (lowWords[a] && low.indexOf(lowWords[a]) >= 0) { hitWord = true; break; }
-          }
-          if (hitWord) continue;
-        }
-        var uid = String(x.uid == null ? '' : x.uid).trim().toLowerCase().slice(0, 8);
-        if (uid && lowUsers.length) {
-          var hitUser = false;
-          for (var b = 0; b < lowUsers.length; b++) { if (lowUsers[b] === uid) { hitUser = true; break; } }
-          if (hitUser) continue;
-        }
-        out.push({
-          t: t,
-          m: m.slice(0, DM_TEXT_MAX),
-          c: c,
-          size: Math.max(12, Math.min(64, Number(x.size) || 25)),
-          color: col,
-          w: wv,
-          uid: uid
-        });
-      }
-      return out;
-    }
-
-    /* 十进制 RGB（16777215 = 白）→ #rrggbb */
-    function dmColor(n) {
-      var v = Number(n);
-      if (!isFinite(v) || v < 0) return '#ffffff';
-      var hex = Math.floor(v % 16777216).toString(16);
-      while (hex.length < 6) hex = '0' + hex;
-      return '#' + hex;
-    }
-
-    /* 字号按舞台宽 / 1280 缩放再乘用户系数，仍夹在 12..20：
-       舞台 390 宽时 25px 原始字号会占掉 11% 高度 */
-    function dmFontPx(dm, size) {
-      var k = Number(dm && dm.fs) || 1;
-      var px = Math.round((Number(size) || 25) * k * dm.W / 1280);
-      return Math.max(12, Math.min(20, px));
-    }
-
-    /* 每条弹幕预渲染成一张小 canvas：measureText / strokeText 只做一次，之后每帧只 drawImage。
-       按字号的缩放缓存（舞台尺寸变了字号才会变，变了才重画）。 */
-    function dmSprite(dm, it, px) {
-      if (it._sp && it._px === px) return it._sp;
-      var dpr = dm.dpr || 1;
-      var font = '600 ' + px + 'px ' + DM_FONT;
-      if (!dm.meas) {
-        var mc = document.createElement('canvas');
-        try { dm.meas = mc.getContext('2d'); } catch (e) { dm.meas = null; }
-        if (!dm.meas) return null;
-      }
-      dm.meas.font = font;
-      var tw = 0;
-      try { tw = dm.meas.measureText(it.m).width || 0; } catch (e) { tw = 0; }
-      if (!(tw > 0)) tw = it.m.length * px * 0.6;       // 无字体信息时的兜底宽度
-      var pad = 2;                                     // 描边留白，防边缘被裁
-      var w = Math.ceil(tw) + pad * 2;
-      var h = Math.ceil(px * 1.22) + pad * 2;
-      var c = document.createElement('canvas');
-      c.width = Math.max(1, Math.round(w * dpr));
-      c.height = Math.max(1, Math.round(h * dpr));
-      var g = null;
-      try { g = c.getContext('2d'); } catch (e) { g = null; }
-      if (!g) return null;
-      g.scale(dpr, dpr);                               // dpr 只在这里缩放一次
-      g.font = font;
-      g.textAlign = 'left';
-      g.textBaseline = 'middle';
-      g.lineJoin = 'round';
-      g.strokeStyle = 'rgba(0, 0, 0, .82)';            // 1px 黑描边：浅色画面里也读得清
-      g.lineWidth = 2;
-      g.strokeText(it.m, pad, h / 2);
-      g.fillStyle = dmColor(it.color);
-      g.fillText(it.m, pad, h / 2);
-      var sp = { c: c, w: w, h: h };
-      it._sp = sp;
-      it._px = px;
-      return sp;
-    }
-
-    /* 二分：第一个 t >= x 的下标（seek 后不复扫全表） */
-    function dmLower(items, x) {
-      var lo = 0, hi = items.length;
-      while (lo < hi) {
-        var mid = (lo + hi) >> 1;
-        if (items[mid].t < x) lo = mid + 1;
-        else hi = mid;
-      }
-      return lo;
-    }
-
-    /* 尺寸 / dpr / 分行：舞台尺寸变了才重来（客户端读 clientWidth 不会触发重排，每帧读一次可接受） */
-    function dmResize(S) {
-      var dm = S && S.dm, cv = dm && dm.cv;
-      if (!cv) return false;
-      var W = cv.clientWidth, H = cv.clientHeight;
-      if (!(W > 0) || !(H > 0)) return false;          // 隐藏 / 还没布局：这一帧不画
-      var dpr = Math.min(2, Number(window.devicePixelRatio) || 1);
-      if (dm.g && W === dm.W && H === dm.H && dpr === dm.dpr) return true;
-      dm.W = W;
-      dm.H = H;
-      dm.dpr = dpr;
-      cv.width = Math.max(1, Math.round(W * dpr));
-      cv.height = Math.max(1, Math.round(H * dpr));
-      var g = null;
-      try { g = cv.getContext('2d'); } catch (e) { g = null; }
-      dm.g = g;
-      if (g) g.setTransform(dpr, 0, 0, dpr, 0, 0);     // dpr 缩放只做这一次
-      dmLayout(S);
-      return !!g;
-    }
-
-    function dmLayout(S) {
-      var dm = S.dm;
-      dm.lineH = Math.max(18, Math.min(26, Math.round(dm.H / 8)));
-      dm.pad = 4;
-      /* 显示区域按百分比收缩可用行数（B 站「显示区域」的做法）：底部的顶部/底部固定条也跟着收 */
-      var rowsAll = Math.max(1, Math.floor((dm.H - dm.pad * 2) / dm.lineH));
-      var pct = Number(dm.area) > 0 ? Number(dm.area) : 100;
-      dm.rows = Math.max(1, Math.floor(rowsAll * pct / 100));
-      dm.rowsAll = rowsAll;
-      dm.cap = window.innerWidth <= 760 ? 20 : 30;     // 同屏上限：移动端 20，桌面 30
-      dm.roll = [];
-      dm.top = [];
-      dm.bot = [];
-      for (var i = 0; i < dm.rows; i++) {
-        dm.roll.push(null);                            // null | {t, w, v}
-        dm.top.push(0);                                // 该轨被占用到的媒体时间
-        dm.bot.push(0);
-      }
-      dm.live = [];
-      dm.next = dmLower(dm.items, (Number(S.v.currentTime) || 0) - DM_LATE);
-      dm.lastCt = -1;                                  // 逼下一帧走「重定位」分支
-    }
-
-    /* 追尾判定：前一条在 t0 时刻的右边界是否已进画面，且新条（更快时）在追上前是否已让前条飞出左边 */
-    function dmFits(rec, t0, w, v, W) {
-      if (!rec) return true;                           // 空轨
-      var dt = t0 - rec.t;
-      if (!(dt >= 0)) return false;
-      var left = W - rec.v * dt;                       // 前一条当前左边界
-      var right = left + rec.w;                        // 前一条当前右边界
-      if (right > W - 6) return false;                 // 尾巴还压在右边界上（留 6px 余量）
-      var vNew = Math.max(1, v), vPrev = Math.max(1, rec.v);
-      if (vNew <= vPrev) return true;                  // 不会追上
-      var exit = (left + rec.w) / vPrev;               // 前一条完全离场还需多久
-      return (W - right) / (vNew - vPrev) >= exit;     // 追上前它已经飞出画面
-    }
-
-    /* 投放一条：滚动 / 顶部固定 / 底部固定，放不下就丢 */
-    function dmSpawn(S, it) {
-      var dm = S.dm, W = dm.W, t0 = it.t;
-      var px = dmFontPx(dm, it.size);
-      var sp = dmSprite(dm, it, px);
-      if (!sp) return;
-
-      if (it.c === 4 || it.c === 5) {                  // 4 底部固定 / 5 顶部固定：停留 4s，顶上往下、底上往上
-        var isTop = it.c === 5, pool = isTop ? dm.top : dm.bot, row = -1;
-        for (var i = 0; i < dm.rows; i++) {
-          if (!pool[i] || t0 >= pool[i]) { row = i; break; }
-        }
-        if (row < 0) return;                           // 固定位全满：丢
-        pool[row] = t0 + DM_FIX_S;
-        var off = Math.round((dm.lineH - sp.h) / 2);
-        var y = isTop
-          ? dm.pad + row * dm.lineH + off
-          : dm.H - dm.pad - (row + 1) * dm.lineH + off;
-        dm.live.push({ mode: isTop ? 'top' : 'bot', t0: t0, w: sp.w, y: y, sp: sp });
-        return;
-      }
-
-      /* 速度取实例上的值（= DM_SPEED * speedplus）。改速度必须重置轨道（dmSet 里靠 dm.W=0
-         强制重排），否则同一轨上会混着新旧两种速度，防追尾公式算出来的间距不再成立。 */
-      var v = Math.max(1, Number(dm.speed) || DM_SPEED), row2 = -1, best = null;
-      for (var k = 0; k < dm.rows; k++) {
-        var rec = dm.roll[k];
-        if (!dmFits(rec, t0, sp.w, v, W)) continue;
-        if (!rec) { row2 = k; break; }                 // 空轨优先
-        if (!best || rec.t < best.t) { best = rec; row2 = k; }   // 都占着就选最久没用的那轨
-      }
-      if (row2 < 0) return;                            // 轨道全满：丢弃
-      dm.roll[row2] = { t: t0, w: sp.w, v: v };
-      dm.live.push({
-        mode: 'roll', t0: t0, v: v, w: sp.w,
-        y: dm.pad + row2 * dm.lineH + Math.round((dm.lineH - sp.h) / 2),
-        sp: sp
+      [].forEach.call(row.querySelectorAll('.nv-ep'), function (b) {
+        b.onclick = function () {
+          var ep = Number(b.getAttribute('data-ep'));
+          if (CUR && CUR.ctx && typeof CUR.ctx.onPickEp === 'function') CUR.ctx.onPickEp(ep);
+        };
       });
     }
-
-    /* 推进到下一条该出现的弹幕（按媒体时间顺排，指针只前进） */
-    function dmAdvance(S, ct) {
-      var dm = S.dm, items = dm.items;
-      while (dm.next < items.length && items[dm.next].t <= ct) {
-        var it = items[dm.next];
-        dm.next += 1;
-        if (ct - it.t > DM_LATE) continue;             // 追不上的旧弹幕：丢，不补投
-        if (dm.live.length >= dm.cap) continue;        // 同屏满：丢
-        dmSpawn(S, it);
-      }
-    }
-
-    function dmDraw(S, ct) {
-      var dm = S.dm, g = dm.g;
-      if (!g) return;
-      g.clearRect(0, 0, dm.W, dm.H);                   // 每帧只清一次
-      var live = dm.live, keep = [];
-      for (var i = 0; i < live.length; i++) {
-        var e = live[i], x;
-        if (e.mode === 'roll') {
-          x = dm.W - e.v * (ct - e.t0);
-          if (x + e.w <= 0) continue;                  // 已经完全飞出左边
-        } else {
-          if (ct >= e.t0 + DM_FIX_S) continue;         // 固定弹幕到期
-          x = Math.round((dm.W - e.w) / 2);
-        }
-        g.drawImage(e.sp.c, x, e.y, e.sp.w, e.sp.h);
-        keep.push(e);
-      }
-      dm.live = keep;
-    }
-
-    /* seek / 换集 / 大幅跳时：清屏、重置轨道、二分定位到下一条（不从 0 重扫） */
-    function dmJump(S, ct) {
-      var dm = S.dm;
-      if (!dm) return;
-      dm.live = [];
-      for (var i = 0; i < dm.rows; i++) { dm.roll[i] = null; dm.top[i] = 0; dm.bot[i] = 0; }
-      dm.next = dmLower(dm.items, ct - DM_LATE);
-      dm.lastCt = ct;
-      if (dm.g) { try { dm.g.clearRect(0, 0, dm.W, dm.H); } catch (e) { /* 忽略 */ } }
-    }
-
-    /* 画一次（暂停时也能出画面：seek 后停住也要看到那一刻的弹幕） */
-    function dmTick(S) {
-      var dm = S && S.dm;
-      if (!dm || !dm.on || !dm.items.length) return;
-      if (!dmResize(S)) return;
-      var ct = Number(S.v.currentTime) || 0;
-      dm.lastCt = ct;
-      dmAdvance(S, ct);
-      dmDraw(S, ct);
-    }
-
-    /* 常驻循环：独立于 paint / schedule（那套是按需触发的，弹幕要每帧推进） */
-    function dmFrame(S) {
-      var dm = S && S.dm;
-      if (!dm) return;
-      dm.raf = null;
-      if (!alive(S) || !dm.on) return;                 // 关掉 / 已销毁：不再排下一帧，循环自然停
-      dm.raf = dmRaf(function () { dmFrame(S); });
-      if (!dmResize(S)) return;
-      var ct = Number(S.v.currentTime) || 0;
-      if (dm.lastCt >= 0 && ct === dm.lastCt) return;  // 暂停：不推进、不重绘
-      if (dm.lastCt < 0 || Math.abs(ct - dm.lastCt) > DM_LATE) dmJump(S, ct);
-      dmTick(S);
-    }
-
-    function dmStart(S) {
-      var dm = S && S.dm;
-      if (!alive(S) || !dm || !dm.on || dm.raf || !dm.items.length || !dm.cv) return;
-      dm.lastCt = -1;
-      dm.raf = dmRaf(function () { dmFrame(S); });
-    }
-
-    function dmStop(S) {
-      var dm = S && S.dm;
-      if (!dm) return;
-      if (dm.raf) { dmCaf(dm.raf); dm.raf = null; }
-      dm.live = [];
-      dm.lastCt = -1;
-      if (dm.g) { try { dm.g.clearRect(0, 0, dm.W || 0, dm.H || 0); } catch (e) { /* 忽略 */ } }
-    }
-
-    function dmPaintBtn(S) {
-      var b = S && S.root && S.root.querySelector('.qp-dm-toggle');
-      if (b) b.textContent = S && S.dm && S.dm.on ? '弹幕 开' : '弹幕 关';
-    }
-
-    /* 装载：原始列表存进 dm.raw（改设置时重新过滤用），过滤 / 清洗交给 dmFilter（一次到位），
-       再按时间排序重置播放状态。空数组 = 关闭：停循环，层上不留东西。 */
-    function dmSet(S, list) {
-      var dm = S && S.dm;
-      if (!dm) return 0;
-      dmStop(S);
-      var arr = Object.prototype.toString.call(list) === '[object Array]' ? list : [];
-      var cfg = dm.cfg || dmCfg();
-      dm.cfg = cfg;
-      var out = dmFilter(arr, cfg);
-      out.sort(function (a, b) { return a.t - b.t; });   // dmLower 二分 / dmAdvance 指针都要求按时间有序
-      dm.raw = arr;
-      dm.items = out;
-      dm.next = 0;
-      dm.live = [];
-      dm.lastCt = -1;
-      dm.W = 0;                                        // 迫使下一帧重跑 dmResize → dmLayout（字号 / 显示区域 / 轨道全重置）
-      if (out.length) dmStart(S);
-      dmPaintBtn(S);
-      return out.length;
-    }
-
-    /* 拉接口：失败只让弹幕层空着，绝不碰 data-state（否则一次 404 会把「正在播放」变成错误页） */
-    function dmFetch(S, cid) {
-      var dm = S && S.dm;
-      if (!dm || !cid || typeof fetch !== 'function') return;
-      var key = String(cid), tok = S.tok;
-      dm.cid = key;
-      fetch(DM_BASE + '/bili/dm?cid=' + encodeURIComponent(key), { credentials: 'omit' })
-        .then(function (r) { return r && r.ok ? r.json() : null; })
-        .then(function (j) {
-          if (!alive(S) || S.tok !== tok || !cur || cur.tok !== tok || dm.cid !== key) return;
-          if (!j || Object.prototype.toString.call(j.items) !== '[object Array]') return;
-          dmSet(S, j.items);
-        })
-        .catch(function () { /* 静默：没弹幕不影响播放 */ });
-    }
-
-    function dmToggle(S, on) {
-      var dm = S && S.dm;
-      if (!dm) return false;
-      dm.on = !!on;
-      var cfg = dmCfg();                               // 现读一次，别拿可能过期的 dm.cfg 覆盖别的设置
-      cfg.on = dm.on;
-      dm.cfg = cfg;
-      dmCfgSave(cfg);                                  // 开关也进设置：面板与开关永远是同一份配置
-      if (S.root) S.root.setAttribute('data-dm', dm.on ? '1' : '0');
-      dmPaintBtn(S);
-      if (dm.on) dmStart(S); else dmStop(S);
-      return dm.on;
-    }
-
-    function dmClear(S) {
-      var dm = S && S.dm;
-      if (!dm) return;
-      if (dm.cfgTimer) { clearTimeout(dm.cfgTimer); dm.cfgTimer = 0; }
-      dmStop(S);
-      dm.items = [];
-      dm.raw = [];
-      dm.next = 0;
-      dm.live = [];
-      dm.cid = '';
-    }
-
-    function dmInit(S, ctx) {
-      var cfg = dmCfg();
-      var dm = {
-        on: !!cfg.on,
-        cv: S.root.querySelector('.qp-dm'),
-        g: null,
-        W: 0, H: 0, dpr: 1,
-        lineH: 22, pad: 4, rows: 1, rowsAll: 1, cap: 30,
-        roll: [], top: [], bot: [],
-        items: [], raw: [], next: 0, live: [],
-        raf: null, lastCt: -1, meas: null, cid: '',
-        cfg: cfg,
-        alpha: cfg.opacity,                         // canvas 的 CSS opacity（见 dmApply）
-        speed: Math.max(1, Math.round(DM_SPEED * cfg.speedplus)),
-        fs: cfg.fontsize,
-        area: cfg.dmarea,
-        cfgTimer: 0
-      };
-      S.dm = dm;
-      if (dm.cv && dm.cv.style) dm.cv.style.opacity = String(dm.alpha);
-      if (S.root) S.root.setAttribute('data-dm', dm.on ? '1' : '0');
-      dmPaintBtn(S);
-      var opt = (ctx && ctx.dm) || null;
-      if (opt && opt.items) dmSet(S, opt.items);       // 调用方带数据：直接用
-      else if (opt && opt.cid) dmFetch(S, opt.cid);    // 只给 cid：播放器自己拉
-    }
-
-    /* ---------------- 弹幕设置：应用 + 面板 ---------------- */
-    /* 把配置套到当前实例。不重拉数据：用缓存的 dm.raw 重新过滤再装一次；
-       dmSet 里 dm.W=0 → dmLayout 重排，速度 / 字号 / 显示区域改了也不会新旧混排。 */
-    function dmApply(S) {
-      var dm = S && S.dm;
-      if (!dm) return 0;
-      var cfg = dmCfg();
-      dm.cfg = cfg;
-      dm.alpha = cfg.opacity;
-      dm.speed = Math.max(1, Math.round(DM_SPEED * cfg.speedplus));
-      dm.fs = cfg.fontsize;
-      dm.area = cfg.dmarea;
-      if (dm.cv && dm.cv.style) dm.cv.style.opacity = String(cfg.opacity);
-      return dmSet(S, dm.raw || []);
-    }
-
-    /* 拖滑杆 / 敲屏蔽词会连发事件：合并成一次重装（文本 150ms，其余 60ms 几乎无感） */
-    function dmApplySoon(S, soft) {
-      var dm = S && S.dm;
-      if (!dm) return;
-      if (dm.cfgTimer) { clearTimeout(dm.cfgTimer); dm.cfgTimer = 0; }
-      dm.cfgTimer = setTimeout(function () {
-        dm.cfgTimer = 0;
-        if (alive(S)) dmApply(S);
-      }, soft ? 150 : 60);
-    }
-
-    function dmPanelEl(S) { return S && S.root ? S.root.querySelector('.qp-dmset') : null; }
-
-    /* 面板回显：只在打开 / 恢复默认时调；输入框有焦点时不回写 value（否则光标会跳） */
-    function dmPanelSync(S) {
-      var box = dmPanelEl(S), dm = S && S.dm;
-      if (!box) return;
-      var cfg = dmCfg();
-      if (dm) dm.cfg = cfg;
-      var chips = {
-        scroll: !cfg.blockscroll, top: !cfg.blocktop, bottom: !cfg.blockbottom,
-        color: !cfg.blockcolor, special: !cfg.blockspecial
-      };
-      for (var k in chips) {
-        if (!Object.prototype.hasOwnProperty.call(chips, k)) continue;
-        var cb = box.querySelector('input[data-k="' + k + '"]');
-        if (cb) cb.checked = !!chips[k];
-      }
-      var rk = ['opacity', 'speedplus', 'fontsize', 'aiLevel'], i;
-      for (i = 0; i < rk.length; i++) {
-        var r = box.querySelector('input[data-k="' + rk[i] + '"]');
-        if (r) r.value = String(cfg[rk[i]]);
-      }
-      var ta = box.querySelector('[data-k="blockWords"]');
-      if (ta && document.activeElement !== ta) ta.value = cfg.blockWords.join('\n');
-      var ui = box.querySelector('[data-k="blockUsers"]');
-      if (ui && document.activeElement !== ui) ui.value = cfg.blockUsers.join(', ');
-      dmPanelPaint(box, cfg);
-    }
-
-    /* 只刷新「数值标签 + 显示区域选中态」，不动输入控件 */
-    function dmPanelPaint(box, cfg) {
-      if (!box) return;
-      var vals = {
-        opacity: Math.round(cfg.opacity * 100) + '%',
-        speedplus: cfg.speedplus.toFixed(1) + '×',
-        fontsize: cfg.fontsize.toFixed(1) + '×',
-        aiLevel: cfg.aiLevel > 0 ? String(cfg.aiLevel) : '关'
-      };
-      for (var k in vals) {
-        if (!Object.prototype.hasOwnProperty.call(vals, k)) continue;
-        var v = box.querySelector('.qp-dmset-v[data-for="' + k + '"]');
-        if (v) v.textContent = vals[k];
-      }
-      var seg = box.querySelector('[data-k="dmarea"]');
-      if (!seg) return;
-      var bs = seg.querySelectorAll('button[data-v]');
-      for (var i = 0; i < bs.length; i++) {
-        var on = Number(bs[i].getAttribute('data-v')) === cfg.dmarea;
-        if (on) bs[i].classList.add('on'); else bs[i].classList.remove('on');
-      }
-    }
-
-    /* 「显示」类开关 → 配置里的 block* 字段（勾 = 显示 = block 关） */
-    var DM_CHIP_KEY = {
-      scroll: 'blockscroll', top: 'blocktop', bottom: 'blockbottom',
-      color: 'blockcolor', special: 'blockspecial'
-    };
-    var DM_RANGE = { opacity: [0.2, 1], speedplus: [0.5, 2], fontsize: [0.6, 1.6], aiLevel: [0, 10] };
-
-    function dmPanelChange(S, k, val) {
-      var dm = S && S.dm, box = dmPanelEl(S);
-      if (!dm || !box) return;
-      var cfg = dmCfg();
-      if (Object.prototype.hasOwnProperty.call(DM_CHIP_KEY, k)) cfg[DM_CHIP_KEY[k]] = !val;
-      else if (Object.prototype.hasOwnProperty.call(DM_RANGE, k)) {
-        var r = DM_RANGE[k];
-        cfg[k] = Math.round(dmNum(val, r[0], r[1], cfg[k]) * 100) / 100;
-      } else if (k === 'dmarea') {
-        var p = Number(val);
-        if (DM_AREAS.indexOf(p) < 0) return;
-        cfg.dmarea = p;
-      } else if (k === 'blockWords' || k === 'blockUsers') cfg[k] = dmCfgList(val, DM_BLOCK_MAX);
-      else return;
-      cfg.on = !!dm.on;                             // 设置面板不决定开关，回写当前状态免得被覆盖
-      dmCfgSave(cfg);
-      dm.cfg = cfg;
-      dmPanelPaint(box, cfg);
-      if (k === 'opacity') {                        // 只是画布透明度：不重装、不重置轨道
-        dm.alpha = cfg.opacity;
-        if (dm.cv && dm.cv.style) dm.cv.style.opacity = String(cfg.opacity);
-        return;
-      }
-      dmApplySoon(S, k === 'blockWords' || k === 'blockUsers');
-    }
-
-    function dmPanelReset(S) {
-      var dm = S && S.dm;
-      if (!dm) return;
-      var cfg = dmCfgNorm(null);                     // 缺省值（on 取旧键，下面立刻用当前开关覆盖）
-      cfg.on = !!dm.on;
-      dmCfgSave(cfg);
-      dm.cfg = cfg;
-      dmPanelSync(S);
-      dmApply(S);
-    }
-
-    function dmPanelShow(S, on) {
-      var box = dmPanelEl(S);
-      if (!box) return false;
-      var show = on === undefined ? box.hasAttribute('hidden') : !!on;
-      if (show) { box.removeAttribute('hidden'); dmPanelSync(S); }
-      else box.setAttribute('hidden', '');
-      var b = S.root.querySelector('.qp-dmset-btn');
-      if (b) b.setAttribute('aria-expanded', show ? 'true' : 'false');
-      return show;
-    }
-
-    function dmPanelBind(S) {
-      var box = dmPanelEl(S);
-      if (!box) return;
-      box.addEventListener('input', function (ev) {
-        var t = ev.target;
-        if (!t || !t.getAttribute || t.type === 'checkbox') return;   // 勾选框交给 change
-        var k = t.getAttribute('data-k');
-        if (k) dmPanelChange(S, k, t.value);
-      });
-      box.addEventListener('change', function (ev) {
-        var t = ev.target;
-        if (!t || !t.getAttribute || t.type !== 'checkbox') return;   // 滑杆 / 文本的 change 已由 input 处理
-        var k = t.getAttribute('data-k');
-        if (k) dmPanelChange(S, k, !!t.checked);
-      });
-      box.addEventListener('click', function (ev) {
-        var t = ev.target;
-        if (!t || !t.closest || !alive(S)) return;
-        if (t.closest('.qp-dmset-done')) { dmPanelShow(S, false); return; }
-        if (t.closest('.qp-dmset-reset')) { dmPanelReset(S); return; }
-        var seg = t.closest('.qp-dmset-seg button[data-v]');
-        if (seg) dmPanelChange(S, 'dmarea', seg.getAttribute('data-v'));
-      });
-    }
-
-    /* ---------------- 事件绑定 ---------------- */
-    function bind(S) {
-      var v = S.v, root = S.root;
-      function q(sel) { return root.querySelector(sel); }
-
+    function mountVideo(url, startAt) {
+      var s = slot();
+      if (!s || !CUR) return;
+      clear();
+      var v = document.createElement('video');
+      v.setAttribute('controls', '');
+      v.setAttribute('autoplay', '');
+      v.setAttribute('playsinline', '');
+      v.src = url;
+      if (startAt > 0) v.currentTime = startAt;   // loadedmetadata 前赋值也能生效
+      v.style.width = '100%';
+      v.style.aspectRatio = '16 / 9';
+      v.style.background = '#000';
+      v.style.display = 'block';
+      s.appendChild(v);
+      var epsRow = document.createElement('div');
+      epsRow.className = 'nv-eps';
+      s.appendChild(epsRow);
+      renderEps();
+      CUR.last = 0;
       v.addEventListener('loadedmetadata', function () {
-        if (!alive(S)) return;
-        if (!S.resumeDone && S.resumeAt > 0) {
-          S.resumeDone = true;
-          var d = Number(v.duration) || 0;
-          if (!(d > 0) || S.resumeAt < d - 5) {
-            try { v.currentTime = S.resumeAt; } catch (e) { /* 忽略 */ }
-          }
-        }
-        schedule(S);
-      });
-      v.addEventListener('playing', function () {
-        if (!alive(S)) return;
-        clearStall(S);
-        hideBigPlay(S);
-        if (S.state !== 'ready') setState(S, 'ready');
-        schedule(S);
+        if (startAt > 0) { try { v.currentTime = startAt; } catch (e) { } }
       });
       v.addEventListener('timeupdate', function () {
-        if (!alive(S)) return;
-        schedule(S);
-        var pos = Number(v.currentTime) || 0;
-        if (gate(S.lastPos, pos, S.lastMs, Date.now()).send) report(S, false);
+        if (!CUR) return;
+        if (Date.now() - CUR.last < REPORT_EVERY) return;
+        report(v.currentTime, v.duration || 0, false);
       });
       v.addEventListener('pause', function () {
-        if (!alive(S)) return;
-        schedule(S);
-        report(S, false);
+        if (CUR) report(v.currentTime, v.duration || 0, false);
       });
-      v.addEventListener('play', function () { schedule(S); });
-      v.addEventListener('seeked', function () {
-        if (!alive(S)) return;
-        /* 拖进度 / 换源：清屏 + 重置轨道 + 按新的 currentTime 二分定位下一条，
-           并立刻画一帧（暂停中拖动也要看到那一刻的弹幕，别留一块被清空的画布） */
-        if (S.dm && S.dm.on) { dmJump(S, Number(v.currentTime) || 0); dmTick(S); }
-        if (S.seekTimer) clearTimeout(S.seekTimer);
-        S.seekTimer = setTimeout(function () {
-          S.seekTimer = 0;
-          report(S, false);                       // 拖动结束 800ms 后再报，避免拖一次发几十条
-        }, 800);
-        schedule(S);
-      });
-      v.addEventListener('waiting', function () { if (alive(S)) armStall(S); });
-      v.addEventListener('stalled', function () { if (alive(S)) armStall(S); });
-      v.addEventListener('error', function () { onLoadFail(S, S.lines[S.lineIdx]); });
-      v.addEventListener('volumechange', function () {
-        if (!alive(S)) return;
-        var vol = q('.qp-vol');
-        if (vol) vol.value = String(Math.round((v.muted ? 0 : v.volume) * 100));
-        schedule(S);
-      });
-      v.addEventListener('ratechange', function () { schedule(S); });
       v.addEventListener('ended', function () {
-        if (!alive(S)) return;
-        report(S, true, true);                     // 先把 pos=dur 记下，再谈下一集
-        showNext(S);
-        schedule(S);
+        report(v.duration, v.duration, true);
+        if (CUR && CUR.ctx && typeof CUR.ctx.onEnded === 'function') CUR.ctx.onEnded();
       });
-      v.addEventListener('click', function () {
-        if (!alive(S)) return;
-        try { root.focus({ preventScroll: true }); } catch (e) { try { root.focus(); } catch (e2) {} }
-        togglePlay(S);
+      v.addEventListener('error', function () {
+        if (!CUR) return;
+        status(stHtml('error', { msg: '视频加载失败（网络或源已过期）' }));
+        wireStatus('error');
+        if (CUR.ctx && typeof CUR.ctx.onRetry === 'function') { /* 重试按钮已给 */ }
       });
-
-      var big = q('.qp-bigplay');
-      if (big) big.onclick = function () {
-        if (!alive(S)) return;
-        hideBigPlay(S);
-        var p = v.play();
-        if (p && p.then) p.then(null, function () { showBigPlay(S); });
-      };
-
-      var closeBtn = q('.qp-close');
-      if (closeBtn) closeBtn.onclick = function () { close(); };
-
-      var dmBtn = q('.qp-dm-toggle');
-      if (dmBtn) dmBtn.onclick = function () { if (alive(S) && S.dm) dmToggle(S, !S.dm.on); };
-
-      var dmSetBtn = q('.qp-dmset-btn');
-      if (dmSetBtn) dmSetBtn.onclick = function () { if (alive(S)) dmPanelShow(S); };
-      dmPanelBind(S);
-
-      var playBtn = q('.qp-play');
-      if (playBtn) playBtn.onclick = function () { togglePlay(S); };
-
-      var muteBtn = q('.qp-mute');
-      if (muteBtn) muteBtn.onclick = function () {
-        v.muted = !v.muted;
-        if (!v.muted && !v.volume) v.volume = 0.6;
-      };
-
-      var seek = q('.qp-seek');
-      if (seek) {
-        seek.addEventListener('pointerdown', function () { S.seekDrag = true; });
-        seek.addEventListener('input', function () {
-          S.seekDrag = true;
-          var d = Number(v.duration) || 0;
-          if (d > 0) {
-            var t = d * (Number(seek.value) || 0) / 1000;
-            try { v.currentTime = Math.max(0, Math.min(d - 0.1, t)); } catch (e) { /* 忽略 */ }
-          }
-        });
-        seek.addEventListener('change', function () { S.seekDrag = false; schedule(S); });
-        seek.addEventListener('pointerup', function () { S.seekDrag = false; });
-        seek.addEventListener('blur', function () { S.seekDrag = false; });
-      }
-
-      var vol = q('.qp-vol');
-      if (vol) vol.addEventListener('input', function () {
-        var x = Math.max(0, Math.min(100, Number(vol.value) || 0));
-        v.volume = x / 100;
-        v.muted = x === 0;
-      });
-
-      var rate = q('.qp-rate');
-      if (rate) rate.onclick = function () {
-        var i = QP_RATES.indexOf(Number(v.playbackRate) || 1);
-        i = (i < 0 ? 3 : i + 1) % QP_RATES.length;
-        try { v.playbackRate = QP_RATES[i]; } catch (e) { /* 忽略 */ }
-        rate.textContent = rateLabel(QP_RATES[i]);
-      };
-
-      var pip = q('.qp-pip');
-      if (pip) {
-        if (document.pictureInPictureEnabled && v.requestPictureInPicture) {
-          pip.onclick = function () { togglePip(S); };
-        } else {
-          pip.hidden = true;
-        }
-      }
-
-      var fs = q('.qp-fs');
-      if (fs) fs.onclick = function () { toggleFs(S); };
-
-      var nextBtn = q('.qp-next');
-      if (nextBtn) nextBtn.onclick = function () { goNext(S, false); };
-      var cancelBtn = q('.qp-cancel');
-      if (cancelBtn) cancelBtn.onclick = function () { cancelNext(S); };
-
-      var epsSec = q('.qp-eps');
-      var epsToggle = q('.qp-eps-toggle');
-      if (epsToggle) epsToggle.onclick = function () { toggleSec(epsSec, '.qp-eps-toggle'); };
-      var linesSec = q('.qp-lines');
-      var linesToggle = q('.qp-lines-toggle');
-      if (linesToggle) linesToggle.onclick = function () { toggleSec(linesSec, '.qp-lines-toggle'); };
-
-      var epsList = q('.qp-eps-list');
-      if (epsList) epsList.addEventListener('click', function (ev) {
-        var t = ev.target;
-        var b = t && t.closest ? t.closest('.qp-ep') : null;
-        if (!b || !alive(S)) return;
-        var ep = Number(b.getAttribute('data-ep'));
-        if (!(ep > 0) || ep === Number(S.ep)) return;
-        S.ep = ep;
-        renderEps(S, S.epsHint);
-        updateSub(S);
-        if (window.innerWidth <= 760) setSecOpen(epsSec, '.qp-eps-toggle', false);   // 手机上点完自动收起
-        if (typeof S.ctx.onPickEp === 'function') S.ctx.onPickEp(ep);
-      });
-
-      var lineList = q('.qp-line-list');
-      if (lineList) lineList.addEventListener('click', function (ev) {
-        var t = ev.target;
-        if (!t || !t.classList || !alive(S)) return;
-        if (t.classList.contains('qp-line-del')) {
-          var di = Number(t.getAttribute('data-i'));
-          var dl = S.lines[di];
-          if (!dl || dl.kind !== 'byo') return;
-          delByo(S.id, dl.url);
-          S.lines.splice(di, 1);
-          if (di < S.lineIdx) S.lineIdx -= 1;
-          else if (di === S.lineIdx) S.lineIdx = -1;
-          renderLines(S);
-          updateSub(S);
-          return;
-        }
-        if (t.classList.contains('qp-line')) {
-          var i = Number(t.getAttribute('data-i'));
-          if (!(i >= 0) || i >= S.lines.length) return;
-          for (var k = 0; k < S.lines.length; k++) S.lines[k].tried = false;
-          startLine(S, i);
-        }
-      });
-
-      var urlIn = q('.qp-line-url');
-      var labIn = q('.qp-line-label');
-      var addBtn = q('.qp-line-add');
-      if (addBtn) addBtn.onclick = function () {
-        if (!alive(S)) return;
-        var url = String((urlIn && urlIn.value) || '').trim();
-        var label = String((labIn && labIn.value) || '').trim();
-        if (!/^https?:\/\//i.test(url)) {
-          var old = addBtn.textContent;
-          addBtn.textContent = '请粘贴 http(s) 直链';
-          setTimeout(function () { if (addBtn.isConnected) addBtn.textContent = old; }, 1400);
-          return;
-        }
-        var type = typeOf(url);
-        saveByo(S.id, { label: label || labelOf(url), url: url, type: type });
-        if (urlIn) urlIn.value = '';
-        if (labIn) labIn.value = '';
-        var idx = addLine(S, { url: url, label: label, kind: 'byo' });
-        for (var k = 0; k < S.lines.length; k++) S.lines[k].tried = false;
-        renderLines(S);
-        startLine(S, idx);
-      };
-
-      /* 键盘快捷键只在播放器（或其内部控件）获得焦点时生效，不做全局监听 */
-      root.addEventListener('keydown', function (ev) {
-        if (!alive(S)) return;
-        var t = ev.target;
-        var tag = t && t.tagName ? String(t.tagName).toUpperCase() : '';
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;   // 滑块/输入框自己处理方向键
-        var k = ev.key;
-        if (k === ' ' || k === 'Spacebar') {
-          if (tag === 'BUTTON' || tag === 'A') return;    // 让获得焦点的按钮自己响应空格
-          ev.preventDefault();
-          togglePlay(S);
-        } else if (k === 'ArrowLeft') {
-          ev.preventDefault(); seekBy(S, -5);
-        } else if (k === 'ArrowRight') {
-          ev.preventDefault(); seekBy(S, 5);
-        } else if (k === 'ArrowUp') {
-          ev.preventDefault(); bumpVolume(S, 0.1);
-        } else if (k === 'ArrowDown') {
-          ev.preventDefault(); bumpVolume(S, -0.1);
-        } else if (k === 'f' || k === 'F') {
-          ev.preventDefault(); toggleFs(S);
-        } else if (k === 'm' || k === 'M') {
-          ev.preventDefault(); S.v.muted = !S.v.muted;
-        }
-      });
-
-      /* 关弹窗 / 切后台：立刻落一次进度（70-modal.js 直接摘节点，靠 isConnected 兜底收尾） */
-      S.onVis = function () {
-        if (document.visibilityState === 'hidden') report(S, true);
-      };
-      S.onPageHide = function () { report(S, true); };
-      document.addEventListener('visibilitychange', S.onVis);
-      window.addEventListener('pagehide', S.onPageHide);
     }
-
-    function togglePlay(S) {
-      if (!alive(S)) return;
-      var v = S.v;
-      if (v.paused) {
-        var p = v.play();
-        if (p && p.then) p.then(null, function () { showBigPlay(S); });
-      } else {
-        v.pause();
-      }
-    }
-
-    function seekBy(S, delta) {
-      var v = S.v, d = Number(v.duration) || 0;
-      if (!(d > 0)) return;
-      try { v.currentTime = Math.max(0, Math.min(d, (Number(v.currentTime) || 0) + delta)); } catch (e) { /* 忽略 */ }
-    }
-
-    function bumpVolume(S, delta) {
-      var v = S.v;
-      var x = Math.max(0, Math.min(1, (Number(v.volume) || 0) + delta));
-      v.volume = x;
-      if (x > 0 && v.muted) v.muted = false;
-    }
-
-    /* ---------------- 打开 / 关闭 ---------------- */
-    function open(ctx) {
-      var m = ctx && ctx.m;
-      if (!m) return 0;
-      close();                                    // 同一弹窗只允许一个实例
-      /* 摘掉已有 .trailer（预告 / 上一次播放）：先 pause + 断源再移除，否则某些浏览器摘了节点还在出声 */
-      var old = m.querySelector('.trailer');
-      if (old && old.parentNode) {
-        var ov = old.querySelector('video');
-        if (ov) {
-          try { ov.pause(); ov.removeAttribute('src'); if (ov.load) ov.load(); } catch (e) { /* 忽略 */ }
-        }
-        old.parentNode.removeChild(old);
-      }
-
-      var root = document.createElement('div');
-      root.className = 'trailer qplayer';
-      root.setAttribute('data-state', 'loading');
-      root.setAttribute('tabindex', '0');
-      root.innerHTML = TPL;
-
-      var v = root.querySelector('.qp-video');
-      var S = {
-        tok: ++SEQ,
-        ctx: ctx || {},
-        m: m,
-        root: root,
-        v: v,
-        id: String(ctx.id == null ? '' : ctx.id),
-        title: String(ctx.title || ''),
-        ep: Number(ctx.ep) > 0 ? Number(ctx.ep) : 0,
-        fid: '',
-        state: 'loading',
-        lines: [],
-        lineIdx: -1,
-        eps: [],
-        epsHint: '',
-        hlsOk: hlsSupported(v),
-        resumeAt: Math.max(0, Number(ctx.startAt) || 0),
-        resumeDone: false,
-        lastMs: 0,
-        lastPos: 0,
-        seekDrag: false,
-        pending: false,
-        nextTimer: 0,
-        nextLeft: 0,
-        stallTimer: 0,
-        seekTimer: 0,
-        dead: false
-      };
-      cur = S;
-
-      root.querySelector('.qp-title').textContent = S.title || '在线播放';
-      bind(S);
-      renderEps(S, S.eps.length ? '' : '正在读取选集…');
-      renderLines(S);
-      updateSub(S);
-
-      /* 官方源（ctx.sources 里带 url 的才可播；没 url 的等 75 取到地址后调 play） */
-      (ctx.sources || []).forEach(function (src) { if (src && src.url) addLine(S, src); });
-      renderLines(S);
-
-      m.appendChild(root);
-      try { root.scrollIntoView({ block: 'center' }); } catch (e) { /* 忽略 */ }
-
-      /* 弹幕：必须在入 DOM 之后初始化 —— dmSet 会立刻启动 rAF，alive() 需要 root.isConnected 为真 */
-      dmInit(S, ctx);
-
-      if (S.lines.length) startLine(S, 0);
-      else setState(S, 'loading', { msg: '正在准备播放…' });
-      return S.tok;
-    }
-
-    function close() {
-      var S = cur;
-      if (!S) return;                             // 幂等
-      cur = null;
-      S.dead = true;
-      if (S.nextTimer) { clearInterval(S.nextTimer); S.nextTimer = 0; }
-      clearStall(S);
-      if (S.seekTimer) { clearTimeout(S.seekTimer); S.seekTimer = 0; }
-      dmClear(S);                                 // 弹幕：停 rAF + 清引用，防泄漏
-      try { document.removeEventListener('visibilitychange', S.onVis); } catch (e) { /* 忽略 */ }
-      try { window.removeEventListener('pagehide', S.onPageHide); } catch (e) { /* 忽略 */ }
-      try {
-        S.v.pause();
-        S.v.removeAttribute('src');
-        if (S.v.load) S.v.load();                 // 断流：否则移除节点后仍可能继续取流
-      } catch (e) { /* 忽略 */ }
-      if (S.root && S.root.parentNode) S.root.parentNode.removeChild(S.root);
-      S.lines = [];
-      S.eps = [];
-    }
-
-    function isCurrent(tok) {
-      return !!cur && !!tok && cur.tok === tok && isConn(cur.root);
-    }
-    function isConn(node) { return !!(node && node.isConnected); }
-
-    /* ---------------- 对外弹幕 API（同一时刻只有一个播放器，统一作用在 cur 上） ---------------- */
-    function setDanmaku(items) { return cur && cur.dm ? dmSet(cur, items) : 0; }
-    function toggleDanmaku(on) {
-      if (!cur || !cur.dm) return false;
-      return dmToggle(cur, on === undefined ? !cur.dm.on : !!on);
-    }
-    function danmakuOn() { return !!(cur && cur.dm && cur.dm.on); }
-    function clearDanmaku() { if (cur && cur.dm) dmClear(cur); }
 
     return {
-      open: open,
-      close: close,
-      state: state,
-      play: play,
-      setSources: setSources,
-      setEpisodes: setEpisodes,
-      setFid: setFid,
-      pause: pause,
-      isCurrent: isCurrent,
-      setDanmaku: setDanmaku,
-      toggleDanmaku: toggleDanmaku,
-      danmakuOn: danmakuOn,
-      clearDanmaku: clearDanmaku,
-      _gate: gate,                                 // 离线自检：进度节流是纯函数
-      _lines: { of: byoOf, save: saveByo, del: delByo },
-      /* 离线自检：配置读写 / 过滤都是纯函数，stats 暴露当前实例的实际参数 */
-      _dm: {
-        def: function () { return dmCfgNorm(null); },
-        cfg: dmCfg, norm: dmCfgNorm, filter: dmFilter,
-        apply: function () { return cur && cur.dm ? dmApply(cur) : 0; },
-        panel: function (on) { return cur ? dmPanelShow(cur, on) : false; },
-        stats: function () {
-          var dm = cur && cur.dm;
-          if (!dm) return null;
-          return {
-            on: dm.on, raw: (dm.raw || []).length, items: dm.items.length,
-            rows: dm.rows, rowsAll: dm.rowsAll, speed: dm.speed, fs: dm.fs,
-            area: dm.area, alpha: dm.alpha, cid: dm.cid
-          };
+      /* 打开播放器骨架：ctx = {m, id, title, ep, sources, startAt, onProgress, onPickEp, onNext, onEnded, onRetry, dm} */
+      open: function (ctx) {
+        GEN += 1;
+        CUR = { gen: GEN, m: ctx.m, ctx: ctx, ep: Number(ctx.ep) > 0 ? Number(ctx.ep) : 1, fid: '', last: 0, eps: [] };
+        clear();
+        status(stHtml('loading', { msg: '准备中…' }));
+        return { gen: GEN };
+      },
+      /* 状态行：loading / transcoding / error / login / rebind / none / quota */
+      state: function (kind, opt) {
+        if (!CUR) return;
+        status(stHtml(kind, opt));
+        wireStatus(kind, opt);
+        renderEps();
+      },
+      /* 选集：list = [{ep, name?, magnet?…}]；只渲染集号按钮（点选走 ctx.onPickEp） */
+      setEpisodes: function (list, ep, hint) {
+        if (!CUR) return;
+        CUR.eps = list || [];
+        if (Number(ep) > 0) CUR.ep = Number(ep);
+        var s = slot();
+        if (!s) return;
+        var row = s.querySelector('.nv-eps');
+        if (!row) {
+          row = document.createElement('div');
+          row.className = 'nv-eps';
+          s.appendChild(row);
         }
+        if (hint && !CUR.eps.length) {
+          row.innerHTML = '<span class="nv-hint">' + esc(hint) + '</span>';
+        } else {
+          renderEps();
+        }
+      },
+      setFid: function (fid) { if (CUR) CUR.fid = String(fid || ''); },
+      pause: function () {
+        var s = slot();
+        var v = s && s.querySelector('video');
+        if (v && !v.paused) { try { v.pause(); } catch (e) { } }
+        if (CUR && CUR.last) report((slot() && slot().querySelector('video') || {}).currentTime || 0, (slot() && slot().querySelector('video') || {}).duration || 0, false);
+      },
+      /* 起播：url = 直链（夸克 CDN / B 站 upos），startAt = 续播秒数 */
+      play: function (url, label, opt) {
+        if (!CUR || !url) return;
+        mountVideo(url, (opt && Number(opt.startAt)) || 0);
+      },
+      isCurrent: function (tok) { return !!(tok && CUR && tok.gen === CUR.gen); },
+      close: function () {
+        if (CUR) { try { report(0, 0, false); } catch (e) { } }
+        CUR = null;
+        clear();
       }
     };
   })();
-  /* 控制台调试入口；75-quarkplay.js 与 70-modal.js 走同一 IIFE 作用域的 QPlayer，不依赖 window */
   window.QPlayer = QPlayer;
