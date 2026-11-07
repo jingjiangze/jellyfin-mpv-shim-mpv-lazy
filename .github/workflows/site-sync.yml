@@ -73,19 +73,6 @@ jobs:
           PAN_HUB_PASS: ${{ secrets.PAN_HUB_PASS }}
         run: python -u fetch_magnet.py
 
-      - name: Fill year catalogs (2000-now)
-        timeout-minutes: 25
-        continue-on-error: true
-        working-directory: site-src
-        env:
-          NO_LOCAL_PROXY: "1"
-          YEARS_PER_RUN: "9"
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -u fetch_years.py
-
-      # 评分分布：Bangumi 旧接口的 rating.count（v0 没有分布字段）。
-      # 只在 CI 跑 —— 本机/盒子到 api.bgm.tv 一律 000，runner 直连 0.16s。
-      # 每轮补 RATE_MAX 条，已有 rc 的跳过，多轮收敛。
       - name: Fill rating distributions
         timeout-minutes: 25
         continue-on-error: true

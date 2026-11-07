@@ -3572,3 +3572,183 @@ html { scroll-behavior: smooth; }
   #main, #main .card, #main .mcard { animation: none; }
   html { scroll-behavior: auto; }
 }
+
+/* ================================================================ 26 原生播放器宿主（76）
+   自研皮肤已删：状态行 + 集数按钮用原生按钮；视频控制条用浏览器自带。 */
+.nv-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s3);
+  min-height: 200px;
+  padding: var(--s4);
+  border-radius: 2px;
+  background: var(--card2);
+  text-align: center;
+  color: var(--fg2);
+  font-size: var(--fs-sm);
+}
+
+.nv-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  justify-content: center;
+}
+
+.nv-eps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--s2);
+}
+
+.nv-ep {
+  min-width: 40px;
+  height: 32px;
+  padding: 0 var(--s2);
+  border-radius: 2px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--fg2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.nv-ep:hover { border-color: var(--accent-line); color: var(--accent); }
+.nv-ep.on {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.nv-hint {
+  font-size: var(--fs-xs);
+  color: var(--dim2);
+}
+
+/* ================================================================ 27 方舟第三层：HUD 线框
+   只加「技术感」的细线与小件，不动布局：四角 L 形括号、hero 左侧橙竖线、
+   等宽数字、信息表小方块、区块副标题的 // 前缀、集数按钮切角。
+   角括号一律 pointer-events:none，不挡点击。 */
+.dp-player:not(:empty),
+.nv-status,
+.trailer-slot {
+  position: relative;
+}
+
+.dp-player:not(:empty)::before,
+.dp-player:not(:empty)::after,
+.nv-status::before,
+.nv-status::after,
+.trailer-slot::before,
+.trailer-slot::after {
+  content: '';
+  position: absolute;
+  z-index: 3;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.dp-player:not(:empty)::before,
+.nv-status::before,
+.trailer-slot::before {
+  top: 6px;
+  left: 6px;
+  border-top: 2px solid var(--ark);
+  border-left: 2px solid var(--ark);
+}
+
+.dp-player:not(:empty)::after,
+.nv-status::after,
+.trailer-slot::after {
+  right: 6px;
+  bottom: 6px;
+  border-right: 2px solid var(--ark);
+  border-bottom: 2px solid var(--ark);
+}
+
+/* 详情页 hero：左侧一条自上而下渐隐的橙竖线（方舟的分区线） */
+.dp .mhero {
+  padding-left: var(--s4);
+  border-left: 0;
+}
+
+.dp .mhero::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: var(--s4);
+  bottom: var(--s4);
+  width: 2px;
+  background: linear-gradient(180deg, var(--ark), rgba(255, 138, 0, .08));
+  pointer-events: none;
+}
+
+/* 评分数字：等宽 + 收紧字距（HUD 数字墙的观感） */
+.mrate-line .score {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.5px;
+}
+
+/* 信息表：每条前面一个小橙方块 */
+.infobox dt {
+  position: relative;
+  padding-left: 12px;
+}
+
+.infobox dt::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  background: var(--ark);
+}
+
+/* 区块副标题（计数 / 更多）：技术标记前缀 */
+.sec-h .sec-sub::before {
+  content: '//';
+  margin-right: 6px;
+  color: var(--ark);
+  font-weight: 600;
+}
+
+/* 集数按钮：右下切角 */
+.nv-ep {
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%);
+}
+
+/* 手机端：hero 竖线内缩、角括号缩小 */
+@media (max-width: 760px) {
+  .dp .mhero {
+    padding-left: var(--s3);
+  }
+
+  .dp .mhero::before {
+    top: var(--s3);
+    bottom: var(--s3);
+  }
+
+  .dp-player:not(:empty)::before,
+  .nv-status::before,
+  .trailer-slot::before,
+  .dp-player:not(:empty)::after,
+  .nv-status::after,
+  .trailer-slot::after {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+/* 播放器槽与磁力行同处 .dp-watch 的两列：默认 stretch 会把槽拉到磁力行的高度
+   （实测 520px），未开播时状态行只占 200px，下方漏出透明空格。顶对齐各走各的高度。 */
+.dp-watch {
+  align-items: start;
+}
