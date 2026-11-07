@@ -603,12 +603,31 @@
   var DEEP_REDIRECT = false;
 
   function bootAnime() {
-    return jd('anime.json').then(function (d) {
+    /* anime.json 走 Cache API 的 SWR：切页不再等 940KB 下载（命中 <100ms），后台静默刷新 */
+    return jdSwr('anime.json').then(function (d) {
+      if (!d) throw new Error('data anime.json 三源都失败');
       ANI.poster = d.poster || ''; ANI.posterSd = d.posterSd || '';
       ANI.rows = d.rows || [];
       ANI.extra = d.extra || {}; ANI.year = d.year || new Date().getFullYear();
     });
   }
+
+  /* 悬停预热：鼠标停在卡片上 80ms 就预取详情分片（点进去秒开）。
+     detailShard 自带去重（shardCache），这里只做 80ms 防抖 + 400ms 限速。 */
+  var PF_LAST = 0, PF_TIMER = 0, PF_ID = 0;
+  document.addEventListener('mouseover', function (e) {
+    var c = e.target.closest && e.target.closest('.card[data-id]');
+    if (!c || PAGE === 'detail') return;
+    var id = Number(c.dataset.id);
+    if (!id || id === PF_ID) return;
+    PF_ID = id;
+    clearTimeout(PF_TIMER);
+    PF_TIMER = setTimeout(function () {
+      if (Date.now() - PF_LAST < 400) return;
+      PF_LAST = Date.now();
+      try { detailShard(id); } catch (e) { /* 预热失败不提示 */ }
+    }, 80);
+  });
 
   document.addEventListener('click', function (e) {
     /* 豆瓣 / TMDB 卡片：跳到同款整页详情（/detail?ext=db&i=N），与番剧一致。

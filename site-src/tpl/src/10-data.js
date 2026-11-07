@@ -33,6 +33,52 @@
   var ANI = { poster: '', posterSd: '', rows: [], extra: {}, year: 0 };
   var shardCache = {};
 
+  /* ---- 大数据文件缓存（Cache API，stale-while-revalidate）----
+     页面切换慢的主因不是动画，是每次导航都重新下载 + 解析 940KB 的 anime.json。
+     这里把大数据文件存进 Cache API：命中先给（切页 <100ms），后台再回源刷新，
+     下一次切换就是新的。build 号变了（站点刚部署）也会先给旧的再刷，最多旧一个视图。 */
+  var DCACHE = 'anime-data-v1';
+  var DCACHE_FRESH = 30 * 60 * 1000;      // 30 分钟内视为新鲜，不回源
+  function dcache() {
+    return (typeof caches !== 'undefined' && caches.open) ? caches.open(DCACHE) : null;
+  }
+  function dcacheGet(name, cb) {
+    var c = dcache();
+    if (!c) { cb(null); return; }
+    c.then(function (store) {
+      return store.match('swr/' + name).then(function (hit) {
+        if (!hit) { cb(null); return; }
+        var ts = Number(hit.headers.get('x-ts')) || 0;
+        return hit.json().then(function (d) {
+          cb(d, ts && (Date.now() - ts) < DCACHE_FRESH);
+        }, function () { cb(null); });
+      });
+    }, function () { cb(null); }).catch(function () { cb(null); });
+  }
+  function dcachePut(name, data) {
+    var c = dcache();
+    if (!c || data == null) return;
+    c.then(function (store) {
+      var h = { headers: { 'content-type': 'application/json', 'x-ts': String(Date.now()) } };
+      store.put('swr/' + name, new Response(JSON.stringify(data), h));
+    }).catch(function () { });
+  }
+  /* 先给缓存，再回源刷新（本视图不重渲染，下一页就是新的）。缓存没有则直取。 */
+  function jdSwr(name) {
+    return new Promise(function (resolve) {
+      var done = false;
+      function settle(v) { if (!done) { done = true; resolve(v); } }
+      dcacheGet(name, function (cached, fresh) {
+        if (cached) settle(cached);
+        if (cached && fresh) return;
+        jd(name).then(function (d) {
+          if (d) dcachePut(name, d);
+          settle(d);
+        }, function () { if (!cached) settle(null); });
+      });
+    });
+  }
+
   var TAGCNT = {}, TAGCNT_LOADING = false, TAGCNT_WAIT = [];
   /* 标签全站计数：单独一份小表。首次拉取成功/失败都要复位 LOADING（旧实现成功分支
      不复位，返回空表后永远不再重试）；带回调的调用方可在数据到位后重绘。 */
