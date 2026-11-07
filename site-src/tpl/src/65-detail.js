@@ -428,7 +428,8 @@
        没有可用播放源时它自己会写状态，这里不预先判。 */
     var wb = m.querySelector('#watch');
     if (wb) wb.onclick = function () {
-      /* 播放顺序（2026-11-07）：YouTube 官方正片 → 夸克转存（幕后，不在面板列出） */
+      /* 播放顺序（2026-11-07）：YouTube 官方正片 → B 站官方嵌入 → 夸克转存（幕后）。
+         用户不再手动切换；面板行保留为手动覆盖入口。 */
       if (window.__srcStart && window.__srcStart(m, id, title, curEp)) return;
       openQuarkPlay(m.querySelector('#dpPlayer') || m, id, title);
     };

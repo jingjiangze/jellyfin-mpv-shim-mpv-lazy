@@ -318,6 +318,20 @@
       return;
     }
     if (key === 'bili') {
+      var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
+      var bvid = exb && exb[5];
+      if (bvid) {
+        if (window.__qpAbort === 'function') window.__qpAbort();
+        if (window.__biliAbort === 'function') window.__biliAbort();
+        if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
+        var slot = box.querySelector('#dpPlayer') || box;
+        slot.innerHTML = '<iframe src="https://player.bilibili.com/player.html?bvid='
+          + encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1"'
+          + ' scrolling="no" frameborder="no" framespacing="0" allowfullscreen="true"'
+          + ' style="width:100%;height:100%;border:0;display:block"></iframe>';
+        srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
+        return;
+      }
       if (typeof biliPlayEp === 'function') biliPlayEp(box, id, title, epNo);
       return;
     }

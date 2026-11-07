@@ -164,6 +164,15 @@ def build_anime():
     shards = load_shards()
     YT_VIDEOS = load_yt_videos()
     print(f"  yt: 官方频道视频 {len(YT_VIDEOS)} 条")
+    # B 站官方嵌入：fetch_bili.py 的 bvid 索引（id -> {bvid,title,…}）
+    BILI = {}
+    bp = SITE / "bili.json"
+    if bp.is_file():
+        try:
+            BILI = json.loads(bp.read_text(encoding="utf-8")) or {}
+        except (ValueError, OSError):
+            BILI = {}
+    print(f"  bili: bvid 索引 {len(BILI)} 条")
 
     # AniList 补充/回退：按标题归一化对齐到 Bangumi 条目
     al = {}
@@ -239,16 +248,17 @@ def build_anime():
         # 固定槽位 [banner, img, trailer, next_at]，缺项填 null —— 前端按 ex[1]
         # 取封面、ex[2] 取预告。以前是「有才 append」，缺 banner 时整体前移，
         # 实测 32 条（名侦探柯南 / 海贼王等）把 next_at 时间戳当成了 YouTube id。
-        a = al.get(norm(cn)) or al.get(norm(name))
-        if a:
-            # 第 5 槽 = 官方 YouTube 正片分集 [[标题, 链接], …]。
-            # 两路来源：RSS 频道匹配（主）+ AniList streamingEpisodes（新番数据已近枯竭，保底）。
+        a = al.get(norm(cn)) or al.get(norm(name)) or {}
+        bvid = (BILI.get(str(sid)) or {}).get("bvid")
+        if a or bvid:
+            # 第 5 槽 = 官方 YouTube 正片分集 [[标题, 链接], …]（RSS 频道匹配为主）。
+            # 第 6 槽 = B 站官方嵌入的 bvid（fetch_bili.py 索引）。
             # 空数组也写入：前端据 ex[4] 区分「无官方片源」与「还没探测」。
             _yt = yt_for(norm(cn or name), YT_VIDEOS) or (a.get("yt") or [])
             ex = [a.get("banner") or None, a.get("img") or None,
                   a.get("trailer") or None, a.get("next_at") or None,
-                  _yt]
-            if any(v is not None for v in ex):
+                  _yt, bvid or None]
+            if any(v not in (None,) and v != [] for v in ex):
                 extra[str(sid)] = ex
 
     _yt_n = sum(1 for v in extra.values() if isinstance(v, list) and len(v) > 4 and v[4])
