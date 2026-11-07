@@ -284,15 +284,26 @@ return '<section class="msect"><div class="mhead"><h2>' + title + '</h2><span>'
 + list.length + ' 部</span></div><div class="grid mgrid">'
 + list.map(function (x, i) { return mcard(x, kind, i); }).join('') + '</div></section>';
 }
-var HOME = { y: 0, q: 0 };
+var HOME = { y: 0, q: 0, wd: 0 };   // wd: 0=跟随今天，1-7=用户手选星期
 var QS = [1, 2, 3, 4];
 function seasonOf(m) { return m ? Math.ceil(m / 3) : 0; }
 function yearRows(y) { return ANI.rows.filter(function (r) { return r[4] === y; }); }
 function byScore(a, b) { return (b[7] || 0) - (a[7] || 0); }
 function wdToday() { return ((new Date().getDay() + 6) % 7) + 1; }
+function wdPick() { return HOME.wd || wdToday(); }
 function todayRows() {
-var wd = wdToday();
+var wd = wdPick();
 return yearRows(HOME.y).filter(function (r) { return r[6] === wd; }).sort(byScore);
+}
+function weekTabsHtml() {
+var wd = wdPick();
+var cnt = {};
+yearRows(HOME.y).forEach(function (r) { if (r[6]) cnt[r[6]] = (cnt[r[6]] || 0) + 1; });
+return '<div class="wk-tabs">' + WD.map(function (d, i) {
+var n = i + 1;
+return '<button class="wk-tab' + (wd === n ? ' on' : '') + '" type="button" data-wd="' + n + '">'
++ d + '<i>' + (cnt[n] || 0) + '</i></button>';
+}).join('') + '</div>';
 }
 function seasonRows() {
 return yearRows(HOME.y).filter(function (r) {
@@ -494,11 +505,16 @@ return '<section class="block"><div class="sec-h"><h2>继续观看</h2>'
 function renderHome() {
 if (!HOME.y) homeDefaults();
 var main = $('#main');
-var wd = wdToday();
+var wd = wdPick();
 var seasonPool = seasonRows();
 var cont = contBlock();
-var today = block('今天更新 · ' + (WD[wd - 1] || ''), todayRows().slice(0, 7),
+var todayTitle = HOME.wd ? (WD[wd - 1] + ' 更新') : ('今天更新 · ' + (WD[wd - 1] || ''));
+var today = block(todayTitle, todayRows().slice(0, 7),
 '<a class="morelink" href="/anime">全部番剧 ›</a>');
+if (today) {
+var tpos = today.indexOf('<div class="grid');
+if (tpos > 0) today = today.slice(0, tpos) + weekTabsHtml() + today.slice(tpos);
+}
 var season = block('本季新番 · ' + (HOME.q ? '第' + HOME.q + '季度' : HOME.y), seasonPool.slice(0, 7),
 '<a class="morelink" href="/anime">更多 ›</a>');
 var top = block('本季高分', topRows(7), '<a class="morelink" href="/rank">排行榜 ›</a>');
@@ -510,6 +526,13 @@ if (BB_TIMER) { clearInterval(BB_TIMER); BB_TIMER = 0; }   // 上一代的自动
 main.innerHTML = (picks.length ? bannerCarousel(picks) : '')
 + '<div class="home-main">' + cont + today + season + top + hot + '</div>';
 if (picks.length) initCarousel(main, picks, gen);
+main.querySelectorAll('[data-wd]').forEach(function (b) {
+b.onclick = function () {
+var n = Number(b.getAttribute('data-wd')) || 0;
+HOME.wd = n;
+renderHome();
+};
+});
 }
 function homeDefaults() {
 var y = ANI.year || new Date().getFullYear();
@@ -3634,6 +3657,61 @@ ANI.rows = d.rows || [];
 ANI.extra = d.extra || {}; ANI.year = d.year || new Date().getFullYear();
 });
 }
+var NAVBAR = null;
+function navStart() {
+try { sessionStorage.setItem('navp', '1'); } catch (e) { /* 隐私模式忽略 */ }
+if (!NAVBAR) {
+NAVBAR = document.createElement('div');
+NAVBAR.className = 'nav-bar';
+NAVBAR.innerHTML = '<i></i>';
+document.body.appendChild(NAVBAR);
+}
+NAVBAR.className = 'nav-bar on';
+}
+function navFinish() {
+var flagged = false;
+try {
+flagged = sessionStorage.getItem('navp') === '1';
+sessionStorage.removeItem('navp');
+} catch (e) { /* 隐私模式忽略 */ }
+if (!flagged) return;
+if (!NAVBAR) {
+NAVBAR = document.createElement('div');
+NAVBAR.className = 'nav-bar';
+NAVBAR.innerHTML = '<i></i>';
+document.body.appendChild(NAVBAR);
+}
+NAVBAR.className = 'nav-bar done';
+setTimeout(function () { if (NAVBAR) NAVBAR.className = 'nav-bar'; }, 320);
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', navFinish);
+else navFinish();
+window.addEventListener('pageshow', navFinish);
+document.addEventListener('click', function (e) {
+var a = e.target.closest && e.target.closest('a[href]');
+if (!a || a.target === '_blank' || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+var href = a.getAttribute('href') || '';
+if (href.charAt(0) !== '/' || href.charAt(1) === '/') return;   // 只站内绝对路径
+if (a.hasAttribute('download')) return;
+navStart();
+}, true);
+var PF_HREF = {};
+document.addEventListener('mouseover', function (e) {
+var a = e.target.closest && e.target.closest('a[href^="/"]');
+if (!a) return;
+var href = a.getAttribute('href') || '';
+if (!href || PF_HREF[href] || href.indexOf('/api/') === 0) return;
+PF_HREF[href] = 1;
+setTimeout(function () {
+try {
+var l = document.createElement('link');
+l.rel = 'prefetch';
+l.as = 'document';
+l.href = href;
+document.head.appendChild(l);
+} catch (err) { /* 预取失败不影响任何功能 */ }
+}, 120);
+});
 var PF_LAST = 0, PF_TIMER = 0, PF_ID = 0;
 document.addEventListener('mouseover', function (e) {
 var c = e.target.closest && e.target.closest('.card[data-id]');
@@ -3653,6 +3731,7 @@ var mc = e.target.closest && e.target.closest('.mcard');
 if (mc) {
 if (e.metaKey || e.ctrlKey || e.button !== 0) return;
 e.preventDefault();
+navStart();
 location.href = '/detail?ext=' + encodeURIComponent(mc.dataset.ext || 'db')
 + '&i=' + encodeURIComponent(mc.dataset.i || '0');
 return;
@@ -3661,6 +3740,7 @@ var c = e.target.closest && e.target.closest('.card');
 if (!c) return;
 if (e.metaKey || e.ctrlKey || e.button !== 0) return;
 e.preventDefault();
+navStart();
 location.href = '/detail?id=' + encodeURIComponent(c.dataset.id || '');
 });
 $('#mask') && $('#mask').addEventListener('click', function (e) { if (e.target.id === 'mask') close(); });
