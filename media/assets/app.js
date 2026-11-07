@@ -2697,6 +2697,7 @@ srcCls(btn, 'on', !!opt.on);
 srcCls(btn, 'is-bad', !!opt.bad);
 }
 row.setAttribute('data-fail', opt.retry ? '1' : '0');
+row.hidden = !!opt.hide;
 var bind = row.querySelector('.btn');
 if (bind) bind.hidden = !opt.bind;
 }
@@ -2707,7 +2708,7 @@ var epNo = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
 var y = data && data.yt;
 if (!data) srcSetRow(list, 'yt', 'YouTube 官方 · 检测中…');
 else if (y.kind === 'has') srcSetRow(list, 'yt', 'YouTube 官方 · ' + y.eps.length + ' 集可看', { on: true });
-else srcSetRow(list, 'yt', 'YouTube 官方 · 本季无正片');
+else srcSetRow(list, 'yt', '', { hide: true });      // 没有官方正片：整行收起
 var b = data && data.bili;
 if (!data) srcSetRow(list, 'bili', 'B 站 · 检测中…');
 else if (b.kind === 'bound') {
