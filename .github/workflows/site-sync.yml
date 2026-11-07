@@ -195,15 +195,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python -u site-src/push_shards.py
 
-      # 官方频道正片索引（木棉花 / Ani-One / 回歸線 的 YouTube RSS，免 key）。
-      # 每频道只给最新 15 条 —— 覆盖「追当季」；整季回填要 YouTube Data API（等 key）。
+      # 官方频道正片索引：由盒子的 cron（每 4h）经公共池隧道拉 YouTube RSS，
+      # 落 /var/www/yt/yt.json 经 nginx /ytdata/ 暴露 —— runner 直连会被 YouTube 404。
       - name: Fetch official YouTube episodes
-        timeout-minutes: 6
+        timeout-minutes: 4
         continue-on-error: true
         working-directory: site-src
-        env:
-          YT_API_KEY: ${{ secrets.YT_API_KEY }}
-        run: python -u fetch_yt_rss.py
+        run: |
+          curl -sf -m 30 "http://120.48.56.189/ytdata/yt.json" -o site/yt.json || true
+          python -c "import json,pathlib;p=pathlib.Path('site/yt.json');d=json.loads(p.read_text()) if p.exists() else {};assert isinstance(d.get('videos'),list)" 2>/dev/null || rm -f site/yt.json
+          echo "yt videos: $(python -c "import json;print(len(json.load(open('site/yt.json')).get('videos',[])))" 2>/dev/null || echo 0)
 
       - name: Build pages
         timeout-minutes: 6
