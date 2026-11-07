@@ -110,12 +110,72 @@
     return true;
   }
 
+  /* B 站官方嵌入：extra[5] = bvid（build 期由 bili.json 对齐）。返回是否接管。 */
+  function srcEmbedBili(box, id) {
+    var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
+    var bvid = exb && exb[5];
+    if (!bvid) return false;
+    if (window.__qpAbort === 'function') window.__qpAbort();
+    if (window.__biliAbort === 'function') window.__biliAbort();
+    if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
+    var slot = box.querySelector('#dpPlayer') || box;
+    slot.innerHTML = '<iframe src="https://player.bilibili.com/player.html?bvid='
+      + encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1"'
+      + ' scrolling="no" frameborder="no" framespacing="0" allowfullscreen="true"'
+      + ' style="width:100%;height:100%;border:0;display:block"></iframe>';
+    srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
+    return true;
+  }
+
+  /* YouTube 可达性探测（1.8s 超时，结果缓存 10 分钟）：
+     国内直连 youtube.com 会挂起/超时 —— 不做这一步，点「开始观看」会先卡在
+     白屏 iframe 上，用户还得手动切到 B 站。探测用 no-cors 的 204 端点，
+     只判「网络层通不通」，不涉及任何账号。 */
+  var YT_REACH = null;
+  function ytReach() {
+    if (YT_REACH) return YT_REACH;
+    YT_REACH = new Promise(function (resolve) {
+      var done = false;
+      function fin(ok) { if (!done) { done = true; resolve(ok); } }
+      var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctl) ctl.abort(); fin(false); }, 1800);
+      try {
+        fetch('https://www.youtube.com/generate_204', {
+          mode: 'no-cors', cache: 'no-store', signal: ctl ? ctl.signal : undefined
+        }).then(function () { clearTimeout(timer); fin(true); },
+               function () { clearTimeout(timer); fin(false); });
+      } catch (e) { clearTimeout(timer); fin(false); }
+    });
+    setTimeout(function () { YT_REACH = null; }, 10 * 60 * 1000);   // 10 分钟后重新探
+    return YT_REACH;
+  }
+
+  /* 自动播放链：YouTube 官方正片（可达时）→ B 站官方嵌入 → 夸克转存（幕后）。
+     返回 true = 已接管（可能是异步的，先占住播放器槽），false = 让调用方走兜底。 */
   function srcStart(box, id, title, ep) {
     var eps = srcYtEps(id);
     if (eps) {
-      var idx = Math.max(0, Math.min(eps.length - 1, Math.max(1, Math.floor(Number(ep) || 1)) - 1));
-      if (srcEmbedYT(box, (eps[idx] || [])[1], ep)) return true;
+      var epNo = Math.max(1, Math.floor(Number(ep) || 1));
+      var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
+      var slot = box.querySelector('#dpPlayer') || box;
+      srcHint(box, '正在检测 YouTube 可达性…');
+      ytReach().then(function (ok) {
+        if (ok && srcEmbedYT(box, (eps[idx] || [])[1], epNo)) return;
+        if (srcEmbedBili(box, id)) return;                 // 有 bvid：B 站官方嵌入
+        /* 没有 bvid 时看有没有站点登录 + B 站绑定：biliPlayEp 走盒子 /bili/playurl
+           （服务器换直链），国内照样能看。未登录就不叫它，避免弹登录把槽位占空。 */
+        var tk = (typeof authToken === 'function') ? authToken() : '';
+        if (tk && typeof biliPlayEp === 'function') {
+          srcHint(box, 'YouTube 不可达 · 切到 B 站源');
+          biliPlayEp(box, id, title, epNo);
+          return;
+        }
+        srcHint(box, 'YouTube 不可达 · 使用网盘源');
+        if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+      });
+      return true;
     }
+    if (srcEmbedBili(box, id)) return true;
     if (typeof openQuarkPlay === 'function') {
       openQuarkPlay(box.querySelector('#dpPlayer') || box, id, title);   // 磁力转存链路（不在面板列出）
       return true;
@@ -320,20 +380,7 @@
       return;
     }
     if (key === 'bili') {
-      var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
-      var bvid = exb && exb[5];
-      if (bvid) {
-        if (window.__qpAbort === 'function') window.__qpAbort();
-        if (window.__biliAbort === 'function') window.__biliAbort();
-        if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
-        var slot = box.querySelector('#dpPlayer') || box;
-        slot.innerHTML = '<iframe src="https://player.bilibili.com/player.html?bvid='
-          + encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1"'
-          + ' scrolling="no" frameborder="no" framespacing="0" allowfullscreen="true"'
-          + ' style="width:100%;height:100%;border:0;display:block"></iframe>';
-        srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
-        return;
-      }
+      if (srcEmbedBili(box, id)) return;
       if (typeof biliPlayEp === 'function') biliPlayEp(box, id, title, epNo);
       return;
     }
