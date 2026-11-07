@@ -3889,6 +3889,42 @@ if (Number(list[i].ep) === Number(ep) && list[i].magnet) return { kind: 'has' };
 return { kind: 'none' };
 }, function () { return { kind: 'error' }; });
 }
+function srcYtEps(id) {
+var ex = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
+var eps = ex && ex[4];
+return (eps && eps.length) ? eps : null;
+}
+function ytKey(url) {
+var m = /[?&]v=([\w-]{6,})/.exec(url || '') || /youtu\.be\/([\w-]{6,})/.exec(url || '');
+return m ? m[1] : '';
+}
+function srcEmbedYT(box, url, ep) {
+var key = ytKey(url);
+if (!key) return false;
+var slot = box.querySelector('#dpPlayer') || box;
+if (window.__qpAbort === 'function') window.__qpAbort();
+if (window.__biliAbort === 'function') window.__biliAbort();
+if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
+slot.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/'
++ encodeURIComponent(key) + '?autoplay=1&rel=0&modestbranding=1"'
++ ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen'
++ ' style="width:100%;height:100%;border:0;display:block"></iframe>';
+srcHint(box, 'YouTube 官方频道 · 播放器由 YouTube 提供（国内访问需代理，B 站源不受限）');
+return true;
+}
+function srcStart(box, id, title, ep) {
+var eps = srcYtEps(id);
+if (eps) {
+var idx = Math.max(0, Math.min(eps.length - 1, Math.max(1, Math.floor(Number(ep) || 1)) - 1));
+if (srcEmbedYT(box, (eps[idx] || [])[1], ep)) return true;
+}
+if (typeof openQuarkPlay === 'function') {
+openQuarkPlay(box.querySelector('#dpPlayer') || box, id, title);   // 磁力转存链路（不在面板列出）
+return true;
+}
+return false;
+}
+window.__srcStart = srcStart;          // 65-detail 的「开始观看」用
 function srcProbe(id, title, ep, force) {
 var key = String(id) + ':' + String(ep);
 var now = Date.now(), mem = SRC_MEM[key];
