@@ -45,6 +45,7 @@ def anilist_fetch(per=50):
          'description(asHtml:false) genres siteUrl popularity status format duration '
          'studios(isMain:true){nodes{name}} '
          'trailer{id site} nextAiringEpisode{airingAt episode} '
+         'streamingEpisodes{title thumbnail url site} '
          'relations{nodes{id type format siteUrl title{romaji native} coverImage{large}}}}}}' % per)
     out = []
     for page in range(1, 3):  # 2 页 = 100 部
@@ -150,8 +151,13 @@ def main():
         sd = m.get("startDate") or {}
         ymd = "-".join(f"{sd.get(k):02d}" if isinstance(sd.get(k), int) else str(sd.get(k) or "") for k in ("year", "month", "day")).strip("-")
         key = "a" + hashlib.md5(str(m["id"]).encode()).hexdigest()[:10]
+        # 官方频道正片（木棉花 / Ani-One / 回歸線 等都在 streamingEpisodes 里，site=YouTube）：
+        # 每季大部分番都能覆盖；只留 YouTube，最多 30 条。
+        yt = [[(se.get("title") or "").strip(), se.get("url") or ""]
+              for se in (m.get("streamingEpisodes") or [])
+              if se.get("site") == "YouTube" and se.get("url")][:30]
         out["anime"].append({
-            "k": key, "n": name,
+            "k": key, "n": name, "yt": yt,
             "o": t.get("romaji") or t.get("english"),
             "y": sd.get("year"),
             "r": round(m["averageScore"] / 10, 1) if m.get("averageScore") else None,
