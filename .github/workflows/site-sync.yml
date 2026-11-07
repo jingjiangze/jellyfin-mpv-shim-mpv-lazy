@@ -198,9 +198,11 @@ jobs:
       # 官方频道正片索引（木棉花 / Ani-One / 回歸線 的 YouTube RSS，免 key）。
       # 每频道只给最新 15 条 —— 覆盖「追当季」；整季回填要 YouTube Data API（等 key）。
       - name: Fetch official YouTube episodes
-        timeout-minutes: 4
+        timeout-minutes: 6
         continue-on-error: true
         working-directory: site-src
+        env:
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
         run: python -u fetch_yt_rss.py
 
       - name: Build pages
