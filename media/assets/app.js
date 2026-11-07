@@ -2622,12 +2622,61 @@ slot.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/'
 srcHint(box, 'YouTube 官方频道 · 播放器由 YouTube 提供（国内访问需代理，B 站源不受限）');
 return true;
 }
+function srcEmbedBili(box, id) {
+var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
+var bvid = exb && exb[5];
+if (!bvid) return false;
+if (window.__qpAbort === 'function') window.__qpAbort();
+if (window.__biliAbort === 'function') window.__biliAbort();
+if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
+var slot = box.querySelector('#dpPlayer') || box;
+slot.innerHTML = '<iframe src="https://player.bilibili.com/player.html?bvid='
++ encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1"'
++ ' scrolling="no" frameborder="no" framespacing="0" allowfullscreen="true"'
++ ' style="width:100%;height:100%;border:0;display:block"></iframe>';
+srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
+return true;
+}
+var YT_REACH = null;
+function ytReach() {
+if (YT_REACH) return YT_REACH;
+YT_REACH = new Promise(function (resolve) {
+var done = false;
+function fin(ok) { if (!done) { done = true; resolve(ok); } }
+var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+var timer = setTimeout(function () { if (ctl) ctl.abort(); fin(false); }, 1800);
+try {
+fetch('https://www.youtube.com/generate_204', {
+mode: 'no-cors', cache: 'no-store', signal: ctl ? ctl.signal : undefined
+}).then(function () { clearTimeout(timer); fin(true); },
+function () { clearTimeout(timer); fin(false); });
+} catch (e) { clearTimeout(timer); fin(false); }
+});
+setTimeout(function () { YT_REACH = null; }, 10 * 60 * 1000);   // 10 分钟后重新探
+return YT_REACH;
+}
 function srcStart(box, id, title, ep) {
 var eps = srcYtEps(id);
 if (eps) {
-var idx = Math.max(0, Math.min(eps.length - 1, Math.max(1, Math.floor(Number(ep) || 1)) - 1));
-if (srcEmbedYT(box, (eps[idx] || [])[1], ep)) return true;
+var epNo = Math.max(1, Math.floor(Number(ep) || 1));
+var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
+var slot = box.querySelector('#dpPlayer') || box;
+srcHint(box, '正在检测 YouTube 可达性…');
+ytReach().then(function (ok) {
+if (ok && srcEmbedYT(box, (eps[idx] || [])[1], epNo)) return;
+if (srcEmbedBili(box, id)) return;                 // 有 bvid：B 站官方嵌入
+var tk = (typeof authToken === 'function') ? authToken() : '';
+if (tk && typeof biliPlayEp === 'function') {
+srcHint(box, 'YouTube 不可达 · 切到 B 站源');
+biliPlayEp(box, id, title, epNo);
+return;
 }
+srcHint(box, 'YouTube 不可达 · 使用网盘源');
+if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+});
+return true;
+}
+if (srcEmbedBili(box, id)) return true;
 if (typeof openQuarkPlay === 'function') {
 openQuarkPlay(box.querySelector('#dpPlayer') || box, id, title);   // 磁力转存链路（不在面板列出）
 return true;
@@ -2801,20 +2850,7 @@ srcEmbedYT(box, (eps[idx] || [])[1], epNo);
 return;
 }
 if (key === 'bili') {
-var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
-var bvid = exb && exb[5];
-if (bvid) {
-if (window.__qpAbort === 'function') window.__qpAbort();
-if (window.__biliAbort === 'function') window.__biliAbort();
-if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
-var slot = box.querySelector('#dpPlayer') || box;
-slot.innerHTML = '<iframe src="https://player.bilibili.com/player.html?bvid='
-+ encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1"'
-+ ' scrolling="no" frameborder="no" framespacing="0" allowfullscreen="true"'
-+ ' style="width:100%;height:100%;border:0;display:block"></iframe>';
-srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
-return;
-}
+if (srcEmbedBili(box, id)) return;
 if (typeof biliPlayEp === 'function') biliPlayEp(box, id, title, epNo);
 return;
 }
