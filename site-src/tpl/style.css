@@ -3528,15 +3528,11 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
 .mposter { box-shadow: 0 8px 20px rgba(0, 0, 0, .30); }
 [data-theme="dark"] .mposter { box-shadow: 0 8px 20px rgba(0, 0, 0, .55); }
 
-/* ================================================================ 25 页面切换动画（照 B 站）
-   跨文档 View Transitions：Chrome/Edge 下页面切换整体淡入淡出（MPA 也能有 SPA 手感）；
-   不支持的浏览器自动退回瞬时切换（现状）。prefers-reduced-motion 一律关闭。 */
-@view-transition { navigation: auto; }
-@keyframes vt-out { to { opacity: 0; } }
-@keyframes vt-in { from { opacity: 0; } }
-::view-transition-old(root) { animation: vt-out 120ms ease-in both; }
-::view-transition-new(root) { animation: vt-in 200ms ease-out both; }
-
+/* ================================================================ 25 页面切换动画
+   原来是跨文档 View Transitions（@view-transition），实测**单次点击就被中止**：
+   页面上的 banner 轮播 / 卡片入场动画 / 弹幕观察器持续改 DOM，Chrome 判定
+   "invalid state" → 淡出根本没生效（控制台每次导航一条报错），而且只有 Chrome 支持。
+   改用「顶部进度条 + 新页内容淡入」：全平台一致、无报错、感知更快。 */
 /* 内容入场：主体淡入 + 轻微上浮（transform 只在 260ms 动画期存在，不影响 fixed/sticky） */
 @keyframes page-in {
   from { opacity: 0; transform: translateY(8px); }
@@ -3568,7 +3564,6 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
 html { scroll-behavior: smooth; }
 
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
   #main, #main .card, #main .mcard { animation: none; }
   html { scroll-behavior: auto; }
 }
@@ -3751,4 +3746,91 @@ html { scroll-behavior: smooth; }
    （实测 520px），未开播时状态行只占 200px，下方漏出透明空格。顶对齐各走各的高度。 */
 .dp-watch {
   align-items: start;
+}
+
+/* 星期 tab（gamer 新番表的文本 tab，不是胶囊）：当前项主色 + 底部 2px 线 */
+.wk-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s4);
+  padding: 0 0 var(--s2);
+  margin: 0 0 var(--s3);
+}
+
+.wk-tab {
+  appearance: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  padding: 6px 2px;
+  font-size: var(--fs-sm);
+  color: var(--dim);
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+
+.wk-tab i {
+  font-style: normal;
+  margin-left: 5px;
+  font-size: var(--fs-xs);
+  color: var(--dim2);
+  font-variant-numeric: tabular-nums;
+}
+
+.wk-tab:hover { color: var(--fg); }
+
+.wk-tab.on {
+  color: var(--accent-text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.wk-tab.on i { color: var(--accent-text); }
+
+@media (max-width: 760px) {
+  .wk-tabs { gap: var(--s3); overflow-x: auto; flex-wrap: nowrap; }
+  .wk-tab { flex: 0 0 auto; }
+}
+
+/* 顶部导航进度条：站内点击即出现，新页 load 时填满并淡出 */
+.nav-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+
+.nav-bar i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.nav-bar.on {
+  opacity: 1;
+}
+
+.nav-bar.on i {
+  width: 72%;
+  transition: width 1.4s cubic-bezier(.1, .7, .3, 1);
+}
+
+.nav-bar.done {
+  opacity: 1;
+}
+
+.nav-bar.done i {
+  width: 100%;
+  transition: width .16s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-bar, .nav-bar i { transition: none; }
 }

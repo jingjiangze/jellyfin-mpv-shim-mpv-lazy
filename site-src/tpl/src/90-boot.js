@@ -612,6 +612,72 @@
     });
   }
 
+  /* ---- 顶部导航进度条（替代已移除的跨文档 View Transitions）----
+     站内点击瞬间出现，新页 load 后填满并淡出。全平台一致、无控制台报错。 */
+  var NAVBAR = null;
+  function navStart() {
+    try { sessionStorage.setItem('navp', '1'); } catch (e) { /* 隐私模式忽略 */ }
+    if (!NAVBAR) {
+      NAVBAR = document.createElement('div');
+      NAVBAR.className = 'nav-bar';
+      NAVBAR.innerHTML = '<i></i>';
+      document.body.appendChild(NAVBAR);
+    }
+    NAVBAR.className = 'nav-bar on';
+  }
+  /* 收尾动画必须在新文档里做：MPA 换文档后旧页的 bar 元素已经不存在。
+     用 sessionStorage 标记「这次是站内点击跳来的」，避免首屏/刷新误闪进度条。
+     ⚠ 不能只挂 pageshow：app.js 是异步注入的，pageshow 在它执行前就触发完了
+     （实测 flag 一直留着没被消费）—— 所以脚本执行时先自己消费一次，pageshow 只兜 bfcache 返回。 */
+  function navFinish() {
+    var flagged = false;
+    try {
+      flagged = sessionStorage.getItem('navp') === '1';
+      sessionStorage.removeItem('navp');
+    } catch (e) { /* 隐私模式忽略 */ }
+    if (!flagged) return;
+    if (!NAVBAR) {
+      NAVBAR = document.createElement('div');
+      NAVBAR.className = 'nav-bar';
+      NAVBAR.innerHTML = '<i></i>';
+      document.body.appendChild(NAVBAR);
+    }
+    NAVBAR.className = 'nav-bar done';
+    setTimeout(function () { if (NAVBAR) NAVBAR.className = 'nav-bar'; }, 320);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', navFinish);
+  else navFinish();
+  window.addEventListener('pageshow', navFinish);
+  /* 站内 <a> 点击（菜单/更多/面包屑）→ 起进度条；新标签/中键/修饰键放行 */
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a || a.target === '_blank' || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    var href = a.getAttribute('href') || '';
+    if (href.charAt(0) !== '/' || href.charAt(1) === '/') return;   // 只站内绝对路径
+    if (a.hasAttribute('download')) return;
+    navStart();
+  }, true);
+
+  /* 站内链接悬停预取（菜单/更多链接数量少，两三个 prefetch 就够）：
+     悬停 120ms 后插 <link rel=prefetch as=document>，点进去时 HTML 已在缓存里。 */
+  var PF_HREF = {};
+  document.addEventListener('mouseover', function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="/"]');
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (!href || PF_HREF[href] || href.indexOf('/api/') === 0) return;
+    PF_HREF[href] = 1;
+    setTimeout(function () {
+      try {
+        var l = document.createElement('link');
+        l.rel = 'prefetch';
+        l.as = 'document';
+        l.href = href;
+        document.head.appendChild(l);
+      } catch (err) { /* 预取失败不影响任何功能 */ }
+    }, 120);
+  });
+
   /* 悬停预热：鼠标停在卡片上 80ms 就预取详情分片（点进去秒开）。
      detailShard 自带去重（shardCache），这里只做 80ms 防抖 + 400ms 限速。 */
   var PF_LAST = 0, PF_TIMER = 0, PF_ID = 0;
@@ -636,6 +702,7 @@
     if (mc) {
       if (e.metaKey || e.ctrlKey || e.button !== 0) return;
       e.preventDefault();
+      navStart();
       location.href = '/detail?ext=' + encodeURIComponent(mc.dataset.ext || 'db')
         + '&i=' + encodeURIComponent(mc.dataset.i || '0');
       return;
@@ -646,6 +713,7 @@
        ⌘/Ctrl/中键 交还浏览器（新标签打开）。 */
     if (e.metaKey || e.ctrlKey || e.button !== 0) return;
     e.preventDefault();
+    navStart();
     location.href = '/detail?id=' + encodeURIComponent(c.dataset.id || '');
   });
   $('#mask') && $('#mask').addEventListener('click', function (e) { if (e.target.id === 'mask') close(); });

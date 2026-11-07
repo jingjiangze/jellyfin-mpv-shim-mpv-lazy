@@ -1,5 +1,5 @@
 /* ---------------- 首页（照 ani.gamer.com.tw：无筛选条，区块按当天/当季自动出） ---------------- */
-var HOME = { y: 0, q: 0 };
+var HOME = { y: 0, q: 0, wd: 0 };   // wd: 0=跟随今天，1-7=用户手选星期
 var QS = [1, 2, 3, 4];
 
 function seasonOf(m) { return m ? Math.ceil(m / 3) : 0; }
@@ -12,9 +12,25 @@ function byScore(a, b) { return (b[7] || 0) - (a[7] || 0); }
    直接按今天出 —— gamer 首页也是这个行为，筛选一律去番剧页做。 */
 function wdToday() { return ((new Date().getDay() + 6) % 7) + 1; }
 
+/* 选中的星期：默认跟随今天，用户点了 tab 就用选中的那天 */
+function wdPick() { return HOME.wd || wdToday(); }
+
 function todayRows() {
-  var wd = wdToday();
+  var wd = wdPick();
   return yearRows(HOME.y).filter(function (r) { return r[6] === wd; }).sort(byScore);
+}
+
+/* 星期 tab（照 gamer 新番表的文本 tab，不是胶囊）：周一…周日 + 当天部数。
+   首页原来只出「今天」那一列，周一到周五的番没有入口。 */
+function weekTabsHtml() {
+  var wd = wdPick();
+  var cnt = {};
+  yearRows(HOME.y).forEach(function (r) { if (r[6]) cnt[r[6]] = (cnt[r[6]] || 0) + 1; });
+  return '<div class="wk-tabs">' + WD.map(function (d, i) {
+    var n = i + 1;
+    return '<button class="wk-tab' + (wd === n ? ' on' : '') + '" type="button" data-wd="' + n + '">'
+      + d + '<i>' + (cnt[n] || 0) + '</i></button>';
+  }).join('') + '</div>';
 }
 
 /* 本季新番：当前年 + 最新季度全部，按评分排 */
@@ -260,12 +276,18 @@ function renderHome() {
 
   /* 区块（自上而下，照 gamer 首页）：继续观看 → 今天更新 → 本季新番 → 本季高分 → 热门排行。
      全部由内存里的 ANI.rows + 本地进度算出，不发新请求。空块自动不出。 */
-  var wd = wdToday();
+  var wd = wdPick();
   var seasonPool = seasonRows();
   var cont = contBlock();
   /* 每块只放一行 7 张（gamer 的首页区块就是这个节奏），整季/整年去番剧页看 */
-  var today = block('今天更新 · ' + (WD[wd - 1] || ''), todayRows().slice(0, 7),
+  var todayTitle = HOME.wd ? (WD[wd - 1] + ' 更新') : ('今天更新 · ' + (WD[wd - 1] || ''));
+  var today = block(todayTitle, todayRows().slice(0, 7),
     '<a class="morelink" href="/anime">全部番剧 ›</a>');
+  /* tab 行插在标题条与卡片网格之间（有今天更新块才插） */
+  if (today) {
+    var tpos = today.indexOf('<div class="grid');
+    if (tpos > 0) today = today.slice(0, tpos) + weekTabsHtml() + today.slice(tpos);
+  }
   var season = block('本季新番 · ' + (HOME.q ? '第' + HOME.q + '季度' : HOME.y), seasonPool.slice(0, 7),
     '<a class="morelink" href="/anime">更多 ›</a>');
   var top = block('本季高分', topRows(7), '<a class="morelink" href="/rank">排行榜 ›</a>');
@@ -280,6 +302,15 @@ function renderHome() {
   main.innerHTML = (picks.length ? bannerCarousel(picks) : '')
     + '<div class="home-main">' + cont + today + season + top + hot + '</div>';
   if (picks.length) initCarousel(main, picks, gen);
+
+  /* 星期 tab：只改状态并重画首页（数据在内存 + Cache API 就绪，重画 <100ms） */
+  main.querySelectorAll('[data-wd]').forEach(function (b) {
+    b.onclick = function () {
+      var n = Number(b.getAttribute('data-wd')) || 0;
+      HOME.wd = n;
+      renderHome();
+    };
+  });
 
   /* 卡片点击由文件底部的全局事件委托处理，这里不需要再绑定 */
 }
