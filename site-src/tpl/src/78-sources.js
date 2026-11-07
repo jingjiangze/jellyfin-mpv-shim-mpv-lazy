@@ -197,6 +197,8 @@
     }
     /* data-fail=1 的行点下去是「重探」，不是「播放」 */
     row.setAttribute('data-fail', opt.retry ? '1' : '0');
+    /* opt.hide：整行隐藏（没有官方正片时别占一行「本季无正片」的灰字噪音） */
+    row.hidden = !!opt.hide;
     var bind = row.querySelector('.btn');
     if (bind) bind.hidden = !opt.bind;
   }
@@ -210,7 +212,7 @@
     var y = data && data.yt;
     if (!data) srcSetRow(list, 'yt', 'YouTube 官方 · 检测中…');
     else if (y.kind === 'has') srcSetRow(list, 'yt', 'YouTube 官方 · ' + y.eps.length + ' 集可看', { on: true });
-    else srcSetRow(list, 'yt', 'YouTube 官方 · 本季无正片');
+    else srcSetRow(list, 'yt', '', { hide: true });      // 没有官方正片：整行收起
 
     var b = data && data.bili;
     if (!data) srcSetRow(list, 'bili', 'B 站 · 检测中…');
