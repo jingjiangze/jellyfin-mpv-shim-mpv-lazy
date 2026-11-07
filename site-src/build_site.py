@@ -164,7 +164,9 @@ def build_anime():
     shards = load_shards()
     YT_VIDEOS = load_yt_videos()
     print(f"  yt: 官方频道视频 {len(YT_VIDEOS)} 条")
-    # B 站官方嵌入：fetch_bili.py 的 bvid 索引（id -> {bvid,title,…}）
+    # B 站官方嵌入：fetch_bili.py 的 bvid 索引（id -> {bvid,title,…}）。
+    # 旧索引的键是 md5（历史 data.json 体系），先按标题归一建倒排兜底；
+    # 新键是 bgm id，直查命中。返回统一函数 bili_bvid(sid, cn, name)。
     BILI = {}
     bp = SITE / "bili.json"
     if bp.is_file():
@@ -172,7 +174,25 @@ def build_anime():
             BILI = json.loads(bp.read_text(encoding="utf-8")) or {}
         except (ValueError, OSError):
             BILI = {}
-    print(f"  bili: bvid 索引 {len(BILI)} 条")
+    BILI_BY_TITLE = {}
+    for _k, _v in BILI.items():
+        if isinstance(_v, dict) and _v.get("bvid"):
+            for t in (_v.get("title"),):
+                nt = norm(t)
+                if nt and nt not in BILI_BY_TITLE:
+                    BILI_BY_TITLE[nt] = _v["bvid"]
+
+    def bili_bvid(sid, cn, name):
+        hit = BILI.get(str(sid)) or {}
+        if hit.get("bvid"):
+            return hit["bvid"]
+        nt = norm(cn) or norm(name)
+        if nt and len(nt) >= 4:
+            for bt, bvid in BILI_BY_TITLE.items():
+                if nt in bt or (len(bt) >= 4 and bt in nt):
+                    return bvid
+        return None
+    print(f"  bili: bvid 索引 {len(BILI)} 条（标题兜底 {len(BILI_BY_TITLE)}）")
 
     # AniList 补充/回退：按标题归一化对齐到 Bangumi 条目
     al = {}
@@ -249,7 +269,7 @@ def build_anime():
         # 取封面、ex[2] 取预告。以前是「有才 append」，缺 banner 时整体前移，
         # 实测 32 条（名侦探柯南 / 海贼王等）把 next_at 时间戳当成了 YouTube id。
         a = al.get(norm(cn)) or al.get(norm(name)) or {}
-        bvid = (BILI.get(str(sid)) or {}).get("bvid")
+        bvid = bili_bvid(sid, cn, name)
         if a or bvid:
             # 第 5 槽 = 官方 YouTube 正片分集 [[标题, 链接], …]（RSS 频道匹配为主）。
             # 第 6 槽 = B 站官方嵌入的 bvid（fetch_bili.py 索引）。
