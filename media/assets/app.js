@@ -43,6 +43,46 @@ return go();
 }
 var ANI = { poster: '', posterSd: '', rows: [], extra: {}, year: 0 };
 var shardCache = {};
+var DCACHE = 'anime-data-v1';
+var DCACHE_FRESH = 30 * 60 * 1000;      // 30 分钟内视为新鲜，不回源
+function dcache() {
+return (typeof caches !== 'undefined' && caches.open) ? caches.open(DCACHE) : null;
+}
+function dcacheGet(name, cb) {
+var c = dcache();
+if (!c) { cb(null); return; }
+c.then(function (store) {
+return store.match('swr/' + name).then(function (hit) {
+if (!hit) { cb(null); return; }
+var ts = Number(hit.headers.get('x-ts')) || 0;
+return hit.json().then(function (d) {
+cb(d, ts && (Date.now() - ts) < DCACHE_FRESH);
+}, function () { cb(null); });
+});
+}, function () { cb(null); }).catch(function () { cb(null); });
+}
+function dcachePut(name, data) {
+var c = dcache();
+if (!c || data == null) return;
+c.then(function (store) {
+var h = { headers: { 'content-type': 'application/json', 'x-ts': String(Date.now()) } };
+store.put('swr/' + name, new Response(JSON.stringify(data), h));
+}).catch(function () { });
+}
+function jdSwr(name) {
+return new Promise(function (resolve) {
+var done = false;
+function settle(v) { if (!done) { done = true; resolve(v); } }
+dcacheGet(name, function (cached, fresh) {
+if (cached) settle(cached);
+if (cached && fresh) return;
+jd(name).then(function (d) {
+if (d) dcachePut(name, d);
+settle(d);
+}, function () { if (!cached) settle(null); });
+});
+});
+}
 var TAGCNT = {}, TAGCNT_LOADING = false, TAGCNT_WAIT = [];
 function ensureTagCounts(done) {
 if (done) TAGCNT_WAIT.push(done);
@@ -4834,12 +4874,27 @@ return m ? Number(m[1]) : 0;
 }
 var DEEP_REDIRECT = false;
 function bootAnime() {
-return jd('anime.json').then(function (d) {
+return jdSwr('anime.json').then(function (d) {
+if (!d) throw new Error('data anime.json 三源都失败');
 ANI.poster = d.poster || ''; ANI.posterSd = d.posterSd || '';
 ANI.rows = d.rows || [];
 ANI.extra = d.extra || {}; ANI.year = d.year || new Date().getFullYear();
 });
 }
+var PF_LAST = 0, PF_TIMER = 0, PF_ID = 0;
+document.addEventListener('mouseover', function (e) {
+var c = e.target.closest && e.target.closest('.card[data-id]');
+if (!c || PAGE === 'detail') return;
+var id = Number(c.dataset.id);
+if (!id || id === PF_ID) return;
+PF_ID = id;
+clearTimeout(PF_TIMER);
+PF_TIMER = setTimeout(function () {
+if (Date.now() - PF_LAST < 400) return;
+PF_LAST = Date.now();
+try { detailShard(id); } catch (e) { /* 预热失败不提示 */ }
+}, 80);
+});
 document.addEventListener('click', function (e) {
 var mc = e.target.closest && e.target.closest('.mcard');
 if (mc) {
