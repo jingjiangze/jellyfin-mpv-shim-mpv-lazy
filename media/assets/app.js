@@ -1410,6 +1410,11 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/movie">电影</a><span>/</span><b
 + '</section>'
 + '<div class="dp-grid">'
 +   '<div class="dp-main">'
++     (x.tr
+? '<section class="sect" id="dp-trailer"><div class="sec-h"><h2>预告</h2></div>'
++ '<div class="trailer-slot" id="dpTrailerSlot">'
++ '<button class="btn pri" id="dpTrailer" type="button">▶ 播放预告（YouTube）</button></div></section>'
+: '')
 +     '<div class="mbody" data-p="ext">'
 +       '<section class="sect" id="dp-plot"><div class="sec-h"><h2>简介</h2></div>'
 +         '<p class="plot">' + esc(intro || '暂无简介') + '</p></section>'
@@ -1431,6 +1436,17 @@ return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
 +   '</aside>'
 + '</div>';
 document.title = title + ' · 番组计划';
+var trb = m.querySelector('#dpTrailer');
+if (trb && x.tr) {
+trb.onclick = function () {
+var slot = m.querySelector('#dpTrailerSlot');
+if (!slot || slot.querySelector('iframe')) return;
+slot.innerHTML = '<iframe src="https://www.youtube.com/embed/'
++ encodeURIComponent(x.tr) + '?autoplay=1&rel=0"'
++ ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen'
++ ' style="width:100%;height:100%;border:0"></iframe>';
+};
+}
 }
 function renderDetail() {
 var m = $('#modal');
