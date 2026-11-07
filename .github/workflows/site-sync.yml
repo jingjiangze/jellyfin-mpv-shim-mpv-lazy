@@ -407,6 +407,7 @@ jobs:
           git add -f site-src/site/data.json site-src/site/bili.json \
                      site-src/site/magnet.json site-src/site/magnet-eps.json \
                      site-src/site/fresh.json \
+                     site-src/site/tmdb.json \
                      site-src/site/years_state.json site-src/site/movies-intro.json 2>/dev/null || true
           if git diff --cached --quiet; then echo "nothing to publish (post-reset)"; exit 0; fi
           git commit -m "data: site payloads + state [skip ci]"
