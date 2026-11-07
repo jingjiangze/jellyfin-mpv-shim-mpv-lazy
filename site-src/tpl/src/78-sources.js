@@ -81,6 +81,49 @@
     }, function () { return { kind: 'error' }; });
   }
 
+  /* YouTube 官方正片：数据在 build 期由 AniList streamingEpisodes / 频道 RSS 对齐进 extra[4]，
+     这里只读内存，不联网探测。 */
+  function srcYtEps(id) {
+    var ex = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
+    var eps = ex && ex[4];
+    return (eps && eps.length) ? eps : null;
+  }
+
+  /* YouTube 官方播放：分集 URL → nocookie embed，塞进 #dpPlayer 槽。
+     播放器 UI 直接用 YouTube 官方播放器（用户点名「抄别人的」），国内需代理。 */
+  function ytKey(url) {
+    var m = /[?&]v=([\w-]{6,})/.exec(url || '') || /youtu\.be\/([\w-]{6,})/.exec(url || '');
+    return m ? m[1] : '';
+  }
+  function srcEmbedYT(box, url, ep) {
+    var key = ytKey(url);
+    if (!key) return false;
+    var slot = box.querySelector('#dpPlayer') || box;
+    if (window.__qpAbort === 'function') window.__qpAbort();
+    if (window.__biliAbort === 'function') window.__biliAbort();
+    if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
+    slot.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/'
+      + encodeURIComponent(key) + '?autoplay=1&rel=0&modestbranding=1"'
+      + ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen'
+      + ' style="width:100%;height:100%;border:0;display:block"></iframe>';
+    srcHint(box, 'YouTube 官方频道 · 播放器由 YouTube 提供（国内访问需代理，B 站源不受限）');
+    return true;
+  }
+
+  function srcStart(box, id, title, ep) {
+    var eps = srcYtEps(id);
+    if (eps) {
+      var idx = Math.max(0, Math.min(eps.length - 1, Math.max(1, Math.floor(Number(ep) || 1)) - 1));
+      if (srcEmbedYT(box, (eps[idx] || [])[1], ep)) return true;
+    }
+    if (typeof openQuarkPlay === 'function') {
+      openQuarkPlay(box.querySelector('#dpPlayer') || box, id, title);   // 磁力转存链路（不在面板列出）
+      return true;
+    }
+    return false;
+  }
+  window.__srcStart = srcStart;          // 65-detail 的「开始观看」用
+
   /* 三个探测并发；任一失败只影响自己那一行（各自 .catch 在探测内成形）。
      同一 "<id>:<ep>" 60s 内复用同一次结果/在途 promise：二次 mount 不重复请求。 */
   function srcProbe(id, title, ep, force) {
