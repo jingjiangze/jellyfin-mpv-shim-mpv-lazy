@@ -20,10 +20,9 @@
      结果按「bgm id + 集号」缓存 60s：详情页来回切标签、弹窗重开都不重复打接口。 */
   var SRC_BASE = 'https://120.48.56.189';
   var SRC_TTL = 60 * 1000;                       // 探测结果缓存时长
-  var SRC_QUARK_BIND = 'https://120.48.56.189/qr/';
   var SRC_USER = '/user';                       // B 站绑定在个人主页
-  var SRC_KEYS = ['quark', 'bili', 'byo', 'magnet'];
-  var SRC_NAME = { quark: '夸克网盘', bili: 'B 站', byo: '自备源', magnet: '磁力' };
+  var SRC_KEYS = ['yt', 'bili', 'magnet'];
+  var SRC_NAME = { yt: 'YouTube 官方', bili: 'B 站', magnet: '磁力' };
   var SRC_MEM = {};                              // "<id>:<ep>" -> {ts, data, pend}
   var SRC_MGEN = 0;                              // 每 mount 一次自增：异步结果只落最新那一代
 
@@ -58,29 +57,6 @@
 
   /* 当前集在网盘里是否真有文件：复用 75 的挑集逻辑（片名归一 + 集号 + 取体积最大），
      保证「已转存」的判定与点开播放时一致，不另写一套口径。 */
-  function srcPickEp(items, title, ep) {
-    if (typeof qpPickEp === 'function') return qpPickEp(items || [], title, ep);
-    var list = items || [], re = null;
-    try { re = new RegExp('第\\s*' + ep + '\\s*[话話集期]|\\[0?' + ep + '(?:v\\d)?\\]', 'i'); }
-    catch (e) { return null; }
-    for (var i = 0; i < list.length; i++) {
-      if (list[i] && re.test(String(list[i].name || ''))) return list[i];
-    }
-    return null;
-  }
-
-  function srcProbeQuark(title, ep, tk) {
-    return srcGet('/tvplay/find?q=' + encodeURIComponent(title) + '&limit=20', tk).then(function (r) {
-      var j = r.j || {}, st = String(j.state || '');
-      if (st === 'found') return { kind: 'found', hit: !!srcPickEp(j.items, title, ep) };
-      if (st === 'none') return { kind: 'none' };
-      if (st === 'need_rebind' || st === 'unauthorized') return { kind: 'bind' };
-      /* 后端没带 state 时按 HTTP 码兜底（与 75 的 qpReq 同一套码） */
-      if (r.status === 409 || r.status === 401) return { kind: 'bind' };
-      return { kind: 'error' };
-    });
-  }
-
   function srcProbeBili(tk) {
     return srcGet('/bili/bind', tk).then(function (r) {
       var j = r.j || {};
@@ -105,17 +81,6 @@
     }, function () { return { kind: 'error' }; });
   }
 
-  /* 自备源每次渲染都重读（用户在播放器里加一条线，面板重挂时立刻能看到条数）。
-     只走 QPlayer 的只读入口，不碰 localStorage 细节 —— 键名与结构归 76 管。 */
-  function srcByoCount(id) {
-    var qp = window.QPlayer;
-    if (!qp || !qp._lines || typeof qp._lines.of !== 'function') return 0;
-    try {
-      var arr = qp._lines.of(id);
-      return Object.prototype.toString.call(arr) === '[object Array]' ? arr.length : 0;
-    } catch (e) { return 0; }
-  }
-
   /* 三个探测并发；任一失败只影响自己那一行（各自 .catch 在探测内成形）。
      同一 "<id>:<ep>" 60s 内复用同一次结果/在途 promise：二次 mount 不重复请求。 */
   function srcProbe(id, title, ep, force) {
@@ -125,12 +90,13 @@
     var rec = { ts: now, data: null, pend: null };
     SRC_MEM[key] = rec;
     var tk = srcToken();
+    var ytEps = srcYtEps(id);
     rec.pend = Promise.all([
-      srcProbeQuark(title, ep, tk),
+      Promise.resolve(ytEps ? { kind: 'has', eps: ytEps } : { kind: 'none' }),
       srcProbeBili(tk),
       srcProbeMagnet(title, id, ep)
     ]).then(function (arr) {
-      var data = { quark: arr[0], bili: arr[1], magnet: arr[2] };
+      var data = { yt: arr[0], bili: arr[1], magnet: arr[2] };
       if (SRC_MEM[key] === rec) { rec.data = data; rec.ts = Date.now(); }   // 代次没被重探顶掉才落缓存
       return data;
     });
@@ -198,15 +164,10 @@
     if (!list) return;
     var epNo = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
 
-    var q = data && data.quark;
-    if (!data) srcSetRow(list, 'quark', '夸克网盘 · 检测中…');
-    else if (q.kind === 'found') {
-      if (q.hit) srcSetRow(list, 'quark', '夸克网盘 · 第 ' + epNo + ' 集已转存', { on: true });
-      else srcSetRow(list, 'quark', '夸克网盘 · 本集未转存');
-    }
-    else if (q.kind === 'bind') srcSetRow(list, 'quark', '夸克网盘 · 需绑定', { bind: true });
-    else if (q.kind === 'none') srcSetRow(list, 'quark', '夸克网盘 · 无此片');
-    else srcSetRow(list, 'quark', '夸克网盘 · 检测失败 · 点此重试', { bad: true, retry: true });
+    var y = data && data.yt;
+    if (!data) srcSetRow(list, 'yt', 'YouTube 官方 · 检测中…');
+    else if (y.kind === 'has') srcSetRow(list, 'yt', 'YouTube 官方 · ' + y.eps.length + ' 集可看', { on: true });
+    else srcSetRow(list, 'yt', 'YouTube 官方 · 本季无正片');
 
     var b = data && data.bili;
     if (!data) srcSetRow(list, 'bili', 'B 站 · 检测中…');
@@ -215,11 +176,6 @@
     }
     else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 需绑定', { bind: true });
     else srcSetRow(list, 'bili', 'B 站 · 检测失败 · 点此重试', { bad: true, retry: true });
-
-    /* 自备源不依赖网络：本地有几条就写几条，缓存命中时也是实时值 */
-    var n = srcByoCount(id);
-    if (n > 0) srcSetRow(list, 'byo', '自备源 · ' + n + ' 条', { on: true });
-    else srcSetRow(list, 'byo', '自备源 · 未添加');
 
     var mg = data && data.magnet;
     if (!data) srcSetRow(list, 'magnet', '磁力 · 检测中…');
@@ -282,13 +238,7 @@
     if (!t || t === list) return;
     var act = t.getAttribute('data-act');
     if (act) {                                    // 绑定入口：只导航，不播放
-      if (act === 'bind-quark') {
-        /* 绑定页要站点登录：有 token 就带上，没有先弹登录面板 */
-        if (typeof authToken === 'function' && authToken()) srcOpenUrl(quarkBindUrl());
-        else if (typeof openAuthPanel === 'function') openAuthPanel('email');
-        else srcOpenUrl(SRC_QUARK_BIND);
-      }
-      else if (act === 'bind-bili') {
+      if (act === 'bind-bili') {
         /* B 站绑定是按站点 uid 存的（bili_bind 表 uid 主键），没登录就没有「归属」，
            直接跳 /user 只会看到一句登录引导 —— 这里先弹登录面板，登录完再回主页绑定。 */
         if (typeof authToken === 'function' && authToken()) srcOpenUrl(SRC_USER);
@@ -317,27 +267,21 @@
     if (typeof window.__qpAbort === 'function') window.__qpAbort();
     if (typeof window.__biliAbort === 'function') window.__biliAbort();
 
+    if (key === 'yt') {
+      var eps = srcYtEps(id);
+      if (!eps) { srcHint(box, '本季没有官方 YouTube 正片'); return; }
+      var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
+      srcEmbedYT(box, (eps[idx] || [])[1], epNo);
+      return;
+    }
     if (key === 'bili') {
       if (typeof biliPlayEp === 'function') biliPlayEp(box, id, title, epNo);
       return;
     }
-    if (key === 'byo') {
-      var slot = box.querySelector('#dpPlayer') || box;
-      if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
-      /* 76 目前没有「展开线路」的公开方法（_lines 只有 of/save/del）：有就调，没有就明说 */
-      if (!srcOpenLines()) srcHint(box, '在播放器里展开「线路」');
-      return;
-    }
-    if (key === 'quark' || key === 'magnet') {     // 磁力同夸克：none 态由 75 自己给转存动作
+    if (key === 'magnet') {                        // 磁力 → 转存后在线播放（夸克在幕后，不列出）
       var q = box.querySelector('#dpPlayer') || box;
       if (typeof openQuarkPlay === 'function') openQuarkPlay(q, id, title);
     }
   }
 
-  function srcOpenLines() {
-    var qp = window.QPlayer;
-    if (!qp) return false;
-    var fn = qp.openLines || qp.showLines || qp.expandLines;
-    if (typeof fn !== 'function') return false;
-    try { fn(); return true; } catch (e) { return false; }
-  }
+

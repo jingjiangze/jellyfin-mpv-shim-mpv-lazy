@@ -427,7 +427,11 @@
        #dpPlayer 槽，播放器才落在框里；槽缺失（壳被换过）才回退到 #modal。
        没有可用播放源时它自己会写状态，这里不预先判。 */
     var wb = m.querySelector('#watch');
-    if (wb) wb.onclick = function () { openQuarkPlay(m.querySelector('#dpPlayer') || m, id, title); };
+    if (wb) wb.onclick = function () {
+      /* 播放顺序（2026-11-07）：YouTube 官方正片 → 夸克转存（幕后，不在面板列出） */
+      if (window.__srcStart && window.__srcStart(m, id, title, curEp)) return;
+      openQuarkPlay(m.querySelector('#dpPlayer') || m, id, title);
+    };
 
     /* 追番：复用卡片星标 / 弹窗同一套存储（key 用条目 id） */
     var fb = m.querySelector('#favbtn');
