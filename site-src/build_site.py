@@ -149,8 +149,12 @@ def yt_for(norm_title, videos):
         vt = norm(_t2s(str(v.get("t") or "")))     # 双侧都过 norm：繁体、空格、标点统一
         if vid in seen:
             continue
-        if norm_title not in vt and vt not in norm_title:
-            continue
+        if norm_title not in vt:
+            # 译名差异兜底：片名较长时用前 6 字做前缀匹配（「歡迎光臨遊之家」类
+            # Ani-One 译名与 Bangumi 不一致时，靠开头一段仍能对上）
+            pre = norm_title[:6] if len(norm_title) >= 6 else ""
+            if not pre or pre not in vt:
+                continue
         if not ep_re.search(vt):
             continue
         seen.add(vid)
