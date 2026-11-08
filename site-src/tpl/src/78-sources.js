@@ -59,17 +59,27 @@
 
   /* 当前集在网盘里是否真有文件：复用 75 的挑集逻辑（片名归一 + 集号 + 取体积最大），
      保证「已转存」的判定与点开播放时一致，不另写一套口径。 */
-  function srcProbeBili(tk) {
-    return srcGet('/bili/bind', tk).then(function (r) {
-      var j = r.j || {};
-      if (r.ok && j.ok && j.bound) {
-        return { kind: 'bound', uname: String(j.uname || '已绑定'), vip: Number(j.vip_type) || 0 };
+  function srcProbeBili(tk, title) {
+    /* 顺带探一次官方番剧（PGC）：面板上能直接写出「免费 M/N 集」，
+       比只有「免登录可看」有用；两条请求并行，各自失败不影响对方。 */
+    var pgcP = (typeof srcPgc === 'function') ? srcPgc(title) : Promise.resolve(null);
+    return Promise.all([srcGet('/bili/bind', tk), pgcP]).then(function (pair) {
+      var r = pair[0], j = (r && r.j) || {}, pgc = pair[1];
+      var kind;
+      if (r && r.ok && j.ok && j.bound) {
+        kind = { kind: 'bound', uname: String(j.uname || '已绑定'), vip: Number(j.vip_type) || 0 };
+      } else if (r && (r.status === 404 || r.status === 401)) {
+        kind = { kind: 'unbound' };
+      } else if (j.bound === false || j.error === 'not_bound' || j.ok === false) {
+        kind = { kind: 'unbound' };
+      } else {
+        kind = { kind: 'error' };
       }
-      if (r.status === 404 || r.status === 401) return { kind: 'unbound' };
-      if (j.bound === false || j.error === 'not_bound' || j.ok === false) return { kind: 'unbound' };
-      return { kind: 'error' };
+      if (pgc) { kind.pgc = pgc; if (kind.kind === 'error') kind.kind = 'unbound'; }
+      return kind;
     });
   }
+
 
   function srcProbeMagnet(title, id, ep) {
     var api = window.__epsApi;
@@ -125,6 +135,35 @@
       + ' style="width:100%;height:100%;border:0;display:block"></iframe>';
     srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
     return true;
+  }
+
+  /* 番剧官方源（PGC）：B 站官方「站外播放器」的参数是 **episodeId + seasonId**
+     （不是 ep_id/season_id），实测 player.bilibili.com 该形态 200 且无 X-Frame-Options。
+     免费集直接嵌；**会员集只返回试看片段**，所以不嵌 —— 交回调方降级并提示去官方页，
+     不碰任何会员 cookie / 付费绕过。 */
+  function srcEmbedPgc(box, sid, ep, epNo) {
+    if (!box || !sid || !ep || !ep.id) return false;
+    if (window.__qpAbort === 'function') window.__qpAbort();
+    if (window.__biliAbort === 'function') window.__biliAbort();
+    if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
+    var slot = box.querySelector('#dpPlayer') || box;
+    slot.innerHTML = '<iframe src="https://player.bilibili.com/player.html?episodeId='
+      + encodeURIComponent(ep.id) + '&seasonId=' + encodeURIComponent(sid)
+      + '&autoplay=1&high_quality=1&danmaku=1"'
+      + ' scrolling="no" frameborder="no" allowfullscreen="true"'
+      + ' style="width:100%;height:100%;border:0;display:block"></iframe>';
+    srcHint(box, 'B 站官方番剧 · 第 ' + epNo + ' 集（免费集，免登录）');
+    return true;
+  }
+
+  /* 盒子 /bili/pgc?t=<片名>：匿名（复用 /bili/find 的 buvid3）+ 24h 缓存，
+     返回 {sid, eps:[{i,id,vip}]}。匹配在盒子侧收得很紧（季号必须一致），
+     宁可 notfound 也不挂错季。 */
+  function srcPgc(title) {
+    if (typeof biliGet !== 'function') return Promise.resolve(null);
+    return biliGet('pgc', { t: title }).then(function (d) {
+      return (d && d.ok && d.found && d.sid && (d.eps || []).length) ? d : null;
+    }, function () { return null; });
   }
 
   /* extra[5] 里 build 期对齐好的 bvid（bili.json 索引） */
@@ -198,12 +237,24 @@
     /* ① B 站（build 期索引命中就直接嵌，同步、最快） */
     if (srcEmbedBili(box, id)) return true;
 
-    /* ①b 没有索引 → 匿名实时搜一次（盒子用匿名 buvid3，不碰任何用户绑定） */
-    srcHint(box, '正在 B 站搜索「' + title + '」…');
-    biliFindBvid(title).then(function (bv) {
-      if (bv && srcEmbedBvid(box, bv)) return;
-      toYoutube('B 站未找到');
-    }, function () { toYoutube('B 站搜索失败'); });
+    /* ①b 没有索引 → 先试**官方番剧（PGC）免费集**：官方正片 + 官方字幕，
+       比 UGC 搜索准（不会搜到解说/搬运）。会员集只有试看，不嵌，继续往下降级。 */
+    srcHint(box, '正在匹配 B 站官方番剧…');
+    srcPgc(title).then(function (p) {
+      if (p) {
+        var row = p.eps[Math.max(0, epNo - 1)] || p.eps[0];
+        if (row && !row.vip && srcEmbedPgc(box, p.sid, row, epNo)) return;
+        if (row && row.vip) {
+          srcHint(box, '第 ' + epNo + ' 集是 B 站大会员集（仅试看）· 已换下一个源');
+        }
+      }
+      /* ①c 匿名实时搜 UGC（盒子用匿名 buvid3，不碰任何用户绑定） */
+      srcHint(box, '正在 B 站搜索「' + title + '」…');
+      biliFindBvid(title).then(function (bv) {
+        if (bv && srcEmbedBvid(box, bv)) return;
+        toYoutube('B 站未找到');
+      }, function () { toYoutube('B 站搜索失败'); });
+    });
     return true;
   }
 
@@ -221,7 +272,7 @@
     var ytEps = srcYtEps(id);
     rec.pend = Promise.all([
       Promise.resolve(ytEps ? { kind: 'has', eps: ytEps } : { kind: 'none' }),
-      srcProbeBili(tk),
+      srcProbeBili(tk, title),
       srcProbeMagnet(title, id, ep)
     ]).then(function (arr) {
       var data = { yt: arr[0], bili: arr[1], magnet: arr[2] };
@@ -304,6 +355,14 @@
 
     var b = data && data.bili;
     if (!data) srcSetRow(list, 'bili', 'B 站 · 检测中…');
+    else if (b.pgc && b.pgc.found) {
+      /* 官方番剧命中：直接报「免费几集」，比「免登录可看」更有信息量 */
+      var pg = b.pgc.eps || [];
+      var freeN = 0;
+      for (var pi = 0; pi < pg.length; pi++) if (!pg[pi].vip) freeN++;
+      srcSetRow(list, 'bili', 'B 站官方 · 免费 ' + freeN + '/' + pg.length + ' 集',
+                { on: freeN > 0, bind: b.kind !== 'bound' });
+    }
     else if (b.kind === 'bound') {
       srcSetRow(list, 'bili', 'B 站 · ' + b.uname + '（VIP' + b.vip + '）', { on: true });
     }
