@@ -1361,6 +1361,27 @@ shardCache[sfx] = pr;
 }
 return pr;
 }
+function trailerSlotBg(slot, key, fallback) {
+if (!slot) return;
+function paint(url) {
+if (!url) return;
+slot.style.backgroundImage = "linear-gradient(rgba(0,0,0,.32),rgba(0,0,0,.32)),url('" + url + "')";
+slot.style.backgroundPosition = 'center';
+slot.style.backgroundSize = 'cover';
+slot.className += ' has-bg';
+}
+if (!key) { paint(fallback); return; }
+var k = encodeURIComponent(key);
+var probe = new Image();
+probe.onload = function () { paint('https://i.ytimg.com/vi/' + k + '/maxresdefault.jpg'); };
+probe.onerror = function () {
+var small = new Image();
+small.onload = function () { paint('https://i.ytimg.com/vi/' + k + '/hqdefault.jpg'); };
+small.onerror = function () { paint(fallback); };
+small.src = 'https://i.ytimg.com/vi/' + k + '/hqdefault.jpg';
+};
+probe.src = 'https://i.ytimg.com/vi/' + k + '/maxresdefault.jpg';
+}
 function detailEmpty(head, sub, retry, docTitle) {
 var m = $('#modal');
 if (!m) return;
@@ -1499,6 +1520,7 @@ return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
 +   '</aside>'
 + '</div>';
 document.title = title + ' · 番组计划';
+trailerSlotBg(m.querySelector('#dpTrailerSlot'), x.tr, x.img);
 var trb = m.querySelector('#dpTrailer');
 if (trb && x.tr) {
 trb.onclick = function () {
@@ -1718,6 +1740,7 @@ if (dpslot.childNodes.length) return;
 openQuarkPlay(dpslot, id, title);
 };
 }
+trailerSlotBg(m.querySelector('#dpTrailerSlot'), ex[2], posterHd(id));
 var trb = m.querySelector('#dpTrailer');
 if (trb && ex[2]) {
 trb.onclick = function () {
