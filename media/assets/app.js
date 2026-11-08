@@ -2658,6 +2658,12 @@ var ex = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
 var eps = ex && ex[4];
 return (eps && eps.length) ? eps : null;
 }
+function srcFrame(src, allow) {
+return '<div class="dpv-frame"><iframe src="' + src + '"'
++ ' allow="' + (allow || 'autoplay; encrypted-media; fullscreen; picture-in-picture') + '"'
++ ' allowfullscreen scrolling="no" frameborder="no"'
++ ' referrerpolicy="origin-when-cross-origin"></iframe></div>';
+}
 function ytKey(url) {
 var m = /[?&]v=([\w-]{6,})/.exec(url || '') || /youtu\.be\/([\w-]{6,})/.exec(url || '');
 return m ? m[1] : '';
@@ -2669,10 +2675,8 @@ var slot = box.querySelector('#dpPlayer') || box;
 if (window.__qpAbort === 'function') window.__qpAbort();
 if (window.__biliAbort === 'function') window.__biliAbort();
 if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
-slot.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/'
-+ encodeURIComponent(key) + '?autoplay=1&rel=0&modestbranding=1"'
-+ ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen'
-+ ' style="width:100%;height:100%;border:0;display:block"></iframe>';
+slot.innerHTML = srcFrame('https://www.youtube-nocookie.com/embed/'
++ encodeURIComponent(key) + '?autoplay=1&rel=0&modestbranding=1');
 srcHint(box, 'YouTube 官方频道 · 播放器由 YouTube 提供（国内访问需代理，B 站源不受限）');
 return true;
 }
@@ -2682,10 +2686,8 @@ if (window.__qpAbort === 'function') window.__qpAbort();
 if (window.__biliAbort === 'function') window.__biliAbort();
 if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
 var slot = box.querySelector('#dpPlayer') || box;
-slot.innerHTML = '<iframe src="https://player.bilibili.com/player.html?bvid='
-+ encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1"'
-+ ' scrolling="no" frameborder="no" framespacing="0" allowfullscreen="true"'
-+ ' style="width:100%;height:100%;border:0;display:block"></iframe>';
+slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?bvid='
++ encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1');
 srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
 return true;
 }
@@ -2695,11 +2697,9 @@ if (window.__qpAbort === 'function') window.__qpAbort();
 if (window.__biliAbort === 'function') window.__biliAbort();
 if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
 var slot = box.querySelector('#dpPlayer') || box;
-slot.innerHTML = '<iframe src="https://player.bilibili.com/player.html?episodeId='
+slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?episodeId='
 + encodeURIComponent(ep.id) + '&seasonId=' + encodeURIComponent(sid)
-+ '&autoplay=1&high_quality=1&danmaku=1"'
-+ ' scrolling="no" frameborder="no" allowfullscreen="true"'
-+ ' style="width:100%;height:100%;border:0;display:block"></iframe>';
++ '&autoplay=1&high_quality=1&danmaku=1');
 srcHint(box, 'B 站官方番剧 · 第 ' + epNo + ' 集（免费集，免登录）');
 return true;
 }
