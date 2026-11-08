@@ -162,22 +162,39 @@
       ytReach().then(function (ok) {
         if (ok && srcEmbedYT(box, (eps[idx] || [])[1], epNo)) return;
         if (srcEmbedBili(box, id)) return;                 // 有 bvid：B 站官方嵌入
-        /* 没有 bvid 时看有没有站点登录 + B 站绑定：biliPlayEp 走盒子 /bili/playurl
-           （服务器换直链），国内照样能看。未登录就不叫它，避免弹登录把槽位占空。 */
+        /* 没有 bvid 时看有没有「站点登录 + B 站已绑定」：biliPlayEp 走盒子 /bili/playurl
+           （服务器换直链），国内照样能看。
+           ⚠ 只判登录不够：登录但没绑 B 站时 biliPlayEp 会直接报「没找到这部番的 B 站源」，
+           不会落到网盘。所以先用 /bili/bind 探一次绑定状态（srcProbeBili 自带 60s 缓存粒度），
+           只有 kind==='bound' 才走它，否则老实走网盘。 */
         var tk = (typeof authToken === 'function') ? authToken() : '';
         if (tk && typeof biliPlayEp === 'function') {
-          srcHint(box, 'YouTube 不可达 · 切到 B 站源');
-          biliPlayEp(box, id, title, epNo);
+          srcHint(box, 'YouTube 不可达 · 检查 B 站绑定…');
+          srcProbeBili(tk).then(function (b) {
+            if (b && b.kind === 'bound') {
+              srcHint(box, 'YouTube 不可达 · 切到 B 站源');
+              biliPlayEp(box, id, title, epNo);
+              return;
+            }
+            srcHint(box, 'YouTube 不可达 · B 站未绑定 · 使用网盘源');
+            if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+          });
           return;
         }
         srcHint(box, 'YouTube 不可达 · 使用网盘源');
         if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+        /* 未登录时「开始观看」只留一条「登录后…」太被动：直接把登录面板弹出来。
+           （已登录但夸克没绑的用户由 75 的 rebind 状态行给「重新绑定」按钮。） */
+        if (!tk && typeof openAuthPanel === 'function') openAuthPanel('email');
       });
       return true;
     }
     if (srcEmbedBili(box, id)) return true;
     if (typeof openQuarkPlay === 'function') {
       openQuarkPlay(box.querySelector('#dpPlayer') || box, id, title);   // 磁力转存链路（不在面板列出）
+      if (!(typeof authToken === 'function' && authToken()) && typeof openAuthPanel === 'function') {
+        openAuthPanel('email');                                          // 未登录：直接弹登录
+      }
       return true;
     }
     return false;
