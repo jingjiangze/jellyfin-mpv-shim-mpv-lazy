@@ -23,7 +23,35 @@ FILES = {
     "media/assets/style.css": HERE / "site" / "style.css",
     "media/assets/app.js": HERE / "site" / "app.js",
 }
-MSG = "assets: sync style.css/app.js to CDN [skip ci]"
+# 哈希名文件也要推：页面 loader 的第一候选是 app-<hash>.js / style-<hash>.css
+# （CDN 里新路径必然是新内容），只推固定名会让 gh-proxy 这条兜底对哈希名 404。
+# 同一目录里**旧的**哈希名文件由 prune_stale() 删掉，否则每轮新增 260KB 进仓库。
+for _p in sorted((HERE / "site").glob("app-*.js")) + sorted((HERE / "site").glob("style-*.css")):
+    FILES["media/assets/" + _p.name] = _p
+
+MSG = "assets: sync style.css/app.js (+hash names) to CDN [skip ci]"
+
+
+def prune_stale(head, keep):
+    """返回要删除的 tree 条目（旧哈希名文件）：sha=None 表示删除。"""
+    r = subprocess.run(
+        ["gh", "api", f"repos/{REPO}/contents/media/assets?ref={head}"],
+        capture_output=True)
+    if r.returncode != 0:
+        return []                      # 目录还不存在 / 取不到：本轮不删
+    try:
+        items = json.loads(r.stdout or b"[]")
+    except Exception:
+        return []
+    out = []
+    for it in items if isinstance(items, list) else []:
+        name = it.get("name") or ""
+        if not (name.startswith("app-") or name.startswith("style-")):
+            continue
+        if it.get("type") != "blob" or name in keep:
+            continue
+        out.append({"path": "media/assets/" + name, "mode": "100644", "type": "blob", "sha": None})
+    return out
 
 
 def gh(args, payload=None, method=None):
@@ -61,6 +89,11 @@ def main():
             blob = gh([f"repos/{REPO}/git/blobs"], {
                 "content": base64.b64encode(local.read_bytes()).decode(), "encoding": "base64"})
             items.append({"path": repo_path, "mode": "100644", "type": "blob", "sha": blob["sha"]})
+        keep = {k.split("/")[-1] for k in FILES}
+        stale = prune_stale(head, keep)
+        if stale:
+            print("prune:", ", ".join(i["path"].split("/")[-1] for i in stale))
+        items += stale
         tree = gh([f"repos/{REPO}/git/trees"], {"base_tree": base_tree, "tree": items})
         commit = gh([f"repos/{REPO}/git/commits"], {
             "message": MSG, "tree": tree["sha"], "parents": [head]})

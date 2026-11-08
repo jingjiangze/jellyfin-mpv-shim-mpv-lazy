@@ -333,10 +333,21 @@ jobs:
             fi
             echo "push 第 $attempt 次失败，尝试同步远端后重试"
             if git fetch -q "$MS_URL" master 2>/dev/null; then
-              if ! git -c rebase.autoStash=true rebase -X theirs FETCH_HEAD >/dev/null 2>&1; then
+              if git -c rebase.autoStash=true rebase -X theirs FETCH_HEAD >/dev/null 2>&1; then
+                :
+              else
                 git rebase --abort >/dev/null 2>&1 || true
-                echo "rebase 冲突，放弃本轮数据集同步"
-                break
+                # 删除/修改型冲突 rebase -X 解决不了（我们每轮 rm 掉旧 assets/app-*.js 再拷新
+                # 哈希名，上游同轮也删改了同一批文件）。兜底：把本轮构建的整棵树挂到上游最新
+                # 提交上（soft reset 保留索引 = 本轮树），一次 commit 即无冲突。
+                # 代价：上游独有、本轮树里没有的文件（别的 run 新加的海报）先被移除；
+                # 下一轮按「目标不存在」重新补上，自愈。
+                if git fetch -q "$MS_URL" master 2>/dev/null                    && git reset --soft FETCH_HEAD                    && git -c commit.gpgsign=false -c user.name=github-actions                         -c user.email=actions@users.noreply.github.com                         commit --allow-empty -qm "sync posters + js (grafted on upstream)"; then
+                  echo "rebase 冲突 → 改用 graft 提交（本轮树覆盖上游树）"
+                else
+                  echo "graft 也失败，放弃本轮数据集同步"
+                  break
+                fi
               fi
             fi
             sleep 5
