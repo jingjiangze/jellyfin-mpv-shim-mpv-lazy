@@ -2690,18 +2690,30 @@ if (ok && srcEmbedYT(box, (eps[idx] || [])[1], epNo)) return;
 if (srcEmbedBili(box, id)) return;                 // 有 bvid：B 站官方嵌入
 var tk = (typeof authToken === 'function') ? authToken() : '';
 if (tk && typeof biliPlayEp === 'function') {
+srcHint(box, 'YouTube 不可达 · 检查 B 站绑定…');
+srcProbeBili(tk).then(function (b) {
+if (b && b.kind === 'bound') {
 srcHint(box, 'YouTube 不可达 · 切到 B 站源');
 biliPlayEp(box, id, title, epNo);
 return;
 }
+srcHint(box, 'YouTube 不可达 · B 站未绑定 · 使用网盘源');
+if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+});
+return;
+}
 srcHint(box, 'YouTube 不可达 · 使用网盘源');
 if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+if (!tk && typeof openAuthPanel === 'function') openAuthPanel('email');
 });
 return true;
 }
 if (srcEmbedBili(box, id)) return true;
 if (typeof openQuarkPlay === 'function') {
 openQuarkPlay(box.querySelector('#dpPlayer') || box, id, title);   // 磁力转存链路（不在面板列出）
+if (!(typeof authToken === 'function' && authToken()) && typeof openAuthPanel === 'function') {
+openAuthPanel('email');                                          // 未登录：直接弹登录
+}
 return true;
 }
 return false;
