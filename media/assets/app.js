@@ -2759,7 +2759,6 @@ if (ok && srcEmbedYT(box, (eps[idx] || [])[1], epNo)) return;
 toQuark(why + ' · YouTube 不可达');
 });
 }
-if (srcEmbedBili(box, id)) return true;
 srcHint(box, '正在匹配 B 站官方番剧…');
 srcPgc(title).then(function (p) {
 if (p) {
@@ -2769,6 +2768,7 @@ if (row && row.vip) {
 srcHint(box, '第 ' + epNo + ' 集是 B 站大会员集（仅试看）· 已换下一个源');
 }
 }
+if (srcEmbedBili(box, id)) return;
 srcHint(box, '正在 B 站搜索「' + title + '」…');
 biliFindBvid(title).then(function (bv) {
 if (bv && srcEmbedBvid(box, bv)) return;
@@ -2957,7 +2957,6 @@ srcEmbedYT(box, (eps[idx] || [])[1], epNo);
 return;
 }
 if (key === 'bili') {
-if (srcEmbedBili(box, id)) return;
 srcStart(box, id, title, epNo);
 return;
 }
