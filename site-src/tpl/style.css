@@ -3443,6 +3443,10 @@ main {
   }
   .dp-srcs .qp-line-list::-webkit-scrollbar { display: none; }
   .dp-srcs .qp-line-row { flex: 0 0 auto; width: auto; }
+  /* 手机端副标题原来 nowrap + 被 flex 压到 115px，文字直接溢出到屏幕外（实测）；
+     改成最多两行、右对齐。 */
+  .dp-srcs .sec-h { align-items: flex-start; }
+  .dp-srcs .sec-sub { white-space: normal; text-align: right; max-width: 62%; line-height: 1.35; }
   .dp-srcs .qp-line { flex: 0 0 auto; height: var(--ctl-h); font-size: var(--fs-xs); }
   .dp-srcs .qp-line-row .btn { height: var(--ctl-h); }
 }
@@ -3532,9 +3536,14 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
   display: grid;
   place-items: center;
   aspect-ratio: 16 / 9;
+  max-height: 420px;
   border-radius: 2px;
   overflow: hidden;
   background: #000;
+}
+/* 有官方缩略图（JS 探测成功后加 .has-bg）：按钮压一圈暗色，别被亮底吞掉 */
+.trailer-slot.has-bg .btn.pri {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .45);
 }
 
 .trailer-slot iframe { display: block; }

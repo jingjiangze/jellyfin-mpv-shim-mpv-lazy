@@ -42,6 +42,31 @@
   /* 空态：一句话 + 回列表的出口；retry=true 时补「重试」。
      正文标题与 <title> 分开传：加载失败时正文要说清是失败，<title> 统一写「条目不存在」。
      这里刻意不出 .acts / h3 —— magnet-eps.js 的观察器只认这两个锚点，空态不该被它插进磁力行。 */
+  /* 预告槽背景：先试 YouTube 官方缩略图（maxres 不一定有，退回 hq），都失败用封面。
+     纯黑 16:9 大块在宽屏上像「加载坏了」（外源详情页实测），有底图才像播放器。
+     只发图片请求、不注任何第三方脚本，点按钮才换成 iframe。 */
+  function trailerSlotBg(slot, key, fallback) {
+    if (!slot) return;
+    function paint(url) {
+      if (!url) return;
+      slot.style.backgroundImage = "linear-gradient(rgba(0,0,0,.32),rgba(0,0,0,.32)),url('" + url + "')";
+      slot.style.backgroundPosition = 'center';
+      slot.style.backgroundSize = 'cover';
+      slot.className += ' has-bg';
+    }
+    if (!key) { paint(fallback); return; }
+    var k = encodeURIComponent(key);
+    var probe = new Image();
+    probe.onload = function () { paint('https://i.ytimg.com/vi/' + k + '/maxresdefault.jpg'); };
+    probe.onerror = function () {
+      var small = new Image();
+      small.onload = function () { paint('https://i.ytimg.com/vi/' + k + '/hqdefault.jpg'); };
+      small.onerror = function () { paint(fallback); };
+      small.src = 'https://i.ytimg.com/vi/' + k + '/hqdefault.jpg';
+    };
+    probe.src = 'https://i.ytimg.com/vi/' + k + '/maxresdefault.jpg';
+  }
+
   function detailEmpty(head, sub, retry, docTitle) {
     var m = $('#modal');
     if (!m) return;
@@ -196,6 +221,7 @@
       +   '</aside>'
       + '</div>';
     document.title = title + ' · 番组计划';
+    trailerSlotBg(m.querySelector('#dpTrailerSlot'), x.tr, x.img);
     /* 预告：与番剧详情同一套「点按钮才注 iframe」 */
     var trb = m.querySelector('#dpTrailer');
     if (trb && x.tr) {
@@ -458,6 +484,7 @@
     }
 
     /* 预告：点按钮才注入 YouTube iframe（页面本身不加载任何第三方脚本） */
+    trailerSlotBg(m.querySelector('#dpTrailerSlot'), ex[2], posterHd(id));
     var trb = m.querySelector('#dpTrailer');
     if (trb && ex[2]) {
       trb.onclick = function () {
