@@ -2574,7 +2574,7 @@ var SRC_BASE = 'https://120.48.56.189';
 var SRC_TTL = 60 * 1000;                       // 探测结果缓存时长
 var SRC_USER = '/user';                       // B 站绑定在个人主页
 var SRC_KEYS = ['yt', 'bili', 'magnet'];
-var SRC_NAME = { yt: 'YouTube 官方', bili: 'B 站', magnet: '磁力' };
+var SRC_NAME = { yt: 'YouTube 官方', bili: 'B 站', magnet: '网盘' };
 var SRC_MEM = {};                              // "<id>:<ep>" -> {ts, data, pend}
 var SRC_MGEN = 0;                              // 每 mount 一次自增：异步结果只落最新那一代
 function srcToken() {
@@ -2645,9 +2645,7 @@ slot.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/'
 srcHint(box, 'YouTube 官方频道 · 播放器由 YouTube 提供（国内访问需代理，B 站源不受限）');
 return true;
 }
-function srcEmbedBili(box, id) {
-var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
-var bvid = exb && exb[5];
+function srcEmbedBvid(box, bvid) {
 if (!bvid) return false;
 if (window.__qpAbort === 'function') window.__qpAbort();
 if (window.__biliAbort === 'function') window.__biliAbort();
@@ -2659,6 +2657,19 @@ slot.innerHTML = '<iframe src="https://player.bilibili.com/player.html?bvid='
 + ' style="width:100%;height:100%;border:0;display:block"></iframe>';
 srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
 return true;
+}
+function srcEmbedBili(box, id) {
+var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
+return srcEmbedBvid(box, exb && exb[5]);
+}
+function biliFindBvid(title) {
+if (typeof biliGet !== 'function') return Promise.reject(new Error('no biliGet'));
+return biliGet('find', { t: title }).then(function (f) {
+if (!f || !f.found || !f.bvid) return '';
+var t = String(f.title || '');
+if (typeof BILI_NOISE === 'object' && BILI_NOISE.test && BILI_NOISE.test(t)) return '';
+return String(f.bvid);
+}, function () { return ''; });
 }
 var YT_REACH = null;
 function ytReach() {
@@ -2679,44 +2690,31 @@ setTimeout(function () { YT_REACH = null; }, 10 * 60 * 1000);   // 10 分钟后�
 return YT_REACH;
 }
 function srcStart(box, id, title, ep) {
-var eps = srcYtEps(id);
-if (eps) {
 var epNo = Math.max(1, Math.floor(Number(ep) || 1));
-var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
 var slot = box.querySelector('#dpPlayer') || box;
-srcHint(box, '正在检测 YouTube 可达性…');
-ytReach().then(function (ok) {
-if (ok && srcEmbedYT(box, (eps[idx] || [])[1], epNo)) return;
-if (srcEmbedBili(box, id)) return;                 // 有 bvid：B 站官方嵌入
 var tk = (typeof authToken === 'function') ? authToken() : '';
-if (tk && typeof biliPlayEp === 'function') {
-srcHint(box, 'YouTube 不可达 · 检查 B 站绑定…');
-srcProbeBili(tk).then(function (b) {
-if (b && b.kind === 'bound') {
-srcHint(box, 'YouTube 不可达 · 切到 B 站源');
-biliPlayEp(box, id, title, epNo);
-return;
-}
-srcHint(box, 'YouTube 不可达 · B 站未绑定 · 使用网盘源');
-if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
-});
-return;
-}
-srcHint(box, 'YouTube 不可达 · 使用网盘源');
+function toQuark(why) {
+srcHint(box, why + ' · 使用网盘源');
 if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
 if (!tk && typeof openAuthPanel === 'function') openAuthPanel('email');
+}
+function toYoutube(why) {
+var eps = srcYtEps(id);
+if (!eps) { toQuark(why + ' · 无官方正片'); return; }
+var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
+srcHint(box, why + ' · 检测 YouTube 可达性…');
+ytReach().then(function (ok) {
+if (ok && srcEmbedYT(box, (eps[idx] || [])[1], epNo)) return;
+toQuark(why + ' · YouTube 不可达');
 });
-return true;
 }
 if (srcEmbedBili(box, id)) return true;
-if (typeof openQuarkPlay === 'function') {
-openQuarkPlay(box.querySelector('#dpPlayer') || box, id, title);   // 磁力转存链路（不在面板列出）
-if (!(typeof authToken === 'function' && authToken()) && typeof openAuthPanel === 'function') {
-openAuthPanel('email');                                          // 未登录：直接弹登录
-}
+srcHint(box, '正在 B 站搜索「' + title + '」…');
+biliFindBvid(title).then(function (bv) {
+if (bv && srcEmbedBvid(box, bv)) return;
+toYoutube('B 站未找到');
+}, function () { toYoutube('B 站搜索失败'); });
 return true;
-}
-return false;
 }
 window.__srcStart = srcStart;          // 65-detail 的「开始观看」用
 function srcProbe(id, title, ep, force) {
@@ -2801,10 +2799,10 @@ srcSetRow(list, 'bili', 'B 站 · ' + b.uname + '（VIP' + b.vip + '）', { on: 
 else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 需绑定', { bind: true });
 else srcSetRow(list, 'bili', 'B 站 · 检测失败 · 点此重试', { bad: true, retry: true });
 var mg = data && data.magnet;
-if (!data) srcSetRow(list, 'magnet', '磁力 · 检测中…');
-else if (mg.kind === 'has') srcSetRow(list, 'magnet', '磁力 · 第 ' + epNo + ' 集可转存', { on: true });
-else if (mg.kind === 'none') srcSetRow(list, 'magnet', '磁力 · 本集无资源');
-else srcSetRow(list, 'magnet', '磁力 · 检测失败 · 点此重试', { bad: true, retry: true });
+if (!data) srcSetRow(list, 'magnet', '网盘 · 检测中…', { bind: true });
+else if (mg.kind === 'has') srcSetRow(list, 'magnet', '网盘 · 第 ' + epNo + ' 集可转存', { on: true, bind: true });
+else if (mg.kind === 'none') srcSetRow(list, 'magnet', '网盘 · 本集无资源', { bind: true });
+else srcSetRow(list, 'magnet', '网盘 · 检测失败 · 点此重试', { bad: true, retry: true, bind: true });
 }
 function srcHint(host, text) {
 var panel = host && host.querySelector ? host.querySelector('.dp-srcs') : null;
@@ -2854,6 +2852,11 @@ t = t.parentNode;
 if (!t || t === list) return;
 var act = t.getAttribute('data-act');
 if (act) {                                    // 绑定入口：只导航，不播放
+if (act === 'bind-magnet') {
+if (typeof authToken === 'function' && authToken()) srcOpenUrl(quarkBindUrl());
+else if (typeof openAuthPanel === 'function') openAuthPanel('email');
+return;
+}
 if (act === 'bind-bili') {
 if (typeof authToken === 'function' && authToken()) srcOpenUrl(SRC_USER);
 else if (typeof openAuthPanel === 'function') openAuthPanel('email');
