@@ -23,6 +23,8 @@
   var SRC_USER = '/user';                       // B 站绑定在个人主页
   var SRC_KEYS = ['yt', 'bili', 'magnet'];
   var SRC_NAME = { yt: 'YouTube 官方', bili: 'B 站', magnet: '网盘' };
+  /* 绑定按钮各源文案不同：B 站绑的是「登录态（换清晰度）」，网盘绑的是夸克账号（换播放权）。 */
+  var SRC_BIND = { bili: '登录高清', magnet: '绑定网盘' };
   var SRC_MEM = {};                              // "<id>:<ep>" -> {ts, data, pend}
   var SRC_MGEN = 0;                              // 每 mount 一次自增：异步结果只落最新那一代
 
@@ -236,7 +238,8 @@
       return '<span class="qp-line-row" data-row="' + k + '">'
         + '<button class="qp-line" type="button" data-src="' + k + '">'
         + esc(SRC_NAME[k]) + ' · 检测中…</button>'
-        + '<button class="btn" type="button" data-act="bind-' + k + '" hidden>绑定</button>'
+        + '<button class="btn" type="button" data-act="bind-' + k + '" hidden>'
+        + esc(SRC_BIND[k] || '绑定') + '</button>'
         + '</span>';
     }).join('');
     return '<section class="dp-srcs" data-open="1" data-bgm="' + esc(id) + '">'
@@ -295,14 +298,18 @@
     var y = data && data.yt;
     if (!data) srcSetRow(list, 'yt', 'YouTube 官方 · 检测中…');
     else if (y.kind === 'has') srcSetRow(list, 'yt', 'YouTube 官方 · ' + y.eps.length + ' 集可看', { on: true });
-    else srcSetRow(list, 'yt', '', { hide: true });      // 没有官方正片：整行收起
+    /* 没有官方正片时不再整行隐藏：三个源要能看见（用户口径「就三个源」），
+       但文案说清是「没收录」而不是「坏了」，也不加 .on，点它只会退到 B 站。 */
+    else srcSetRow(list, 'yt', 'YouTube 官方 · 本季未收录');
 
     var b = data && data.bili;
     if (!data) srcSetRow(list, 'bili', 'B 站 · 检测中…');
     else if (b.kind === 'bound') {
       srcSetRow(list, 'bili', 'B 站 · ' + b.uname + '（VIP' + b.vip + '）', { on: true });
     }
-    else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 需绑定', { bind: true });
+    /* 未登录也能看：player.bilibili.com 官方嵌入不要求账号，只是清晰度受限。
+       所以文案是「免登录可看」，右侧给「登录高清」——绑定是升级，不是门槛。 */
+    else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 免登录可看', { on: true, bind: true });
     else srcSetRow(list, 'bili', 'B 站 · 检测失败 · 点此重试', { bad: true, retry: true });
 
     /* 网盘行常显「绑定」：未登录→弹登录；已登录→带 token 打开夸克绑定页（网页+TV 两步）。
@@ -411,8 +418,10 @@
       return;
     }
     if (key === 'bili') {
+      /* 索引里有官方 bvid → 直接官方嵌入（免登录）。没有就走 srcStart 的同一条匿名链：
+         盒子 /bili/find 搜 bvid → YouTube → 网盘，而不是掉进需要登录的 biliPlayEp。 */
       if (srcEmbedBili(box, id)) return;
-      if (typeof biliPlayEp === 'function') biliPlayEp(box, id, title, epNo);
+      srcStart(box, id, title, epNo);
       return;
     }
     if (key === 'magnet') {                        // 磁力 → 转存后在线播放（夸克在幕后，不列出）

@@ -3410,10 +3410,19 @@ main {
   aspect-ratio: auto; overflow: visible; }
 .dp-player:not(:empty) > .trailer { margin: 0; }
 
-/* 播放源聚合面板 */
+/* 播放源聚合面板：桌面端是「一行一个源」的列表（行内左名右按钮），
+   不是横排小胶囊 —— 横排在 1500px 宽下会缩成一条窄带，源名被截断、绑定按钮
+   和源名分不清谁是谁（线上实测截图）。明日方舟语言：2px 圆角、hairline、可用源
+   左侧橙条、hover 变橙。窄屏再用横滑（见下方 @media）。 */
 .dp-srcs { margin: 0 0 var(--s5); }
-.dp-srcs .qp-line-list { display: flex; flex-wrap: wrap; gap: var(--s2); }
-.dp-srcs .qp-line-row { display: inline-flex; align-items: center; gap: var(--s1-5); }
+.dp-srcs .qp-line-list { display: flex; flex-direction: column; gap: 6px; }
+.dp-srcs .qp-line-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+.dp-srcs .qp-line-row[hidden] { display: none; }
+.dp-srcs .qp-line { flex: 1 1 auto; min-width: 0; height: 38px; padding: 0 var(--s3);
+  text-align: left; font-size: var(--fs-sm); border-radius: var(--r-xs); }
+.dp-srcs .qp-line.on { border-color: var(--ark); box-shadow: inset 2px 0 0 var(--ark);
+  background: var(--card); color: var(--fg); font-weight: 600; }
+.dp-srcs .qp-line-row .btn { flex: 0 0 auto; height: 38px; padding: 0 var(--s3); }
 .dp-srcs .sec-sub { margin-left: auto; }
 @media (max-width: 760px) { .dp-srcs[data-open="0"] .qp-line-list { display: none; } }
 
@@ -3421,6 +3430,7 @@ main {
    把播放器挤到首屏外；单行 + 横向滚动既不换行也保留全部入口。 */
 @media (max-width: 760px) {
   .dp-srcs .qp-line-list {
+    flex-direction: row;
     flex-wrap: nowrap;
     overflow-x: auto;
     overflow-y: hidden;
@@ -3429,7 +3439,9 @@ main {
     -ms-overflow-style: none;
   }
   .dp-srcs .qp-line-list::-webkit-scrollbar { display: none; }
-  .dp-srcs .qp-line-row { flex: 0 0 auto; }
+  .dp-srcs .qp-line-row { flex: 0 0 auto; width: auto; }
+  .dp-srcs .qp-line { flex: 0 0 auto; height: var(--ctl-h); font-size: var(--fs-xs); }
+  .dp-srcs .qp-line-row .btn { height: var(--ctl-h); }
 }
 
 /* ================================================================ 24 明日方舟设计语言（2026-11-07）
