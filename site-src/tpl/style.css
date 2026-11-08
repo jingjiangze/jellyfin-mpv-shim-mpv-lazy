@@ -3420,8 +3420,11 @@ main {
 .dp-srcs .qp-line-row[hidden] { display: none; }
 .dp-srcs .qp-line { flex: 1 1 auto; min-width: 0; height: 38px; padding: 0 var(--s3);
   text-align: left; font-size: var(--fs-sm); border-radius: var(--r-xs); }
-.dp-srcs .qp-line.on { border-color: var(--ark); box-shadow: inset 2px 0 0 var(--ark);
+/* 「可用」不是「已选中」：只给左侧一道橙条 + 字重加粗，边框保持中性。
+   整圈描橙会让两行同时像被选中（本地渲染实测）。 */
+.dp-srcs .qp-line.on { border-color: var(--line); box-shadow: inset 3px 0 0 var(--ark);
   background: var(--card); color: var(--fg); font-weight: 600; }
+.dp-srcs .qp-line.on:hover { border-color: var(--ark); }
 .dp-srcs .qp-line-row .btn { flex: 0 0 auto; height: 38px; padding: 0 var(--s3); }
 .dp-srcs .sec-sub { margin-left: auto; }
 @media (max-width: 760px) { .dp-srcs[data-open="0"] .qp-line-list { display: none; } }
