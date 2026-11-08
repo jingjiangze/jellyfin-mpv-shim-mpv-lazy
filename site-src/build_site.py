@@ -428,33 +428,40 @@ SHELL_INLINE = ('<div class="mask" id="mask"></div>'
                 '<main class="wrap" id="main"><div id="modal" class="dp"></div></main>')
 SHELLS = {"modal": SHELL_MODAL, "inline": SHELL_INLINE}
 
-PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><link rel=preconnect href=https://modelscope.cn crossorigin><link rel=preconnect href=https://cdn-lfs-cn-1.modelscope.cn crossorigin><meta name=color-scheme content="dark light"><script>try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script><style>html{background:#f6f6fa}html[data-theme=dark]{background:#101013}</style><link rel=stylesheet href="/style-__CV__.css" onerror="var l=document.createElement('link');l.rel='stylesheet';l.href='https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/style-__CV__.css';document.head.appendChild(l)"><script>(function(){
-  /* 资源加载：每类资源一份「候选链」，命中即停。
-     ⚠ 曾经的 bug：写成「先 app-<hash>.js 再 app.js?v=」的顺序加载，两个都会执行 —— 第一个
-       （同源，新）成功后继续加载第二个（ModelScope 上没更新过的旧 app.js）→ 旧代码覆盖新代码，
-       新功能静默失效、面板文案回退。CSS 同理会被旧样式覆盖。所以必须「命中一个就停」。
-     CSS 改成 <head> 里的静态 <link>：同源 Pages 必然有哈希名文件，并行下载、不阻塞首屏、可长期缓存；
-     仅当同源失败才退 ModelScope 的同名文件。
-     JS 走链：ModelScope（国内最快）→ gh-proxy → 同源；哈希名优先（CDN 新路径必新），固定名 + ?v= 兜旧 HTML。 */
+PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><link rel=preconnect href=https://modelscope.cn crossorigin><link rel=preconnect href=https://cdn-lfs-cn-1.modelscope.cn crossorigin><meta name=color-scheme content="dark light"><script>try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script><style>html{background:#f6f6fa}html[data-theme=dark]{background:#101013}</style><link rel=stylesheet href="/style-__CV__.css" onerror="var l=document.createElement('link');l.rel='stylesheet';l.href='https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/style-__CV__.css';document.head.appendChild(l)"><link rel=preload as=script href="https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/app-__JV__.js"><script>(function(){
+  /* 资源加载：每类资源一份「候选链」，命中即停 + 单候选超时。
+     血泪三条（都踩过，别再改回去）：
+       ① 不能写成「先 app-<hash>.js 再 app.js?v=」的顺序双加载 —— 两个都会执行，第二个
+          从 ModelScope 取到的是没更新的旧 app.js，旧代码覆盖新代码，新功能静默失效。
+       ② 候选不能只有一个源：ModelScope 数据集同步失败时哈希名在数据集是 404，必须能退。
+       ③ **每个候选必须带超时**：Cloudflare Pages 国内偶尔卡到 20s+ 不回包，没有超时就
+          整页空白（实测 iPhone UA 那次 25s 还没响应，__srcStart 一直是 undefined）。
+          超时即移除该 <script> 试下一个；元素在未执行前被移除，浏览器不会再执行它。
+     顺序：ModelScope（国内最快，0.3s 级）→ 同源 Pages（权威，HTML 都从这来）→
+           gh-proxy（第三方代理，最后兜底）。固定名 app.js?v= 只在哈希名全军覆没时用。 */
   var MS='https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/';
   var GH='https://gh-proxy.com/https://raw.githubusercontent.com/jingjiangze/jellyfin-mpv-shim-mpv-lazy/main/media/assets/';
-  var B=[MS,GH,'/'];
-  function chain(name, hashName){
-    var out=[];
-    for (var i=0;i<B.length;i++) out.push(B[i]+hashName);
-    for (var j=0;j<B.length;j++) out.push(B[j]+name);
-    return out;
-  }
-  var JS=chain('app.js?v=__JV__','app-__JV__.js');
-  var ME=[MS+'magnet-eps.js',GH+'magnet-eps.js','/magnet-eps.js'];
-  function js(list,n,done){
-    if(n>=list.length) return;
-    var s=document.createElement('script'); s.src=list[n];
-    s.onload=function(){ if(done) done(); };
-    s.onerror=function(){ if(s.parentNode) s.parentNode.removeChild(s); js(list,n+1,done); };
+  var JS=[MS+'app-__JV__.js','/app-__JV__.js','/app.js?v=__JV__',MS+'app.js?v=__JV__',GH+'app-__JV__.js',GH+'app.js?v=__JV__'];
+  var ME=[MS+'magnet-eps.js','/magnet-eps.js',GH+'magnet-eps.js'];
+  var TMO=7000;
+  function load(list,i,done){
+    if(i>=list.length) return;
+    var s=document.createElement('script'),settled=false;
+    var timer=setTimeout(function(){
+      if(settled) return; settled=true;
+      if(s.parentNode) s.parentNode.removeChild(s);
+      load(list,i+1,done);
+    },TMO);
+    s.onload=function(){ if(settled) return; settled=true; clearTimeout(timer); if(done) done(); };
+    s.onerror=function(){
+      if(settled) return; settled=true; clearTimeout(timer);
+      if(s.parentNode) s.parentNode.removeChild(s);
+      load(list,i+1,done);
+    };
+    s.src=list[i];
     document.body.appendChild(s);
   }
-  function boot(){ js(JS,0,function(){ js(ME,0,null); }); }
+  function boot(){ load(JS,0,function(){ load(ME,0,null); }); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot);
   else boot();
 })()</script></head><body data-page=__PAGE__ data-build="__BUILD__"><header class=site-head id=topbar></header>__SHELL__</body></html>"""
