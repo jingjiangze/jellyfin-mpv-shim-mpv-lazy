@@ -3404,10 +3404,30 @@ main {
 .dp-player:empty:hover::after {
   transform: scale(1.06);
 }
-/* 播放器自带 .qp-stage 的 16:9 + 控制条 + 选集，比槽高约 130px：
-   槽必须让出比例与裁切，否则 .qp-bar 与选集会被 overflow:hidden 切掉。 */
+/* 播放器自带内容（76 的原生宿主：video + 状态行 + 集数按钮）比槽高，槽让出比例与裁切。
+   ⚠ 但第三方 iframe 不能靠这个槽定高度 —— 见下面 .dpv-frame。 */
 .dp-player:not(:empty) { border: 0; background: transparent; border-radius: 0;
   aspect-ratio: auto; overflow: visible; }
+
+/* 第三方播放器（B 站 / YouTube）外壳：比例由**外壳**自己给 16:9。
+   之前 iframe 直接写 height:100%，而 .dp-player:not(:empty) 的 height 是 auto
+   ⇒ 塌成 iframe 默认 150px，视频被压成一条（线上实测桌面 784×150、手机 366×150）。 */
+.dpv-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.dpv-frame > iframe {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
 .dp-player:not(:empty) > .trailer { margin: 0; }
 
 /* 播放源聚合面板：桌面端是「一行一个源」的列表（行内左名右按钮），
