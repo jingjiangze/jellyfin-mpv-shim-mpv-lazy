@@ -2624,15 +2624,22 @@ clearTimeout(timer);
 return { status: 0, ok: false, j: {} };
 });
 }
-function srcProbeBili(tk) {
-return srcGet('/bili/bind', tk).then(function (r) {
-var j = r.j || {};
-if (r.ok && j.ok && j.bound) {
-return { kind: 'bound', uname: String(j.uname || '已绑定'), vip: Number(j.vip_type) || 0 };
+function srcProbeBili(tk, title) {
+var pgcP = (typeof srcPgc === 'function') ? srcPgc(title) : Promise.resolve(null);
+return Promise.all([srcGet('/bili/bind', tk), pgcP]).then(function (pair) {
+var r = pair[0], j = (r && r.j) || {}, pgc = pair[1];
+var kind;
+if (r && r.ok && j.ok && j.bound) {
+kind = { kind: 'bound', uname: String(j.uname || '已绑定'), vip: Number(j.vip_type) || 0 };
+} else if (r && (r.status === 404 || r.status === 401)) {
+kind = { kind: 'unbound' };
+} else if (j.bound === false || j.error === 'not_bound' || j.ok === false) {
+kind = { kind: 'unbound' };
+} else {
+kind = { kind: 'error' };
 }
-if (r.status === 404 || r.status === 401) return { kind: 'unbound' };
-if (j.bound === false || j.error === 'not_bound' || j.ok === false) return { kind: 'unbound' };
-return { kind: 'error' };
+if (pgc) { kind.pgc = pgc; if (kind.kind === 'error') kind.kind = 'unbound'; }
+return kind;
 });
 }
 function srcProbeMagnet(title, id, ep) {
@@ -2681,6 +2688,26 @@ slot.innerHTML = '<iframe src="https://player.bilibili.com/player.html?bvid='
 + ' style="width:100%;height:100%;border:0;display:block"></iframe>';
 srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
 return true;
+}
+function srcEmbedPgc(box, sid, ep, epNo) {
+if (!box || !sid || !ep || !ep.id) return false;
+if (window.__qpAbort === 'function') window.__qpAbort();
+if (window.__biliAbort === 'function') window.__biliAbort();
+if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
+var slot = box.querySelector('#dpPlayer') || box;
+slot.innerHTML = '<iframe src="https://player.bilibili.com/player.html?episodeId='
++ encodeURIComponent(ep.id) + '&seasonId=' + encodeURIComponent(sid)
++ '&autoplay=1&high_quality=1&danmaku=1"'
++ ' scrolling="no" frameborder="no" allowfullscreen="true"'
++ ' style="width:100%;height:100%;border:0;display:block"></iframe>';
+srcHint(box, 'B 站官方番剧 · 第 ' + epNo + ' 集（免费集，免登录）');
+return true;
+}
+function srcPgc(title) {
+if (typeof biliGet !== 'function') return Promise.resolve(null);
+return biliGet('pgc', { t: title }).then(function (d) {
+return (d && d.ok && d.found && d.sid && (d.eps || []).length) ? d : null;
+}, function () { return null; });
 }
 function srcEmbedBili(box, id) {
 var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
@@ -2733,11 +2760,21 @@ toQuark(why + ' · YouTube 不可达');
 });
 }
 if (srcEmbedBili(box, id)) return true;
+srcHint(box, '正在匹配 B 站官方番剧…');
+srcPgc(title).then(function (p) {
+if (p) {
+var row = p.eps[Math.max(0, epNo - 1)] || p.eps[0];
+if (row && !row.vip && srcEmbedPgc(box, p.sid, row, epNo)) return;
+if (row && row.vip) {
+srcHint(box, '第 ' + epNo + ' 集是 B 站大会员集（仅试看）· 已换下一个源');
+}
+}
 srcHint(box, '正在 B 站搜索「' + title + '」…');
 biliFindBvid(title).then(function (bv) {
 if (bv && srcEmbedBvid(box, bv)) return;
 toYoutube('B 站未找到');
 }, function () { toYoutube('B 站搜索失败'); });
+});
 return true;
 }
 window.__srcStart = srcStart;          // 65-detail 的「开始观看」用
@@ -2751,7 +2788,7 @@ var tk = srcToken();
 var ytEps = srcYtEps(id);
 rec.pend = Promise.all([
 Promise.resolve(ytEps ? { kind: 'has', eps: ytEps } : { kind: 'none' }),
-srcProbeBili(tk),
+srcProbeBili(tk, title),
 srcProbeMagnet(title, id, ep)
 ]).then(function (arr) {
 var data = { yt: arr[0], bili: arr[1], magnet: arr[2] };
@@ -2818,6 +2855,13 @@ else if (y.kind === 'has') srcSetRow(list, 'yt', 'YouTube 官方 · ' + y.eps.le
 else srcSetRow(list, 'yt', 'YouTube 官方 · 本季未收录');
 var b = data && data.bili;
 if (!data) srcSetRow(list, 'bili', 'B 站 · 检测中…');
+else if (b.pgc && b.pgc.found) {
+var pg = b.pgc.eps || [];
+var freeN = 0;
+for (var pi = 0; pi < pg.length; pi++) if (!pg[pi].vip) freeN++;
+srcSetRow(list, 'bili', 'B 站官方 · 免费 ' + freeN + '/' + pg.length + ' 集',
+{ on: freeN > 0, bind: b.kind !== 'bound' });
+}
 else if (b.kind === 'bound') {
 srcSetRow(list, 'bili', 'B 站 · ' + b.uname + '（VIP' + b.vip + '）', { on: true });
 }
