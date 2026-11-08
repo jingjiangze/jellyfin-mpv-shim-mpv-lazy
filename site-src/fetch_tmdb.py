@@ -35,7 +35,12 @@ POSTER_DIR = pathlib.Path(os.environ.get("POSTER_DIR", "site/posters"))
 MODELSCOPE = os.environ.get(
     "MODELSCOPE_BASE",
     "https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master")
-TMDB_KEY = os.environ.get("TMDB_KEY") or "99bf884d2a3e8403ae8accded44ec73c"
+# 密钥只从环境变量取（GitHub Secrets: TMDB_KEY）。这里原来回填了明文 key，
+# 而本仓库是公开的 —— 已移除；缺失时直接报错退出，不要静默降级成「无 TMDB 数据」。
+TMDB_KEY = (os.environ.get("TMDB_KEY") or "").strip()
+if not TMDB_KEY:
+    raise SystemExit("TMDB_KEY 未配置：请在仓库 Secrets 里设置 TMDB_KEY")
+
 UA = "jellyfin-mpv-shim-mpv-lazy/anime-tmdb"
 LIMIT = int(os.environ.get("TMDB_MAX", "60"))
 

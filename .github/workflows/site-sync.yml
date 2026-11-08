@@ -5,19 +5,44 @@ name: site-sync
 # 触发方式：由 pipeline.yml 每 4 小时触发；也可手动 dispatch。
 
 # 定时统一由 .github/workflows/pipeline.yml 触发（保留 dispatch 供手工重跑）
+# 触发方式（2026-11-08 审计后）：
+#   · push 到 main 且只动了前端（tpl/**、build_site.py、推送脚本）→ **fast 模式**：
+#     跳过全部抓取步骤，只走「Restore state → 构建 → 同步资产 → 部署」，约 5 分钟。
+#     在此之前前端改动必须手动 dispatch、跑满 25 分钟全套抓取，是这条链路最大的手工口子。
+#   · pipeline.yml 每 4 小时触发 / 手动 dispatch → 全量。
 on:
   workflow_dispatch:
+    inputs:
+      fast:
+        description: "只构建+部署（跳过全部抓取步骤）"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - "site-src/tpl/**"
+      - "site-src/build_site.py"
+      - "site-src/push_site_assets.py"
+      - "site-src/push_data_cdn.py"
+      - "site-src/ms-revert-blocklist.txt"
+      - ".github/workflows/site-sync.yml"
 
 permissions:
   contents: write
+  issues: write          # 失败时开/更新 ci-alert issue（见末尾 Notify 步骤）
 
+# 分两组：push（fast）自成一队、后来的直接抢占 —— 前端连推几次不该排队等 5 分钟；
+# 全量 run（pipeline / dispatch）单独一队且不抢占 —— 抢占等于白扔一次 25 分钟的抓取。
 concurrency:
-  group: site-sync
-  cancel-in-progress: false
+  group: site-sync-${{ github.event_name == 'push' && 'fast' || 'full' }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    env:
+      # FAST=1 时跳过全部抓取步骤，只构建 + 部署（push 触发，或 dispatch 时勾 fast）
+      FAST: ${{ (github.event_name == 'push' || inputs.fast) && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +61,7 @@ jobs:
           ls -la site-src/site | head -6
 
       - name: Fetch fresh anime and movies
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 12
         working-directory: site-src
         env:
@@ -44,6 +70,7 @@ jobs:
         run: python -u fetch_fresh_v2.py
 
       - name: Fetch bilibili links
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 15
         continue-on-error: true
         working-directory: site-src
@@ -53,6 +80,7 @@ jobs:
         run: python -u fetch_bili.py
 
       - name: Fetch bilibili links for fresh items
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 25
         continue-on-error: true
         working-directory: site-src
@@ -62,6 +90,7 @@ jobs:
         run: python -u fetch_bili_fresh.py
 
       - name: Fetch magnet links
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 25
         continue-on-error: true
         working-directory: site-src
@@ -74,6 +103,7 @@ jobs:
         run: python -u fetch_magnet.py
 
       - name: Fill rating distributions
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 25
         continue-on-error: true
         working-directory: site-src
@@ -85,6 +115,7 @@ jobs:
 
       # 角色 / 制作人员 / 收藏统计（Bangumi v0），每轮补 PEOPLE_MAX 条
       - name: Fill characters and staff
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 35
         continue-on-error: true
         working-directory: site-src
@@ -105,6 +136,7 @@ jobs:
         run: python -u fetch_people.py
 
       - name: Fill missing posters
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 20
         working-directory: site-src
         env:
@@ -117,6 +149,7 @@ jobs:
       # 落到 site/posters/ 后由下面的 Sync posters to ModelScope 自动上云，
       # build_site 再把主源换成 ModelScope（国内 0.35s）。
       - name: Fetch fresh covers
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 20
         continue-on-error: true
         working-directory: site-src
@@ -128,6 +161,7 @@ jobs:
       # 豆瓣封面有防盗链（无 referer 418 / 站点 referer 403），必须构建期带
       # movie.douban.com 的 referer 下到本地，再由数据集分发。
       - name: Fetch Douban covers
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 12
         continue-on-error: true
         working-directory: site-src
@@ -136,6 +170,7 @@ jobs:
       # TMDB 热门/正在上映：给「电影」页第二、三块供数。
       # 接口失败不阻断站点（脚本自身 exit 0 并保留上一轮 tmdb.json）。
       - name: Fetch TMDB movies
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 10
         continue-on-error: true
         working-directory: site-src
@@ -148,6 +183,7 @@ jobs:
       # 豆瓣有 IP 级风控（subject_ip_rate_limit），失败时脚本保留上一轮数据，
       # 所以这里 continue-on-error 不会把已抓到的简介冲掉。
       - name: Fetch Douban intros
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 15
         continue-on-error: true
         env:
@@ -159,6 +195,7 @@ jobs:
       # 已有 overview_ja 的跳过（幂等）。翻完写回 site/anime/*.json + site/data/s*.json，
       # 失败不阻断构建。
       - name: Translate Japanese overviews
+        if: ${{ env.FAST != '1' && success() }}
         # 2026-11-04 由 60 降到 10：这一步反复吃满 60 分钟超时，把整条发布队列堵死
         # （实测两次 run 各卡 1.5 小时，站点修复无法上线）。翻译是幂等的，翻不完下次继续。
         timeout-minutes: 10
@@ -176,6 +213,7 @@ jobs:
       # 只有这条 Git Data API 路径能可靠落盘；后面的 Publish data + posters + state
       # 有 rebase 冲突静默跳过的分支，实测丢过整轮 1,624 条翻译（run 41678297541）。
       - name: Push shards (Git Data API)
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 10
         continue-on-error: true
         env:
@@ -187,17 +225,34 @@ jobs:
       # 官方频道正片索引：由盒子的 cron（每 4h）经公共池隧道拉 YouTube RSS，
       # 落 /var/www/yt/yt.json 经 nginx /ytdata/ 暴露 —— runner 直连会被 YouTube 404。
       - name: Fetch official YouTube episodes
+        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 4
         continue-on-error: true
         working-directory: site-src
         run: |
-          curl -sfk -m 30 "https://120.48.56.189/ytdata/yt.json" -o site/yt.json || true
-          python - <<'PYEOF' 2>/dev/null || rm -f site/yt.json
-          import json, pathlib
-          d = json.loads(pathlib.Path("site/yt.json").read_text(encoding="utf-8"))
-          assert isinstance(d.get("videos"), list)
+          set -uo pipefail
+          # 盒子 cron 产出的官方频道正片索引。**必须原子替换**：原来是 curl -o 直接写
+          # site/yt.json、校验失败再 rm —— 盒子抖一下就把已入库的索引删了，YouTube 源
+          # 整站消失到下一轮成功为止。现在先写临时文件，校验通过才 mv，失败保留上一版。
+          TMP="$RUNNER_TEMP/yt.json"
+          rm -f "$TMP"
+          if ! curl -sfk -m 30 "https://120.48.56.189/ytdata/yt.json" -o "$TMP"; then
+            echo "::warning::盒子 /ytdata/yt.json 拉取失败，保留上一版 site/yt.json"
+            exit 0
+          fi
+          if python - "$TMP" <<'PYEOF'
+          import json, sys
+          d = json.loads(open(sys.argv[1], encoding="utf-8").read())
+          assert isinstance(d.get("videos"), list), "缺 videos 字段"
+          assert d["videos"], "videos 为空"
           print("yt videos:", len(d["videos"]))
           PYEOF
+          then
+            mv -f "$TMP" site/yt.json
+            echo "yt.json 已更新"
+          else
+            echo "::warning::yt.json 内容不合法，保留上一版"
+          fi
 
       - name: Build pages
         id: build
@@ -459,3 +514,29 @@ jobs:
           # 当成预览版（alias=head）而不更新生产环境
           npx -y wrangler@4 pages deploy dist --project-name=media-library \
             --branch=main --commit-dirty=true
+
+      # 失败告警：Actions 没人盯着，失败要能自己找上门。
+      # 同一类失败只保留**一个**开着的 ci-alert issue（按标题前缀去重），后续失败追加评论。
+      - name: Notify failure (ci-alert issue)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          BODY="$RUNNER_TEMP/ci-alert.md"
+          {
+            echo "运行：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo
+            echo "- 模式：${{ github.event_name }}（FAST=${{ env.FAST }}）"
+            echo "- 提交：${{ github.sha }}"
+            echo
+            echo "常见原因：抓取源超时 / ModelScope 数据集推送失败 / CF Pages token 失效 / 构建断言（data files < 60）失败。"
+            echo "排查顺序：先看带 ::error:: 的那一步，再看 Build pages 与 Deploy 的日志。"
+          } > "$BODY"
+          NUM=$(gh issue list --repo "$GITHUB_REPOSITORY" --label ci-alert --state open --json number,title --jq '.[]|select(.title|startswith("CI 失败 · site-sync"))|.number' 2>/dev/null | head -1 || true)
+          if [ -n "${NUM:-}" ]; then
+            gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body-file "$BODY" && echo "已追加到 issue #$NUM"
+          else
+            gh label create ci-alert --repo "$GITHUB_REPOSITORY" --color B60205 --description "CI 失败告警（自动创建）" 2>/dev/null || true
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "CI 失败 · site-sync（$(date -u +%m-%d)）" --label ci-alert --body-file "$BODY" && echo "已开新告警 issue"
+          fi

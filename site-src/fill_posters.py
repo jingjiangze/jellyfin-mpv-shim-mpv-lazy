@@ -23,7 +23,13 @@ PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({"http": PX, "ht
 # 结果每轮「Fill missing posters」对 TMDB 目标 2×18s 超时白等、海报永远补不上（2026-11-07 修）。
 OPENER = DIRECT if os.environ.get("NO_LOCAL_PROXY") else PROXY
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0 Safari/537.36"
-TMDB_KEY = os.environ.get("TMDB_KEY") or "99bf884d2a3e8403ae8accded44ec73c"
+# 密钥只从环境变量取（GitHub Secrets: TMDB_KEY）。这里原来回填了明文 key，
+# 而本仓库是公开的 —— 已移除；缺失时直接报错退出，不要静默降级成「无 TMDB 数据」。
+TMDB_KEY = (os.environ.get("TMDB_KEY") or "").strip()
+if not TMDB_KEY:
+    # 海报补齐没有 key 时只跳过 TMDB 那一路，不影响 B 站/豆瓣封面
+    print("TMDB_KEY 未配置：本轮跳过 TMDB 海报补齐")
+
 CACHE = HERE / "poster_cache.json"
 
 NOISE = re.compile(
