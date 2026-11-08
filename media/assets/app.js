@@ -2575,6 +2575,7 @@ var SRC_TTL = 60 * 1000;                       // 探测结果缓存时长
 var SRC_USER = '/user';                       // B 站绑定在个人主页
 var SRC_KEYS = ['yt', 'bili', 'magnet'];
 var SRC_NAME = { yt: 'YouTube 官方', bili: 'B 站', magnet: '网盘' };
+var SRC_BIND = { bili: '登录高清', magnet: '绑定网盘' };
 var SRC_MEM = {};                              // "<id>:<ep>" -> {ts, data, pend}
 var SRC_MGEN = 0;                              // 每 mount 一次自增：异步结果只落最新那一代
 function srcToken() {
@@ -2741,7 +2742,8 @@ var rows = SRC_KEYS.map(function (k) {
 return '<span class="qp-line-row" data-row="' + k + '">'
 + '<button class="qp-line" type="button" data-src="' + k + '">'
 + esc(SRC_NAME[k]) + ' · 检测中…</button>'
-+ '<button class="btn" type="button" data-act="bind-' + k + '" hidden>绑定</button>'
++ '<button class="btn" type="button" data-act="bind-' + k + '" hidden>'
++ esc(SRC_BIND[k] || '绑定') + '</button>'
 + '</span>';
 }).join('');
 return '<section class="dp-srcs" data-open="1" data-bgm="' + esc(id) + '">'
@@ -2790,13 +2792,13 @@ var epNo = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
 var y = data && data.yt;
 if (!data) srcSetRow(list, 'yt', 'YouTube 官方 · 检测中…');
 else if (y.kind === 'has') srcSetRow(list, 'yt', 'YouTube 官方 · ' + y.eps.length + ' 集可看', { on: true });
-else srcSetRow(list, 'yt', '', { hide: true });      // 没有官方正片：整行收起
+else srcSetRow(list, 'yt', 'YouTube 官方 · 本季未收录');
 var b = data && data.bili;
 if (!data) srcSetRow(list, 'bili', 'B 站 · 检测中…');
 else if (b.kind === 'bound') {
 srcSetRow(list, 'bili', 'B 站 · ' + b.uname + '（VIP' + b.vip + '）', { on: true });
 }
-else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 需绑定', { bind: true });
+else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 免登录可看', { on: true, bind: true });
 else srcSetRow(list, 'bili', 'B 站 · 检测失败 · 点此重试', { bad: true, retry: true });
 var mg = data && data.magnet;
 if (!data) srcSetRow(list, 'magnet', '网盘 · 检测中…', { bind: true });
@@ -2889,7 +2891,7 @@ return;
 }
 if (key === 'bili') {
 if (srcEmbedBili(box, id)) return;
-if (typeof biliPlayEp === 'function') biliPlayEp(box, id, title, epNo);
+srcStart(box, id, title, epNo);
 return;
 }
 if (key === 'magnet') {                        // 磁力 → 转存后在线播放（夸克在幕后，不列出）
