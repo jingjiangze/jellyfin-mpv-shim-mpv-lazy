@@ -234,11 +234,8 @@
       });
     }
 
-    /* ① B 站（build 期索引命中就直接嵌，同步、最快） */
-    if (srcEmbedBili(box, id)) return true;
-
-    /* ①b 没有索引 → 先试**官方番剧（PGC）免费集**：官方正片 + 官方字幕，
-       比 UGC 搜索准（不会搜到解说/搬运）。会员集只有试看，不嵌，继续往下降级。 */
+    /* ① 先试**官方番剧（PGC）免费集**：官方正片 + 官方字幕，比 UGC 准（不会搜到解说/搬运）。
+       盒子侧 24h 缓存 + nginx 10 分钟边缘缓存，重复点几乎零延迟；会员集只有试看，不嵌。 */
     srcHint(box, '正在匹配 B 站官方番剧…');
     srcPgc(title).then(function (p) {
       if (p) {
@@ -248,7 +245,9 @@
           srcHint(box, '第 ' + epNo + ' 集是 B 站大会员集（仅试看）· 已换下一个源');
         }
       }
-      /* ①c 匿名实时搜 UGC（盒子用匿名 buvid3，不碰任何用户绑定） */
+      /* ② build 期索引里的 UGC bvid（同步、零等待） */
+      if (srcEmbedBili(box, id)) return;
+      /* ③ 匿名实时搜 UGC（盒子用匿名 buvid3，不碰任何用户绑定） */
       srcHint(box, '正在 B 站搜索「' + title + '」…');
       biliFindBvid(title).then(function (bv) {
         if (bv && srcEmbedBvid(box, bv)) return;
@@ -477,9 +476,8 @@
       return;
     }
     if (key === 'bili') {
-      /* 索引里有官方 bvid → 直接官方嵌入（免登录）。没有就走 srcStart 的同一条匿名链：
-         盒子 /bili/find 搜 bvid → YouTube → 网盘，而不是掉进需要登录的 biliPlayEp。 */
-      if (srcEmbedBili(box, id)) return;
+      /* 点「B 站」行 = 手动选这个源：走 srcStart 同一条链（PGC 免费集 → 索引 bvid →
+         匿名 find → YouTube → 网盘），不再自己复制一份顺序逻辑，也不掉进需要登录的 biliPlayEp。 */
       srcStart(box, id, title, epNo);
       return;
     }
