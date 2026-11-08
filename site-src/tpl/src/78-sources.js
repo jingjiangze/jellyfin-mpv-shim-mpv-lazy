@@ -22,7 +22,7 @@
   var SRC_TTL = 60 * 1000;                       // 探测结果缓存时长
   var SRC_USER = '/user';                       // B 站绑定在个人主页
   var SRC_KEYS = ['yt', 'bili', 'magnet'];
-  var SRC_NAME = { yt: 'YouTube 官方', bili: 'B 站', magnet: '磁力' };
+  var SRC_NAME = { yt: 'YouTube 官方', bili: 'B 站', magnet: '网盘' };
   var SRC_MEM = {};                              // "<id>:<ep>" -> {ts, data, pend}
   var SRC_MGEN = 0;                              // 每 mount 一次自增：异步结果只落最新那一代
 
@@ -110,10 +110,8 @@
     return true;
   }
 
-  /* B 站官方嵌入：extra[5] = bvid（build 期由 bili.json 对齐）。返回是否接管。 */
-  function srcEmbedBili(box, id) {
-    var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
-    var bvid = exb && exb[5];
+  /* B 站官方嵌入：直接给 bvid（官方 player iframe，**不需要任何账号**）。 */
+  function srcEmbedBvid(box, bvid) {
     if (!bvid) return false;
     if (window.__qpAbort === 'function') window.__qpAbort();
     if (window.__biliAbort === 'function') window.__biliAbort();
@@ -125,6 +123,24 @@
       + ' style="width:100%;height:100%;border:0;display:block"></iframe>';
     srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
     return true;
+  }
+
+  /* extra[5] 里 build 期对齐好的 bvid（bili.json 索引） */
+  function srcEmbedBili(box, id) {
+    var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
+    return srcEmbedBvid(box, exb && exb[5]);
+  }
+
+  /* 匿名实时搜 B 站：盒子 /bili/find 用匿名 buvid3，不碰任何用户绑定。
+     解说 / 合集 / OP 之类按 80-bili 同一份 BILI_NOISE 黑名单剔掉，不当正片。 */
+  function biliFindBvid(title) {
+    if (typeof biliGet !== 'function') return Promise.reject(new Error('no biliGet'));
+    return biliGet('find', { t: title }).then(function (f) {
+      if (!f || !f.found || !f.bvid) return '';
+      var t = String(f.title || '');
+      if (typeof BILI_NOISE === 'object' && BILI_NOISE.test && BILI_NOISE.test(t)) return '';
+      return String(f.bvid);
+    }, function () { return ''; });
   }
 
   /* YouTube 可达性探测（1.8s 超时，结果缓存 10 分钟）：
@@ -152,53 +168,43 @@
 
   /* 自动播放链：YouTube 官方正片（可达时）→ B 站官方嵌入 → 夸克转存（幕后）。
      返回 true = 已接管（可能是异步的，先占住播放器槽），false = 让调用方走兜底。 */
+  /* 自动播放链（2026-11-08 定版）：**B 站 → YouTube → 网盘**。
+     B 站排第一是因为它**不需要登录**：官方 player iframe 匿名就能播（bvid 来自 build 期索引
+     或盒子匿名 /bili/find 实时搜索）。YouTube 要有官方正片且网络可达；网盘兜底（需登录+绑定）。 */
   function srcStart(box, id, title, ep) {
-    var eps = srcYtEps(id);
-    if (eps) {
-      var epNo = Math.max(1, Math.floor(Number(ep) || 1));
+    var epNo = Math.max(1, Math.floor(Number(ep) || 1));
+    var slot = box.querySelector('#dpPlayer') || box;
+    var tk = (typeof authToken === 'function') ? authToken() : '';
+
+    function toQuark(why) {
+      srcHint(box, why + ' · 使用网盘源');
+      if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+      if (!tk && typeof openAuthPanel === 'function') openAuthPanel('email');
+    }
+
+    function toYoutube(why) {
+      var eps = srcYtEps(id);
+      if (!eps) { toQuark(why + ' · 无官方正片'); return; }
       var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
-      var slot = box.querySelector('#dpPlayer') || box;
-      srcHint(box, '正在检测 YouTube 可达性…');
+      srcHint(box, why + ' · 检测 YouTube 可达性…');
       ytReach().then(function (ok) {
         if (ok && srcEmbedYT(box, (eps[idx] || [])[1], epNo)) return;
-        if (srcEmbedBili(box, id)) return;                 // 有 bvid：B 站官方嵌入
-        /* 没有 bvid 时看有没有「站点登录 + B 站已绑定」：biliPlayEp 走盒子 /bili/playurl
-           （服务器换直链），国内照样能看。
-           ⚠ 只判登录不够：登录但没绑 B 站时 biliPlayEp 会直接报「没找到这部番的 B 站源」，
-           不会落到网盘。所以先用 /bili/bind 探一次绑定状态（srcProbeBili 自带 60s 缓存粒度），
-           只有 kind==='bound' 才走它，否则老实走网盘。 */
-        var tk = (typeof authToken === 'function') ? authToken() : '';
-        if (tk && typeof biliPlayEp === 'function') {
-          srcHint(box, 'YouTube 不可达 · 检查 B 站绑定…');
-          srcProbeBili(tk).then(function (b) {
-            if (b && b.kind === 'bound') {
-              srcHint(box, 'YouTube 不可达 · 切到 B 站源');
-              biliPlayEp(box, id, title, epNo);
-              return;
-            }
-            srcHint(box, 'YouTube 不可达 · B 站未绑定 · 使用网盘源');
-            if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
-          });
-          return;
-        }
-        srcHint(box, 'YouTube 不可达 · 使用网盘源');
-        if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
-        /* 未登录时「开始观看」只留一条「登录后…」太被动：直接把登录面板弹出来。
-           （已登录但夸克没绑的用户由 75 的 rebind 状态行给「重新绑定」按钮。） */
-        if (!tk && typeof openAuthPanel === 'function') openAuthPanel('email');
+        toQuark(why + ' · YouTube 不可达');
       });
-      return true;
     }
+
+    /* ① B 站（build 期索引命中就直接嵌，同步、最快） */
     if (srcEmbedBili(box, id)) return true;
-    if (typeof openQuarkPlay === 'function') {
-      openQuarkPlay(box.querySelector('#dpPlayer') || box, id, title);   // 磁力转存链路（不在面板列出）
-      if (!(typeof authToken === 'function' && authToken()) && typeof openAuthPanel === 'function') {
-        openAuthPanel('email');                                          // 未登录：直接弹登录
-      }
-      return true;
-    }
-    return false;
+
+    /* ①b 没有索引 → 匿名实时搜一次（盒子用匿名 buvid3，不碰任何用户绑定） */
+    srcHint(box, '正在 B 站搜索「' + title + '」…');
+    biliFindBvid(title).then(function (bv) {
+      if (bv && srcEmbedBvid(box, bv)) return;
+      toYoutube('B 站未找到');
+    }, function () { toYoutube('B 站搜索失败'); });
+    return true;
   }
+
   window.__srcStart = srcStart;          // 65-detail 的「开始观看」用
 
   /* 三个探测并发；任一失败只影响自己那一行（各自 .catch 在探测内成形）。
@@ -299,11 +305,13 @@
     else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 需绑定', { bind: true });
     else srcSetRow(list, 'bili', 'B 站 · 检测失败 · 点此重试', { bad: true, retry: true });
 
+    /* 网盘行常显「绑定」：未登录→弹登录；已登录→带 token 打开夸克绑定页（网页+TV 两步）。
+       之前夸克绑定入口只在「我的」页，用户反馈「根本没地方绑」。 */
     var mg = data && data.magnet;
-    if (!data) srcSetRow(list, 'magnet', '磁力 · 检测中…');
-    else if (mg.kind === 'has') srcSetRow(list, 'magnet', '磁力 · 第 ' + epNo + ' 集可转存', { on: true });
-    else if (mg.kind === 'none') srcSetRow(list, 'magnet', '磁力 · 本集无资源');
-    else srcSetRow(list, 'magnet', '磁力 · 检测失败 · 点此重试', { bad: true, retry: true });
+    if (!data) srcSetRow(list, 'magnet', '网盘 · 检测中…', { bind: true });
+    else if (mg.kind === 'has') srcSetRow(list, 'magnet', '网盘 · 第 ' + epNo + ' 集可转存', { on: true, bind: true });
+    else if (mg.kind === 'none') srcSetRow(list, 'magnet', '网盘 · 本集无资源', { bind: true });
+    else srcSetRow(list, 'magnet', '网盘 · 检测失败 · 点此重试', { bad: true, retry: true, bind: true });
   }
 
   function srcHint(host, text) {
@@ -360,6 +368,12 @@
     if (!t || t === list) return;
     var act = t.getAttribute('data-act');
     if (act) {                                    // 绑定入口：只导航，不播放
+      if (act === 'bind-magnet') {
+        /* 网盘绑定：未登录先弹登录（绑定按站点 uid 归属），已登录带 token 跳绑定页 */
+        if (typeof authToken === 'function' && authToken()) srcOpenUrl(quarkBindUrl());
+        else if (typeof openAuthPanel === 'function') openAuthPanel('email');
+        return;
+      }
       if (act === 'bind-bili') {
         /* B 站绑定是按站点 uid 存的（bili_bind 表 uid 主键），没登录就没有「归属」，
            直接跳 /user 只会看到一句登录引导 —— 这里先弹登录面板，登录完再回主页绑定。 */
