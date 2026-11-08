@@ -200,6 +200,7 @@ jobs:
           PYEOF
 
       - name: Build pages
+        id: build
         timeout-minutes: 6
         working-directory: site-src
         env:
@@ -322,6 +323,9 @@ jobs:
           # 并发 run / 别的会话会同时推这个数据集仓库，单次 push 会被
           # "cannot lock ref 'refs/heads/master'" 拒掉（实测 41608694447，
           # 后续 CDN 推送与 Deploy 全被跳过）。先 fetch + rebase 再推，最多 3 轮。
+          # rebase 必须 -X theirs：数据集里的 assets/ 是本站构建产物，冲突时以本轮
+          # 构建（正在重放的提交）为准；实测 42448397259 就是 assets 冲突破在 rebase，
+          # 一 abort 整步 fail、CDN 推送全被跳过。
           pushed=0
           for attempt in 1 2 3; do
             if git push "$MS_URL" HEAD:master 2>"$RUNNER_TEMP/ms-push.err"; then
@@ -329,7 +333,7 @@ jobs:
             fi
             echo "push 第 $attempt 次失败，尝试同步远端后重试"
             if git fetch -q "$MS_URL" master 2>/dev/null; then
-              if ! git -c rebase.autoStash=true rebase FETCH_HEAD >/dev/null 2>&1; then
+              if ! git -c rebase.autoStash=true rebase -X theirs FETCH_HEAD >/dev/null 2>&1; then
                 git rebase --abort >/dev/null 2>&1 || true
                 echo "rebase 冲突，放弃本轮数据集同步"
                 break
@@ -352,6 +356,7 @@ jobs:
       # 失败不阻断部署（continue-on-error），但要留下 warning 注解。
       - name: Push data JSON to GitHub CDN
         timeout-minutes: 10
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         continue-on-error: true
         working-directory: site-src
         env:
@@ -364,6 +369,7 @@ jobs:
       # 这里用 Git Data API 直推，与 magnet_publish.py 同一条可靠路径。
       - name: Push style/app to CDN
         timeout-minutes: 5
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -376,6 +382,7 @@ jobs:
       # "API rate limit exceeded for installation" 卡死（实测整步挂满 18 分钟）。
       - name: Publish data + posters + state
         timeout-minutes: 8
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         continue-on-error: true
         run: |
           set -euo pipefail
