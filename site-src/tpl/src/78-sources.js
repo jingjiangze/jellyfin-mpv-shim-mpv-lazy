@@ -430,6 +430,56 @@
     try { window.location.href = url; } catch (e2) { /* 忽略 */ }
   }
 
+  /* 夸克网盘绑定：**内嵌弹窗**，不再新开标签页（用户反馈「怎么还跳转页面」）。
+     盒子 /qr 页面没有 X-Frame-Options，可以直接 iframe；加 &embed=1 让它收掉页头，
+     绑定成功后它 postMessage({type:'quark-bound'}) —— 我们关窗 + 重探播放源，
+     用户直接就能点播放。关掉弹窗也不影响绑定（服务端已落库）。 */
+  function openQuarkBindPanel() {
+    if (document.getElementById('qbmask')) return;
+    if (typeof authToken === 'function' && !authToken()) {
+      if (typeof openAuthPanel === 'function') openAuthPanel('email');
+      return;
+    }
+    var mask = document.createElement('div');
+    mask.className = 'authmask qbmask';
+    mask.id = 'qbmask';
+    mask.innerHTML = '<div class="authcard qbcard" role="dialog" aria-modal="true">'
+      + '<button class="authx" type="button" aria-label="关闭">×</button>'
+      + '<h3 class="qbtitle">绑定夸克网盘</h3>'
+      + '<p class="qbhint">用夸克 App 扫码，扫完自动绑定（只需一次）。绑定后网盘源可直接播放。</p>'
+      + '<div class="qbframe"><iframe src="' + esc(quarkBindUrl('&embed=1')) + '"'
+      + ' referrerpolicy="origin-when-cross-origin" allow="clipboard-write"></iframe></div>'
+      + '</div>';
+    document.body.appendChild(mask);
+
+    function cleanup() {
+      if (mask.parentNode) mask.parentNode.removeChild(mask);
+      window.removeEventListener('message', onMsg);
+      document.removeEventListener('keydown', onKey);
+    }
+    function onMsg(ev) {
+      if (String(ev.origin).indexOf('120.48.56.189') < 0) return;
+      var d = ev.data || {};
+      if (d && d.type === 'quark-bound' && d.ok) {
+        cleanup();
+        var host = document.querySelector('#modal') || document;
+        srcHint(host, '夸克网盘已绑定 · 重探播放源…');
+        var panel = host.querySelector ? host.querySelector('.dp-srcs') : null;
+        if (panel) {
+          var bgm = panel.getAttribute('data-bgm') || '';
+          srcMount(host, bgm, '', 1, true);       // force 重探
+        }
+      }
+    }
+    function onKey(ev) { if (ev.key === 'Escape') cleanup(); }
+    mask.onclick = function (ev) {
+      var t = ev.target;
+      if (t === mask || (t && String(t.className || '').indexOf('authx') >= 0)) cleanup();
+    };
+    window.addEventListener('message', onMsg);
+    document.addEventListener('keydown', onKey);
+  }
+
   function srcClick(host, list, ev, id, title, ep) {
     var t = ev && ev.target ? ev.target : null;
     while (t && t !== list) {
@@ -440,8 +490,8 @@
     var act = t.getAttribute('data-act');
     if (act) {                                    // 绑定入口：只导航，不播放
       if (act === 'bind-magnet') {
-        /* 网盘绑定：未登录先弹登录（绑定按站点 uid 归属），已登录带 token 跳绑定页 */
-        if (typeof authToken === 'function' && authToken()) srcOpenUrl(quarkBindUrl());
+        /* 网盘绑定：已登录 → 站内弹窗扫码（不再新开标签页）；未登录 → 先弹登录 */
+        if (typeof authToken === 'function' && authToken()) openQuarkBindPanel();
         else if (typeof openAuthPanel === 'function') openAuthPanel('email');
         return;
       }

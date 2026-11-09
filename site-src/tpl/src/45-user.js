@@ -183,6 +183,8 @@
     if (u) u.onclick = function () { pfBiliDoUnbind(u); };
     var r = pfNode('pfbili-re');
     if (r) r.onclick = function () { loadPfBili(true); };
+    var sv = pfNode('pfqrsave');
+    if (sv) sv.onclick = function () { pfBiliQrSave(); };
   }
 
   /* ---------------- 扫码绑定（后端 state=ok 时已自己落库，前端只刷新卡片） ---------------- */
@@ -248,8 +250,39 @@
     box.innerHTML = '<img class="pf-qr" id="pfqrimg" alt="B站登录二维码" src="' + esc(src) + '"'
       + ' style="width:180px;height:180px;display:block;margin:0 auto 8px;border-radius:8px;background:#fff">'
       + '<p class="authhint" id="pfbili-qrmsg" role="status" aria-live="polite"></p>'
-      + '<div id="pfbili-qractions"></div>';
+      + '<div id="pfbili-qractions">'
+      + '<button class="mnote-btn" id="pfqrsave" type="button">保存二维码</button>'
+      + '</div>';
     pfBiliQrText('用 B 站 App 扫码 · 180 秒内有效');
+  }
+
+  /* 二维码是 data:image/png;base64 的 <img>：手机长按「保存图片」对 data URI 往往无效
+     （用户反馈「保存也保存不上」）。转成 Blob URL 再走 <a download> —— Blob 是真正的
+     图片资源，浏览器下载器 / 系统相册才认。 */
+  function pfBiliQrSave() {
+    var img = pfNode('pfqrimg');
+    if (!img) return;
+    var src = String(img.getAttribute('src') || '');
+    var m = /^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/=\s]+)$/i.exec(src);
+    if (!m) { pfBiliQrNote('二维码不是图片数据，无法保存', true); return; }
+    try {
+      var bin = atob(m[2].replace(/\s+/g, ''));
+      var buf = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      var type = m[1].toLowerCase() === 'png' ? 'image/png' : 'image/jpeg';
+      var url = URL.createObjectURL(new Blob([buf], { type: type }));
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'bilibili-login-qr.' + (type === 'image/png' ? 'png' : 'jpg');
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 20000);
+      pfBiliQrNote('已发起保存；手机端没反应就长按二维码图片另存', false);
+    } catch (e) {
+      pfBiliQrNote('保存失败（' + (e && e.message ? e.message : '浏览器不支持') + '），可长按二维码另存', true);
+    }
   }
 
   /* 一拍 2 秒；网络失败只跳过这一拍，不终止；QR_TRIES 到 90（≈180s）按过期收尾。
@@ -487,7 +520,7 @@
       + '<div class="pf-actions">'
       + '<button class="btn" id="pfpw" type="button">修改密码</button>'
       + '<button class="btn" id="pfout" type="button">退出登录</button>'
-      + '<a class="btn" href="' + esc(quarkBindUrl()) + '" target="_blank" rel="noopener">绑定夸克网盘</a>'
+      + '<button class="btn" id="pfquark" type="button">绑定夸克网盘</button>'
       + '</div>'
       + '<div class="pf-bili" id="pfbili"></div>'
       + '<div class="mtabs pf-tabs">'
@@ -528,6 +561,9 @@
   function bindUserActions() {
     var pw = document.getElementById('pfpw');
     if (pw) pw.onclick = function () { openAuthPanel('account'); };
+    /* 夸克绑定：站内弹窗扫码（原来是一个 target=_blank 的链接，用户抱怨「怎么还跳转页面」） */
+    var qk = document.getElementById('pfquark');
+    if (qk) qk.onclick = function () { openQuarkBindPanel(); };
     var out = document.getElementById('pfout');
     if (out) out.onclick = function () {
       /* logoutAccount() 的 token 清理在请求返回后的 .then 里（最长等 12s），

@@ -172,10 +172,12 @@
   /* 夸克绑定页现在要站点登录（服务端 /qr 门禁，2026-11-06）：
      把当前 token 作为 ?t= 带过去，服务端校验后种 30 分钟 cookie，页面内 XHR 免再带。
      未登录返回裸链接 —— 调用方应先弹登录面板，别把人扔到 401 页。 */
-  function quarkBindUrl() {
+  /* extra 用于追加查询参数（如内嵌弹窗用的 '&embed=1'） */
+  function quarkBindUrl(extra) {
     var tk = '';
     try { tk = (typeof authToken === 'function' && authToken()) || ''; } catch (e) { tk = ''; }
-    return 'https://120.48.56.189/qr/' + (tk ? '?t=' + encodeURIComponent(tk) : '');
+    return 'https://120.48.56.189/qr/' + (tk ? '?t=' + encodeURIComponent(tk) : '?')
+      + (extra || '');
   }
 
   window.__prog = {

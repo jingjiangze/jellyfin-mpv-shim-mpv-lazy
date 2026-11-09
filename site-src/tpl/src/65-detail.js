@@ -42,30 +42,19 @@
   /* 空态：一句话 + 回列表的出口；retry=true 时补「重试」。
      正文标题与 <title> 分开传：加载失败时正文要说清是失败，<title> 统一写「条目不存在」。
      这里刻意不出 .acts / h3 —— magnet-eps.js 的观察器只认这两个锚点，空态不该被它插进磁力行。 */
-  /* 预告槽背景：先试 YouTube 官方缩略图（maxres 不一定有，退回 hq），都失败用封面。
-     纯黑 16:9 大块在宽屏上像「加载坏了」（外源详情页实测），有底图才像播放器。
-     只发图片请求、不注任何第三方脚本，点按钮才换成 iframe。 */
-  function trailerSlotBg(slot, key, fallback) {
-    if (!slot) return;
-    function paint(url) {
-      if (!url) return;
-      slot.style.backgroundImage = "linear-gradient(rgba(0,0,0,.32),rgba(0,0,0,.32)),url('" + url + "')";
-      slot.style.backgroundPosition = 'center';
-      slot.style.backgroundSize = 'cover';
-      slot.className += ' has-bg';
-    }
-    if (!key) { paint(fallback); return; }
-    var k = encodeURIComponent(key);
-    var probe = new Image();
-    probe.onload = function () { paint('https://i.ytimg.com/vi/' + k + '/maxresdefault.jpg'); };
-    probe.onerror = function () {
-      var small = new Image();
-      small.onload = function () { paint('https://i.ytimg.com/vi/' + k + '/hqdefault.jpg'); };
-      small.onerror = function () { paint(fallback); };
-      small.src = 'https://i.ytimg.com/vi/' + k + '/hqdefault.jpg';
-    };
-    probe.src = 'https://i.ytimg.com/vi/' + k + '/maxresdefault.jpg';
+  /* 预告：直接嵌 **YouTube 官方播放器**（www.youtube.com/embed），不再自绘黑框 + 按钮。
+     用户口径「预告的地方，放到 youtube 官方里面」。iframe 用 loading=lazy 并放在首屏下方，
+     不抢首屏带宽；点了由官方播放器自己起播（不自动播，避免详情页一进来就出声）。 */
+  function mountTrailer(slot, key) {
+    if (!slot || !key) return;
+    slot.className = 'trailer-slot is-player';
+    slot.style.backgroundImage = '';
+    slot.innerHTML = '<div class="dpv-frame"><iframe'
+      + ' src="https://www.youtube.com/embed/' + encodeURIComponent(key) + '?rel=0&modestbranding=1&playsinline=1"'
+      + ' loading="lazy" allow="autoplay; encrypted-media; fullscreen; picture-in-picture"'
+      + ' allowfullscreen referrerpolicy="origin-when-cross-origin"></iframe></div>';
   }
+
 
   function detailEmpty(head, sub, retry, docTitle) {
     var m = $('#modal');
@@ -221,19 +210,9 @@
       +   '</aside>'
       + '</div>';
     document.title = title + ' · 番组计划';
-    trailerSlotBg(m.querySelector('#dpTrailerSlot'), x.tr, x.img);
-    /* 预告：与番剧详情同一套「点按钮才注 iframe」 */
-    var trb = m.querySelector('#dpTrailer');
-    if (trb && x.tr) {
-      trb.onclick = function () {
-        var slot = m.querySelector('#dpTrailerSlot');
-        if (!slot || slot.querySelector('iframe')) return;
-        slot.innerHTML = '<iframe src="https://www.youtube.com/embed/'
-          + encodeURIComponent(x.tr) + '?autoplay=1&rel=0"'
-          + ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen'
-          + ' style="width:100%;height:100%;border:0"></iframe>';
-      };
-    }
+    /* 预告：直接嵌 YouTube 官方播放器（原来是自己画的黑框 + 点一下才注 iframe） */
+    var tslotExt = m.querySelector('#dpTrailerSlot');
+    if (tslotExt && x.tr) mountTrailer(tslotExt, x.tr);
   }
 
   /* 90-boot.js 在 detail 分支调这个。分片只有 200–500ms，但慢网下不能白屏，
@@ -491,19 +470,9 @@
       };
     }
 
-    /* 预告：点按钮才注入 YouTube iframe（页面本身不加载任何第三方脚本） */
-    trailerSlotBg(m.querySelector('#dpTrailerSlot'), ex[2], posterHd(id));
-    var trb = m.querySelector('#dpTrailer');
-    if (trb && ex[2]) {
-      trb.onclick = function () {
-        var slot = m.querySelector('#dpTrailerSlot');
-        if (!slot || slot.querySelector('iframe')) return;
-        slot.innerHTML = '<iframe src="https://www.youtube.com/embed/'
-          + encodeURIComponent(ex[2]) + '?autoplay=1&rel=0"'
-          + ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen'
-          + ' style="width:100%;height:100%;border:0"></iframe>';
-      };
-    }
+    /* 预告：直接嵌 YouTube 官方播放器（原来自绘黑框 + 按钮） */
+    var tslot = m.querySelector('#dpTrailerSlot');
+    if (tslot && ex[2]) mountTrailer(tslot, ex[2]);
 
     /* 区块导航：整页滚动到锚点并切 .on。桌面 .dp-nav 吸顶在顶栏下面，会让开两段高度，
        否则目标标题正好被盖住；≤760 .dp-nav 是 static，只让开顶栏。 */

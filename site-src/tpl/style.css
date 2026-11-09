@@ -3569,6 +3569,23 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
   overflow: hidden;
   background: #000;
 }
+/* 预告槽播放器态：直接装 YouTube 官方 iframe（.dpv-frame 自带 16:9），
+   槽本身不再限高、不再居中排布 —— 否则 420px 上限会把 16:9 裁掉一截。 */
+.trailer-slot.is-player {
+  display: block;
+  aspect-ratio: auto;
+  max-height: none;
+  background: transparent;
+}
+
+/* 夸克绑定弹窗：站内 iframe 扫码（不再新开标签页） */
+.qbcard { width: min(420px, 94vw); padding: var(--s4); }
+.qbtitle { margin: 0 0 6px; font-size: var(--fs-lg); }
+.qbhint { margin: 0 0 var(--s3); font-size: var(--fs-sm); color: var(--dim); line-height: 1.6; }
+.qbframe { border: 1px solid var(--line); border-radius: 2px; overflow: hidden; background: #fff; }
+.qbframe iframe { display: block; width: 100%; height: 460px; border: 0; }
+@media (max-width: 760px) { .qbframe iframe { height: 420px; } }
+
 /* 有官方缩略图（JS 探测成功后加 .has-bg）：按钮压一圈暗色，别被亮底吞掉 */
 .trailer-slot.has-bg .btn.pri {
   box-shadow: 0 6px 24px rgba(0, 0, 0, .45);
