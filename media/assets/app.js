@@ -19,6 +19,23 @@ function chip(label, on, attr, val) {
 return '<button class="chip' + (on ? ' on' : '') + '" type="button" ' + attr + '="' + val + '">'
 + label + '</button>';
 }
+function splitPlot(overview, overviewJa) {
+var mark = '[简介原文]';
+var s = String(overview == null ? '' : overview).replace(/\r\n/g, '\n');
+var i = s.indexOf(mark);
+var zh = s, ja = String(overviewJa == null ? '' : overviewJa);
+if (i >= 0) {
+zh = s.slice(0, i);
+if (!ja.trim()) ja = s.slice(i + mark.length);
+}
+zh = zh.replace(/\n{3,}/g, '\n\n').trim();
+ja = ja.replace(/\n{3,}/g, '\n\n').trim();
+if (ja && !/[。．.!?！？…」』）】〕”"]$/.test(ja)) ja = '';
+return { zh: zh || '暂无简介', ja: ja };
+}
+function plotJaHtml(ja) {
+return '<details class="plot-ja"><summary>原文</summary><p>' + esc(ja) + '</p></details>';
+}
 var D_BASES = [
 'https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/data/',
 '/data/',
@@ -1674,7 +1691,14 @@ document.body.removeAttribute('data-ext-detail');   // 回到番剧详情：磁�
 document.title = title + ' · 番组计划';
 srcPanelMount(m, id, title, curEp);
 var plot = m.querySelector('#plot');
-if (plot) plot.textContent = String(rec.overview || '暂无简介').replace(/\n{3,}/g, '\n\n');
+if (plot) {
+var pv = splitPlot(rec.overview, rec.overview_ja);
+plot.textContent = pv.zh;
+var sect = plot.parentNode;
+var oldJa = sect ? sect.querySelector('.plot-ja') : null;
+if (oldJa) sect.removeChild(oldJa);
+if (pv.ja && sect) sect.insertAdjacentHTML('beforeend', plotJaHtml(pv.ja));
+}
 renderTags(rec, m.querySelector('#tags'));
 ensureTagCounts(function () { renderTags(rec, m.querySelector('#tags')); });
 var chgrid = m.querySelector('.chgrid');
@@ -1934,7 +1958,11 @@ if (!plot) return;      // close() 已清空 / 已切到磁力视图：这一代
 if (list === null) { plot.textContent = '简介加载失败，请重试'; return; }  // 分片拉不到，与「记录不存在」区分
 rec = (list || []).find(function (x) { return x.id === id; });
 if (!rec) { plot.textContent = '暂无详细资料'; return; }
-plot.textContent = String(rec.overview || '暂无简介').replace(/\n{3,}/g, '\n\n');
+var pv = splitPlot(rec.overview, rec.overview_ja);
+plot.textContent = pv.zh;
+var sect = plot.parentNode, oldJa = sect ? sect.querySelector('.plot-ja') : null;
+if (oldJa) sect.removeChild(oldJa);
+if (pv.ja && sect) sect.insertAdjacentHTML('beforeend', plotJaHtml(pv.ja));
 renderTags(rec, host.querySelector('#tags'));
 var meta = [];
 if (Array.isArray(rec.rc) && rec.rc.length === 10 && !host.querySelector('#rdist')) {
