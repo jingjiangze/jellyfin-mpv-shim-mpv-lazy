@@ -579,11 +579,14 @@ def main():
             if isinstance(rec, dict) and clean_overview(rec):
                 touched = True
         out = ddir / f"s{p.stem}.json"
+        payload = (json.dumps(recs, ensure_ascii=False, separators=(",", ":")) if touched else None)
         try:
-            if touched:
-                # 有改动就重写（紧凑分隔符，和原分片同尺寸量级）
-                out.write_text(json.dumps(recs, ensure_ascii=False, separators=(",", ":")),
-                               encoding="utf-8")
+            if payload is not None:
+                out.write_text(payload, encoding="utf-8")
+                # **回写真源**：清洗（简介里的历史 [简介原文] 残块）落回 site/anime，
+                # 由 publish_all 一起提交 —— 下一轮构建就 clean 不到东西了（no-op）。
+                # 不回写的话每轮都要重洗 64 个分片。
+                p.write_text(payload, encoding="utf-8")
                 cleaned += 1
             else:
                 shutil.copy2(p, out)          # 无改动保持原样，省 IO

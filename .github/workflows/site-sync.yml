@@ -212,48 +212,6 @@ jobs:
       # 必须排在 Translate 之后：Translate 写的是 site/anime/*.json（真源），
       # 只有这条 Git Data API 路径能可靠落盘；后面的 Publish data + posters + state
       # 有 rebase 冲突静默跳过的分支，实测丢过整轮 1,624 条翻译（run 41678297541）。
-      - name: Push shards (Git Data API)
-        if: ${{ env.FAST != '1' && success() }}
-        timeout-minutes: 10
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -u site-src/push_shards.py
-
-      # 官方频道正片索引：由盒子的 cron（每 4h）经公共池隧道拉 YouTube RSS，
-      # 落 /var/www/yt/yt.json 经 nginx /ytdata/ 暴露 —— runner 直连会被 YouTube 404。
-      # 官方频道正片索引：由盒子的 cron（每 4h）经公共池隧道拉 YouTube RSS，
-      # 落 /var/www/yt/yt.json 经 nginx /ytdata/ 暴露 —— runner 直连会被 YouTube 404。
-      - name: Fetch official YouTube episodes
-        if: ${{ env.FAST != '1' && success() }}
-        timeout-minutes: 4
-        continue-on-error: true
-        working-directory: site-src
-        run: |
-          set -uo pipefail
-          # 盒子 cron 产出的官方频道正片索引。**必须原子替换**：原来是 curl -o 直接写
-          # site/yt.json、校验失败再 rm —— 盒子抖一下就把已入库的索引删了，YouTube 源
-          # 整站消失到下一轮成功为止。现在先写临时文件，校验通过才 mv，失败保留上一版。
-          TMP="$RUNNER_TEMP/yt.json"
-          rm -f "$TMP"
-          if ! curl -sfk -m 30 "https://120.48.56.189/ytdata/yt.json" -o "$TMP"; then
-            echo "::warning::盒子 /ytdata/yt.json 拉取失败，保留上一版 site/yt.json"
-            exit 0
-          fi
-          if python - "$TMP" <<'PYEOF'
-          import json, sys
-          d = json.loads(open(sys.argv[1], encoding="utf-8").read())
-          assert isinstance(d.get("videos"), list), "缺 videos 字段"
-          assert d["videos"], "videos 为空"
-          print("yt videos:", len(d["videos"]))
-          PYEOF
-          then
-            mv -f "$TMP" site/yt.json
-            echo "yt.json 已更新"
-          else
-            echo "::warning::yt.json 内容不合法，保留上一版"
-          fi
-
       - name: Build pages
         id: build
         timeout-minutes: 6
@@ -435,85 +393,18 @@ jobs:
       # + Build pages 才产出这些文件。push_data_cdn.py 用 cwd 的 site/ 读文件
       # （ROOT = Path.cwd()），所以这里必须给 working-directory: site-src。
       # 失败不阻断部署（continue-on-error），但要留下 warning 注解。
-      - name: Push data JSON to GitHub CDN
-        timeout-minutes: 10
+      # 发布：**单一写入者**。一次 run 只产生一个提交，覆盖站点需要的全部仓库路径
+      # （media/assets 固定名+哈希名、media/data 全部 JSON、media/posters 增量、
+      #   site-src/site/anime 清洗后的真源、site-src/site/*.json 与 site-src/data/* 状态）。
+      # 重构前这里是 4 个各自写仓库的步骤（Push shards / Push data / Push style / git Publish），
+      # 互相抢同一批文件，只能靠 rebase/graft 硬扛冲突；现在只剩这一处写。
+      - name: Publish (single writer)
+        timeout-minutes: 12
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        continue-on-error: true
-        working-directory: site-src
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -u push_data_cdn.py --yes || { echo "::warning::GitHub CDN 镜像推送失败（非致命，数据集仍是主源）"; exit 1; }
+        run: python -u site-src/publish_all.py --yes
 
-      # style.css / app.js 推到 media/assets/，由 jsDelivr(gcore) 分发。
-      # 不走 `git add -A media`：实测那条路 media/assets 进不了提交
-      # （publish 步骤 success 但仓库里没有该目录），原因未查清；
-      # 这里用 Git Data API 直推，与 magnet_publish.py 同一条可靠路径。
-      - name: Push style/app to CDN
-        timeout-minutes: 5
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -u site-src/push_site_assets.py
-
-      # 每轮只提交+推送一次：数据 JSON、海报、站点状态一起进仓库。
-      # 必须排在 Build pages 之后 —— build_site 每轮用内容哈希生成新的
-      # index-<hash>.json / library-<hash>.json，HTML 里外链的就是这些名字。
-      # 走 git 协议而不是 Git Data API：CI 的 GITHUB_TOKEN 经常被
-      # "API rate limit exceeded for installation" 卡死（实测整步挂满 18 分钟）。
-      - name: Publish data + posters + state
-        timeout-minutes: 8
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          # index-*.json / library-*.json 已由上面的 `Push data JSON to CDN`
-          # （push_assets.py --data-only，走 Git Data API）推到 media/；
-          # 这里再 cp 一遍等于两边改同一批文件，是非快进冲突的来源，故删掉。
-          if [ -d site-src/site/posters ]; then
-            mkdir -p media/posters
-            cp -f site-src/site/posters/*.jpg media/posters/ 2>/dev/null || true
-          fi
-          cp -f site-src/site/movies-intro.json site-src/data/ || true
-          cp -f site-src/site/data.json site-src/site/bili.json site-src/site/magnet.json site-src/site/magnet-eps.json site-src/data/ || true
-          cp -f site-src/poster_cache.json site-src/data/ || true
-          cp -f site-src/site/years_state.json site-src/data/ || true
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # 旧实现是「git add -A media site-src/data site-src/site … → commit →
-          # rebase FETCH_HEAD → 冲突就 exit 0」。两个坑：
-          #   ① `site-src/site` 整树含 anime/ 与 data/，而它们刚被
-          #      `Push shards (Git Data API)` / `Push data JSON to CDN` 用 API 推到 origin，
-          #      rebase 时同一批文件两边都改 → 必然冲突 → 静默跳过
-          #      （实测丢过整轮 1,624 条翻译）。
-          #   ② 冲突分支吞掉失败，state 文件（data.json / poster_cache.json /
-          #      years_state.json）长期不更新，fetch_years 因此在 year 2000 空转十几轮。
-          # 改成：只 add 本步独占的路径，并在最新远端之上新建提交（不做 rebase），
-          # 冲突面从「整树」缩到「单文件」，且真的失败会报错而不是装作成功。
-          git fetch origin "${GITHUB_REF_NAME}"
-          git reset --mixed FETCH_HEAD
-          git add -A media/posters 2>/dev/null || true
-          git add -A site-src/data site-src/poster_cache.json
-          # 站点状态文件只挑这几个；anime/ 与 data/ 归上面的 API 推送管，不能再进本提交
-          git add -f site-src/site/data.json site-src/site/bili.json \
-                     site-src/site/magnet.json site-src/site/magnet-eps.json \
-                     site-src/site/fresh.json \
-                     site-src/site/tmdb.json \
-                     site-src/site/yt.json \
-                     site-src/site/years_state.json site-src/site/movies-intro.json 2>/dev/null || true
-          if git diff --cached --quiet; then echo "nothing to publish (post-reset)"; exit 0; fi
-          git commit -m "data: site payloads + state [skip ci]"
-          for i in 1 2 3; do
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then echo "PUBLISHED"; exit 0; fi
-            echo "push 失败，第 $i 次重试"
-            git fetch origin "${GITHUB_REF_NAME}"
-            git rebase FETCH_HEAD || { git rebase --abort || true; }
-            sleep $((i * 3))
-          done
-          echo "::error::发布 state 失败：data.json / poster_cache.json / years_state.json 本轮未入库"
-          exit 1
-
-      # 部署只认 build-out/ 快照
       - name: Deploy to Cloudflare Pages
         # 镜像同步（ModelScope）失败不该挡住站点上线：数据集只是兜底源，站点本身在 CF Pages。
         # 之前 MS 一冲突就整轮不部署，线上连续多次停在旧版（2026-11-06 实测）。

@@ -9,7 +9,8 @@ on:
         description: "只补最近 5 年（true/false）"
         required: false
         default: "false"
-  schedule:
+  # 定时统一由 pipeline.yml 触发；原来的 cron 已删（会与 pipeline 双跑）
+  schedule_disabled: 
     - cron: "40 18 * * *"   # 每天 02:40（北京时间）
 
 permissions:
