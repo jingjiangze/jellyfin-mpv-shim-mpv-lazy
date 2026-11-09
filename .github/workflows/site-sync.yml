@@ -224,7 +224,8 @@ jobs:
       #   yt-full.json  每日 yt-dlp 枚举 uploads 播放列表：每频道 100 条，与历史并集 → 整季回填
       # 写临时文件、校验通过才 mv：盒子抖动时保留上一版（历史上直接 rm 掉把 YouTube 源打没）。
       - name: Fetch official YouTube episodes
-        if: ${{ env.FAST != '1' && success() }}
+        # fast 也要拉：yt-full.json 不入库（4.5MB 且每天变），构建必须有它
+        if: ${{ success() }}
         timeout-minutes: 4
         continue-on-error: true
         working-directory: site-src

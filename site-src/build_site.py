@@ -182,12 +182,59 @@ YT_EP_NOISE = re.compile(r"合集|全集|重溫|重温|回顧|回顾|總集篇|�
 EP_NO_RE = re.compile(r"第\s*(\d{1,4})\s*[話话集期]|\bEP?\.?\s*(\d{1,3})\b", re.I)
 
 
+SEASON_RE = re.compile(r"第\s*([一二三四五六七八九十\d]{1,2})\s*[季期]|season\s*(\d{1,2})|s(\d{1,2})", re.I)
+_CN_NUM = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+
+
+def yt_season(title):
+    """抽季号：第N季 / 第N期 / Season N / S2。抽不到返回 0。
+
+    为什么必须有：以前只按片名包含匹配，《关于我转生变成史莱姆这档事》5 个季度页
+    各自都被挂成「60 集」—— S1 页面点第 30 集会播到第四季的内容。
+    """
+    m = SEASON_RE.search(str(title or ""))
+    if not m:
+        return 0
+    raw = (m.group(1) or m.group(2) or m.group(3) or "").strip()
+    if raw.isdigit():
+        return int(raw)
+    return _CN_NUM.get(raw[0], 0)
+
+
 def yt_ep_no(title):
     """从标题里抽集号；抽不到返回 0。"""
     m = EP_NO_RE.search(str(title or ""))
     if not m:
         return 0
     return int(m.group(1) or m.group(2) or 0)
+
+
+def yt_index(videos):
+    """把视频标题切成 6-gram 建倒排：{gram: [video_index,...]}。
+
+    为什么需要：26,002 条视频 × 8,854 部番逐个扫 = 2.3 亿次 Python 级循环，实测 301 秒，
+    而 `Build pages` 只有 6 分钟超时。倒排后每部番只取「前 6 字命中」的少量候选，
+    再由 yt_for 做完整包含校验，总耗时降到秒级。
+    """
+    idx = {}
+    for i, v in enumerate(videos):
+        vt = v.get("_n") or ""
+        if len(vt) < 6:
+            continue
+        for j in range(len(vt) - 5):
+            idx.setdefault(vt[j:j + 6], []).append(i)
+    return idx
+
+
+def yt_pick(videos, idx, norm_title):
+    """按倒排取候选后再交给 yt_for 精确校验（短标题直接扫，数量很少）。"""
+    if not norm_title or len(norm_title) < 2:
+        return []
+    if len(norm_title) >= 6:
+        rows = [videos[i] for i in idx.get(norm_title[:6], ())]
+    else:
+        rows = [v for v in videos if norm_title in (v.get("_n") or "")]
+    return yt_for(norm_title, rows)
 
 
 def yt_for(norm_title, videos):
@@ -198,6 +245,7 @@ def yt_for(norm_title, videos):
     """
     if not norm_title or len(norm_title) < 2:
         return []
+    a_season = yt_season(norm_title)
     out, seen = [], set()
     for v in videos:
         vid = str(v.get("v") or "")
@@ -216,17 +264,25 @@ def yt_for(norm_title, videos):
             continue
         if YT_EP_NOISE.search(raw_t):
             continue
+        v_season = yt_season(raw_t)
+        if v_season and a_season and v_season != a_season:
+            continue                     # 季号明确冲突
+        if v_season and not a_season:
+            continue                     # 番本身没季号、视频是第 2 季以后 → 别挂到 S1 页
         seen.add(vid)
-        out.append((yt_ep_no(raw_t), len(raw_t), raw_t[:80],
-                    "https://www.youtube.com/watch?v=" + vid))
-    out.sort(key=lambda r: (r[0] or 9999, r[1]))     # 集号升序；同集号短标题（正片）优先
+        out.append((yt_ep_no(raw_t), 0 if v.get("r") == 1 else 1, len(raw_t), raw_t[:80],
+                    "https://www.youtube.com/watch?v=" + vid, int(v.get("r") == 1)))
+    # 排序：集号升序 → 大陆可播优先 → 短标题（正片）优先。
+    # 实测官方频道视频 99% 带 regionRestriction（HK/MO/TW/SG/MY，不含 CN），
+    # 所以同一集如果既有可播又有锁区版本，必须优先可播的那条。
+    out.sort(key=lambda r: (r[0] or 9999, r[1], r[2]))
     picked, got = [], set()
-    for ep, _n, title, url in out:
+    for ep, _reg, _n, title, url, cn in out:
         if ep and ep in got:
             continue
         if ep:
             got.add(ep)
-        picked.append([title, url])
+        picked.append([title, url, cn])       # 第三位给前端判断「是否需港澳台出口」
         if len(picked) >= 60:
             break
     return picked
@@ -236,7 +292,8 @@ def build_anime():
     cat = json.loads((DATA / "catalog.json").read_text(encoding="utf-8"))
     shards = load_shards()
     YT_VIDEOS = load_yt_videos()
-    print(f"  yt: 官方频道视频 {len(YT_VIDEOS)} 条")
+    YT_IDX = yt_index(YT_VIDEOS)
+    print(f"  yt: 官方频道视频 {len(YT_VIDEOS)} 条（倒排键 {len(YT_IDX)}）")
     # B 站官方嵌入：fetch_bili.py 的 bvid 索引（id -> {bvid,title,…}）。
     # 旧索引的键是 md5（历史 data.json 体系），先按标题归一建倒排兜底；
     # 新键是 bgm id，直查命中。返回统一函数 bili_bvid(sid, cn, name)。
@@ -345,9 +402,9 @@ def build_anime():
         bvid = bili_bvid(sid, cn, name)
         # **YouTube 匹配要在 if 之前算**：原来只在「AniList 命中或有 bvid」时才匹配，
         # 于是纯 YouTube 命中的番（169 部里的大多数，如老番《死神》）永远挂不上正片。
-        _yt = yt_for(norm(_t2s(cn or name)), YT_VIDEOS)
+        _yt = yt_pick(YT_VIDEOS, YT_IDX, norm(_t2s(cn or name)))
         if not _yt and name and name != cn:
-            _yt = yt_for(norm(_t2s(name)), YT_VIDEOS)
+            _yt = yt_pick(YT_VIDEOS, YT_IDX, norm(_t2s(name)))
         _yt = _yt or (a.get("yt") or [])
         if a or bvid or _yt:
             ex = [a.get("banner") or None, a.get("img") or None,

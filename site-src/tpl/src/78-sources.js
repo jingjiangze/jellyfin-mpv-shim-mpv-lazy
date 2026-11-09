@@ -353,7 +353,17 @@
 
     var y = data && data.yt;
     if (!data) srcSetRow(list, 'yt', 'YouTube 官方 · 检测中…');
-    else if (y.kind === 'has') srcSetRow(list, 'yt', 'YouTube 官方 · ' + y.eps.length + ' 集可看', { on: true });
+    else if (y.kind === 'has') {
+      /* 官方频道视频绝大多数带地区限制（HK/MO/TW/SG/MY，不含 CN）：把「能直连播几集」说清楚，
+         别让用户点了才发现 "not available in your country"。eps 第三位 1=大陆可播。 */
+      var cnN = 0;
+      for (var yi = 0; yi < y.eps.length; yi++) {
+        if (Array.isArray(y.eps[yi]) && y.eps[yi][2] === 1) cnN++;
+      }
+      var ytLabel = 'YouTube 官方 · ' + y.eps.length + ' 集'
+        + (cnN === y.eps.length ? '可看' : (cnN ? '可看（' + cnN + ' 集大陆直连）' : '（需港澳台出口）'));
+      srcSetRow(list, 'yt', ytLabel, { on: true });
+    }
     /* 没有官方正片时不再整行隐藏：三个源要能看见（用户口径「就三个源」），
        但文案说清是「没收录」而不是「坏了」，也不加 .on，点它只会退到 B 站。 */
     else srcSetRow(list, 'yt', 'YouTube 官方 · 本季未收录');

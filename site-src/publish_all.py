@@ -57,6 +57,8 @@ MAX_RETRY = 3
 HASH_RE = re.compile(r"^(app|style)-[0-9a-f]{10}\.(js|css)$")
 # 历史遗留：media/ 根目录的旧 app-<hash>.js 无任何引用，但删仓文件需单独授权，先不动
 UNTOUCHED = re.compile(r"^media/app-[0-9a-f]{10}\.js$")
+# 不进仓库的体积大户：由 CI 每轮从盒子现拉（4.5MB 且每天变，进 git 等于每天堆垃圾）
+EXCLUDE_NAMES = {"yt-full.json"}
 
 
 class GhError(RuntimeError):
@@ -149,6 +151,8 @@ def plan():
     for p in sorted((SITE / "anime").glob("*.json")):
         _add(pairs, f"site-src/site/anime/{p.name}", p)
     for p in sorted(SITE.glob("*.json")):
+        if p.name in EXCLUDE_NAMES:
+            continue
         _add(pairs, f"site-src/site/{p.name}", p, required=False)
     for p in sorted(DATA_STATE.glob("*.json")):
         _add(pairs, f"site-src/data/{p.name}", p, required=False)
@@ -166,6 +170,8 @@ def deletions(remote_paths, keep_hash, keep_data=()):
     media/ 根目录历史遗留的 app-<hash>.js 不动（无引用，但删仓文件要单独授权）。
     """
     out = ["media/magnet-eps.js"]
+    # 早年误提交过的 yt-full.json：从仓库里清掉（CI 每轮现拉，不需要入库）
+    out += [f"site-src/site/{n}" for n in EXCLUDE_NAMES]
     keep = set(keep_hash) | set(keep_data)
     for path in remote_paths:
         name = path.rsplit("/", 1)[-1]
