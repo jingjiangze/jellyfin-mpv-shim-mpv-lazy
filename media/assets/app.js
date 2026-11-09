@@ -228,10 +228,11 @@ fetch(PROG_API, { headers: { authorization: 'Bearer ' + tk } })
 }
 pullFollow();
 pullProgress();
-function quarkBindUrl() {
+function quarkBindUrl(extra) {
 var tk = '';
 try { tk = (typeof authToken === 'function' && authToken()) || ''; } catch (e) { tk = ''; }
-return 'https://120.48.56.189/qr/' + (tk ? '?t=' + encodeURIComponent(tk) : '');
+return 'https://120.48.56.189/qr/' + (tk ? '?t=' + encodeURIComponent(tk) : '?')
++ (extra || '');
 }
 window.__prog = {
 report: function (id, ep, extra) { return setProgress(id, ep, extra); },
@@ -730,6 +731,8 @@ var u = pfNode('pfunbind');
 if (u) u.onclick = function () { pfBiliDoUnbind(u); };
 var r = pfNode('pfbili-re');
 if (r) r.onclick = function () { loadPfBili(true); };
+var sv = pfNode('pfqrsave');
+if (sv) sv.onclick = function () { pfBiliQrSave(); };
 }
 function pfBiliQrStop() {
 QR_GEN += 1;
@@ -782,8 +785,35 @@ return;
 box.innerHTML = '<img class="pf-qr" id="pfqrimg" alt="B站登录二维码" src="' + esc(src) + '"'
 + ' style="width:180px;height:180px;display:block;margin:0 auto 8px;border-radius:8px;background:#fff">'
 + '<p class="authhint" id="pfbili-qrmsg" role="status" aria-live="polite"></p>'
-+ '<div id="pfbili-qractions"></div>';
++ '<div id="pfbili-qractions">'
++ '<button class="mnote-btn" id="pfqrsave" type="button">保存二维码</button>'
++ '</div>';
 pfBiliQrText('用 B 站 App 扫码 · 180 秒内有效');
+}
+function pfBiliQrSave() {
+var img = pfNode('pfqrimg');
+if (!img) return;
+var src = String(img.getAttribute('src') || '');
+var m = /^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/=\s]+)$/i.exec(src);
+if (!m) { pfBiliQrNote('二维码不是图片数据，无法保存', true); return; }
+try {
+var bin = atob(m[2].replace(/\s+/g, ''));
+var buf = new Uint8Array(bin.length);
+for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+var type = m[1].toLowerCase() === 'png' ? 'image/png' : 'image/jpeg';
+var url = URL.createObjectURL(new Blob([buf], { type: type }));
+var a = document.createElement('a');
+a.href = url;
+a.download = 'bilibili-login-qr.' + (type === 'image/png' ? 'png' : 'jpg');
+a.rel = 'noopener';
+document.body.appendChild(a);
+a.click();
+document.body.removeChild(a);
+setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 20000);
+pfBiliQrNote('已发起保存；手机端没反应就长按二维码图片另存', false);
+} catch (e) {
+pfBiliQrNote('保存失败（' + (e && e.message ? e.message : '浏览器不支持') + '），可长按二维码另存', true);
+}
 }
 function pfBiliQrPoll() {
 if (QR_TIMER) { clearInterval(QR_TIMER); QR_TIMER = 0; }
@@ -996,7 +1026,7 @@ return '<div class="pf-hero"></div>'
 + '<div class="pf-actions">'
 + '<button class="btn" id="pfpw" type="button">修改密码</button>'
 + '<button class="btn" id="pfout" type="button">退出登录</button>'
-+ '<a class="btn" href="' + esc(quarkBindUrl()) + '" target="_blank" rel="noopener">绑定夸克网盘</a>'
++ '<button class="btn" id="pfquark" type="button">绑定夸克网盘</button>'
 + '</div>'
 + '<div class="pf-bili" id="pfbili"></div>'
 + '<div class="mtabs pf-tabs">'
@@ -1032,6 +1062,8 @@ watchLogin();
 function bindUserActions() {
 var pw = document.getElementById('pfpw');
 if (pw) pw.onclick = function () { openAuthPanel('account'); };
+var qk = document.getElementById('pfquark');
+if (qk) qk.onclick = function () { openQuarkBindPanel(); };
 var out = document.getElementById('pfout');
 if (out) out.onclick = function () {
 logoutAccount();
@@ -1380,26 +1412,14 @@ shardCache[sfx] = pr;
 }
 return pr;
 }
-function trailerSlotBg(slot, key, fallback) {
-if (!slot) return;
-function paint(url) {
-if (!url) return;
-slot.style.backgroundImage = "linear-gradient(rgba(0,0,0,.32),rgba(0,0,0,.32)),url('" + url + "')";
-slot.style.backgroundPosition = 'center';
-slot.style.backgroundSize = 'cover';
-slot.className += ' has-bg';
-}
-if (!key) { paint(fallback); return; }
-var k = encodeURIComponent(key);
-var probe = new Image();
-probe.onload = function () { paint('https://i.ytimg.com/vi/' + k + '/maxresdefault.jpg'); };
-probe.onerror = function () {
-var small = new Image();
-small.onload = function () { paint('https://i.ytimg.com/vi/' + k + '/hqdefault.jpg'); };
-small.onerror = function () { paint(fallback); };
-small.src = 'https://i.ytimg.com/vi/' + k + '/hqdefault.jpg';
-};
-probe.src = 'https://i.ytimg.com/vi/' + k + '/maxresdefault.jpg';
+function mountTrailer(slot, key) {
+if (!slot || !key) return;
+slot.className = 'trailer-slot is-player';
+slot.style.backgroundImage = '';
+slot.innerHTML = '<div class="dpv-frame"><iframe'
++ ' src="https://www.youtube.com/embed/' + encodeURIComponent(key) + '?rel=0&modestbranding=1&playsinline=1"'
++ ' loading="lazy" allow="autoplay; encrypted-media; fullscreen; picture-in-picture"'
++ ' allowfullscreen referrerpolicy="origin-when-cross-origin"></iframe></div>';
 }
 function detailEmpty(head, sub, retry, docTitle) {
 var m = $('#modal');
@@ -1539,18 +1559,8 @@ return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
 +   '</aside>'
 + '</div>';
 document.title = title + ' · 番组计划';
-trailerSlotBg(m.querySelector('#dpTrailerSlot'), x.tr, x.img);
-var trb = m.querySelector('#dpTrailer');
-if (trb && x.tr) {
-trb.onclick = function () {
-var slot = m.querySelector('#dpTrailerSlot');
-if (!slot || slot.querySelector('iframe')) return;
-slot.innerHTML = '<iframe src="https://www.youtube.com/embed/'
-+ encodeURIComponent(x.tr) + '?autoplay=1&rel=0"'
-+ ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen'
-+ ' style="width:100%;height:100%;border:0"></iframe>';
-};
-}
+var tslotExt = m.querySelector('#dpTrailerSlot');
+if (tslotExt && x.tr) mountTrailer(tslotExt, x.tr);
 }
 function renderDetail() {
 var m = $('#modal');
@@ -1766,18 +1776,8 @@ if (dpslot.childNodes.length) return;
 openQuarkPlay(dpslot, id, title);
 };
 }
-trailerSlotBg(m.querySelector('#dpTrailerSlot'), ex[2], posterHd(id));
-var trb = m.querySelector('#dpTrailer');
-if (trb && ex[2]) {
-trb.onclick = function () {
-var slot = m.querySelector('#dpTrailerSlot');
-if (!slot || slot.querySelector('iframe')) return;
-slot.innerHTML = '<iframe src="https://www.youtube.com/embed/'
-+ encodeURIComponent(ex[2]) + '?autoplay=1&rel=0"'
-+ ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen'
-+ ' style="width:100%;height:100%;border:0"></iframe>';
-};
-}
+var tslot = m.querySelector('#dpTrailerSlot');
+if (tslot && ex[2]) mountTrailer(tslot, ex[2]);
 var nav = m.querySelector('.dp-nav');
 if (nav) {
 nav.onclick = function (ev) {
@@ -2942,6 +2942,50 @@ if (w) return;
 } catch (e) { /* 被拦截：退化成同页跳转 */ }
 try { window.location.href = url; } catch (e2) { /* 忽略 */ }
 }
+function openQuarkBindPanel() {
+if (document.getElementById('qbmask')) return;
+if (typeof authToken === 'function' && !authToken()) {
+if (typeof openAuthPanel === 'function') openAuthPanel('email');
+return;
+}
+var mask = document.createElement('div');
+mask.className = 'authmask qbmask';
+mask.id = 'qbmask';
+mask.innerHTML = '<div class="authcard qbcard" role="dialog" aria-modal="true">'
++ '<button class="authx" type="button" aria-label="关闭">×</button>'
++ '<h3 class="qbtitle">绑定夸克网盘</h3>'
++ '<p class="qbhint">用夸克 App 扫码，扫完自动绑定（只需一次）。绑定后网盘源可直接播放。</p>'
++ '<div class="qbframe"><iframe src="' + esc(quarkBindUrl('&embed=1')) + '"'
++ ' referrerpolicy="origin-when-cross-origin" allow="clipboard-write"></iframe></div>'
++ '</div>';
+document.body.appendChild(mask);
+function cleanup() {
+if (mask.parentNode) mask.parentNode.removeChild(mask);
+window.removeEventListener('message', onMsg);
+document.removeEventListener('keydown', onKey);
+}
+function onMsg(ev) {
+if (String(ev.origin).indexOf('120.48.56.189') < 0) return;
+var d = ev.data || {};
+if (d && d.type === 'quark-bound' && d.ok) {
+cleanup();
+var host = document.querySelector('#modal') || document;
+srcHint(host, '夸克网盘已绑定 · 重探播放源…');
+var panel = host.querySelector ? host.querySelector('.dp-srcs') : null;
+if (panel) {
+var bgm = panel.getAttribute('data-bgm') || '';
+srcMount(host, bgm, '', 1, true);       // force 重探
+}
+}
+}
+function onKey(ev) { if (ev.key === 'Escape') cleanup(); }
+mask.onclick = function (ev) {
+var t = ev.target;
+if (t === mask || (t && String(t.className || '').indexOf('authx') >= 0)) cleanup();
+};
+window.addEventListener('message', onMsg);
+document.addEventListener('keydown', onKey);
+}
 function srcClick(host, list, ev, id, title, ep) {
 var t = ev && ev.target ? ev.target : null;
 while (t && t !== list) {
@@ -2952,7 +2996,7 @@ if (!t || t === list) return;
 var act = t.getAttribute('data-act');
 if (act) {                                    // 绑定入口：只导航，不播放
 if (act === 'bind-magnet') {
-if (typeof authToken === 'function' && authToken()) srcOpenUrl(quarkBindUrl());
+if (typeof authToken === 'function' && authToken()) openQuarkBindPanel();
 else if (typeof openAuthPanel === 'function') openAuthPanel('email');
 return;
 }
