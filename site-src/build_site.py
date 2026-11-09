@@ -270,19 +270,22 @@ def yt_for(norm_title, videos):
         if v_season and not a_season:
             continue                     # 番本身没季号、视频是第 2 季以后 → 别挂到 S1 页
         seen.add(vid)
-        out.append((yt_ep_no(raw_t), 0 if v.get("r") == 1 else 1, len(raw_t), raw_t[:80],
-                    "https://www.youtube.com/watch?v=" + vid, int(v.get("r") == 1)))
+        out.append((yt_ep_no(raw_t), 0 if v.get("r") == 1 else 1, 0 if v.get("hd") == 1 else 1,
+                    len(raw_t), raw_t[:80],
+                    "https://www.youtube.com/watch?v=" + vid, int(v.get("r") == 1),
+                    int(v.get("hd") == 1)))
     # 排序：集号升序 → 大陆可播优先 → 短标题（正片）优先。
     # 实测官方频道视频 99% 带 regionRestriction（HK/MO/TW/SG/MY，不含 CN），
     # 所以同一集如果既有可播又有锁区版本，必须优先可播的那条。
-    out.sort(key=lambda r: (r[0] or 9999, r[1], r[2]))
+    out.sort(key=lambda r: (r[0] or 9999, r[1], r[2], r[3]))   # 集号 → 大陆可播 → 高画质 → 短标题
     picked, got = [], set()
-    for ep, _reg, _n, title, url, cn in out:
+    for ep, _reg, _hd, _n, title, url, cn, hd in out:
         if ep and ep in got:
             continue
         if ep:
             got.add(ep)
-        picked.append([title, url, cn])       # 第三位给前端判断「是否需港澳台出口」
+        # [标题, 链接, 大陆可播, 高清] —— 后两位给前端做标签与「默认最高画质」
+        picked.append([title, url, cn, hd])
         if len(picked) >= 60:
             break
     return picked
