@@ -874,13 +874,15 @@ BILI_ST = { bound: true, uname: j.uname, vip_type: j.vip_type };
 pfBiliPaint(BILI_ST);
 return;
 }
-if (j.error === 'not_bound' || r.status === 404) {
+if (j.ok && (j.bound === false || j.status === 'none')
+|| j.error === 'not_bound' || r.status === 404) {
 BILI_ST = { bound: false };
 pfBiliPaint(BILI_ST);
 return;
 }
 if (r.status === 401) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
-pfBiliFail('B 站账号状态读取失败（HTTP ' + r.status + '）');
+pfBiliFail('B 站账号状态读取失败（HTTP ' + r.status
++ (j.error ? ' · ' + String(j.error).slice(0, 40) : '') + '）');
 }, function (e) {
 pfBiliFail((e && e.message) || 'B 站账号状态读取失败');
 });
