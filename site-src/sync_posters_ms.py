@@ -39,11 +39,21 @@ SKIP_EPS_NOTE = (
 )
 
 
-def sh(*args, cwd=None, check=True, capture=True):
-    p = subprocess.run(args, cwd=str(cwd) if cwd else None,
-                       capture_output=capture, text=True)
+# **必须有 GIT_LFS_SKIP_SMUDGE=1**：数据集里 2.4 万张海报是 LFS 对象（合计 7GB+），
+# 不跳过 smudge 时 clone 会把它们全拉下来 —— 2026-11-09 重写时漏了它，实测直接卡到
+# step 超时（12 分钟）且日志里一行输出都没有。同时禁掉交互提示、给每次 git 调用设超时。
+GIT_ENV = dict(os.environ,
+               GIT_LFS_SKIP_SMUDGE="1", GIT_TERMINAL_PROMPT="0",
+               GIT_ASKPASS="/bin/true", GCM_INTERACTIVE="never")
+
+
+def sh(*args, cwd=None, check=True, capture=True, timeout=600):
+    p = subprocess.run(args, cwd=str(cwd) if cwd else None, env=GIT_ENV,
+                       capture_output=capture, text=True, timeout=timeout,
+                       stdin=subprocess.DEVNULL)
     if check and p.returncode != 0:
-        raise RuntimeError(f"{' '.join(map(str, args))} -> {p.returncode}\n{(p.stderr or '')[-500:]}")
+        err = (p.stderr or "")[-500:] if capture else ""
+        raise RuntimeError("%s -> %s\n%s" % (" ".join(map(str, args)), p.returncode, err))
     return p
 
 
@@ -75,7 +85,16 @@ def clone():
         return False
     shutil.rmtree(MS, ignore_errors=True)
     for attempt in (1, 2, 3):
-        p = sh("git", "clone", "-q", "--depth", "1", URL, str(MS), check=False)
+        # --no-checkout：先只拿 git 元数据，再单 checkout 需要的目录（避免 assets/data 的
+        # 23MB 级大 JSON 被拉一遍；LFS 实体由 GIT_LFS_SKIP_SMUDGE 跳过）
+        p = sh("git", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=120",
+               "clone", "--depth", "1", "--no-checkout", URL, str(MS),
+               check=False, capture=False, timeout=900)
+        if p.returncode == 0:
+            # 只检出 posters/ 与 assets/（数据集里还有 eps/ 等其它目录，本轮用不到）
+            sh("git", "-C", str(MS), "sparse-checkout", "set", "--no-cone", "posters", "assets",
+               check=False)
+            p = sh("git", "-C", str(MS), "checkout", "-q", "HEAD", check=False, timeout=900)
         if p.returncode == 0:
             print(f"cloned (attempt {attempt})")
             return True

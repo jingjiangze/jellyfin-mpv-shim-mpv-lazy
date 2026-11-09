@@ -276,7 +276,7 @@ jobs:
       # clone 三次失败只 warning 不判红：站点还有 gh-proxy / 同源两条兜底。
       - name: Sync posters to ModelScope
         id: ms
-        timeout-minutes: 12
+        timeout-minutes: 20
         env:
           MS_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
         run: python -u site-src/sync_posters_ms.py
