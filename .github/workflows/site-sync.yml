@@ -17,13 +17,20 @@ on:
         description: "只构建+部署（跳过全部抓取步骤）"
         type: boolean
         default: false
+  # 由 pipeline.yml 作为可复用 workflow 调用（不再靠轮询 gh api 发现 run id）
+  workflow_call:
+    inputs:
+      fast:
+        description: "只构建+部署（跳过全部抓取步骤）"
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
       - "site-src/tpl/**"
       - "site-src/build_site.py"
-      - "site-src/push_site_assets.py"
-      - "site-src/push_data_cdn.py"
+      - "site-src/publish_all.py"
+      - "site-src/sync_posters_ms.py"
       - "site-src/ms-revert-blocklist.txt"
       - ".github/workflows/site-sync.yml"
 
@@ -262,137 +269,18 @@ jobs:
       #   ① 按「文件大小」比对而不是只看存在，同名但内容变了也会重传；
       #   ② 不再用 `2>&1 | sed` 包住 git push（管道会吞掉退出码，失败也被判成功）；
       #   ③ 跳过 ms-revert-blocklist.txt 里的文件（ModelScope 审核会撤销，重传无意义）。
+      # 海报 / 资产镜像到 ModelScope 数据集（站点主 CDN 源）。
+      # 2026-11-09 重写：原来是 ~90 行 bash，2.4 万张海报每条 fork 一个 grep，实测每轮 ~10 分钟；
+      # 现在单进程 Python 一次读完尺寸表（1–2 秒），clone --depth 1 + 3 次重试，
+      # 推送冲突 rebase -X theirs → 仍冲突则 graft（把本轮树挂到上游最新提交）。
+      # clone 三次失败只 warning 不判红：站点还有 gh-proxy / 同源两条兜底。
       - name: Sync posters to ModelScope
         id: ms
         timeout-minutes: 12
         env:
           MS_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${MS_TOKEN:-}" ]; then echo "::error::MODELSCOPE_TOKEN 未配置 —— 数据集是主源，缺它不允许继续部署"; exit 1; fi
-          MS_URL="https://oauth2:${MS_TOKEN}@www.modelscope.cn/datasets/jingjiangze/Anime-JPG.git"
-          BLOCK="site-src/ms-revert-blocklist.txt"
-          rm -rf "$RUNNER_TEMP/ms"
-          # ModelScope 的 git 端偶发断流（2026-11-09 连续两轮 "RPC failed; curl 18 / early EOF"）：
-          #   ① 只取最近一层历史（--depth 1）把传输量压下来；
-          #   ② 失败重试 3 次，10s/20s 退避；
-          #   ③ 三次都失败只发 warning 并正常退出 —— 站点有 gh-proxy / 同源两条兜底，
-          #      不该为镜像同步失败把整轮 CI 判红；真坏了会每轮都 warning，看得见。
-          cloned=0
-          for attempt in 1 2 3; do
-            if GIT_LFS_SKIP_SMUDGE=1 git clone -q --depth 1 "$MS_URL" "$RUNNER_TEMP/ms" 2>"$RUNNER_TEMP/ms-clone.err"; then
-              cloned=1; break
-            fi
-            sed -E 's#oauth2:[^@]*@#oauth2:***@#g' "$RUNNER_TEMP/ms-clone.err" || true
-            echo "clone 第 $attempt 次失败，$((attempt * 10))s 后重试"
-            rm -rf "$RUNNER_TEMP/ms"
-            sleep $((attempt * 10))
-          done
-          if [ "$cloned" != "1" ]; then
-            echo "::warning::ModelScope 数据集 clone 失败（3 次）—— 本轮跳过镜像同步，站点仍从 gh-proxy / 同源加载 assets"
-            exit 0
-          fi
-          mkdir -p "$RUNNER_TEMP/ms/posters"
-          added=0; updated=0; skipped=0; blocked=0
-          for f in site-src/site/posters/*.jpg media/posters/*.jpg; do
-            [ -e "$f" ] || continue
-            b=$(basename "$f")
-            if [ -f "$BLOCK" ] && grep -qxF "$b" "$BLOCK"; then blocked=$((blocked+1)); continue; fi
-            dst="$RUNNER_TEMP/ms/posters/$b"
-            want=$(stat -c%s "$f")
-            if [ -e "$dst" ]; then
-              # SKIP_SMUDGE 检出的是 LFS 指针文本，里面有 "size N"；真实文件则读不到，按一致处理
-              have=$(grep -o 'size [0-9]\+' "$dst" 2>/dev/null | awk '{print $2}' | head -1 || true)
-              if [ -n "${have:-}" ] && [ "$have" != "$want" ]; then
-                cp -f "$f" "$dst"; updated=$((updated+1))
-              else
-                skipped=$((skipped+1))
-              fi
-            else
-              cp -f "$f" "$dst"; added=$((added+1))
-            fi
-          done
-          echo "posters: added=$added updated=$updated unchanged=$skipped blocklisted=$blocked"
-          # 交互脚本镜像进数据集 assets/：CF Pages 劣化时给 jsDelivr/gh-proxy 之外的国内第三源
-          mkdir -p "$RUNNER_TEMP/ms/assets"
-          mkdir -p "$RUNNER_TEMP/ms/assets/data"
-          cp -f site-src/site/data/*.json "$RUNNER_TEMP/ms/assets/data/" 2>/dev/null || true
-          rm -f "$RUNNER_TEMP/ms/assets"/app-*.js "$RUNNER_TEMP/ms/assets"/style-*.css
-          js_added=0
-          for f in site-src/site/app-*.js; do
-            [ -e "$f" ] || continue
-            cp -f "$f" "$RUNNER_TEMP/ms/assets/"; js_added=$((js_added+1))
-          done
-          echo "js: copied=$js_added"
-          # 站点静态资源（HTML 骨架引用的样式/脚本/加载器）与分集索引分片：
-          # 一律以数据集为主源（国内 CDN，实测 0.2–0.5s），jsDelivr/同源只作兜底。
-          asset_added=0
-          for f in site-src/site/style.css site-src/site/style-*.css site-src/site/app.js site-src/tpl/magnet-eps.js; do
-            [ -e "$f" ] || continue
-            cp -f "$f" "$RUNNER_TEMP/ms/assets/"; asset_added=$((asset_added+1))
-          done
-          # eps 分片由 anime-magnet 自己镜像进数据集（它 publish 完立刻推）。
-          # 这里不能再拷：site-sync 的 checkout 通常比刚跑完的 magnet 旧，
-          # 拷一次就把新版覆盖回旧版（实测数据集 count 4490 -> 被盖成 4279，
-          # 纯合集条目 16 -> 0）。
-          # 页面 HTML 也镜像一份：数据集是主存，GitHub 是次存（构建产物本身不进仓，
-          # 只有 dist 里的这份镜像能让人从数据集完整取回一个可跑的站点）。
-          mkdir -p "$RUNNER_TEMP/ms/assets/site"
-          cp -f site-src/site/index.html site-src/site/anime.html site-src/site/movie.html site-src/site/rank.html site-src/site/user.html site-src/site/detail.html site-src/site/fav.html                 "$RUNNER_TEMP/ms/assets/site/" 2>/dev/null || true
-          echo "html: $(ls -1 "$RUNNER_TEMP/ms/assets/site" 2>/dev/null | wc -l) 页"
-          echo "site assets: copied=$asset_added eps=$(ls -1 "$RUNNER_TEMP/ms/assets/eps" 2>/dev/null | wc -l)"
-          if [ -z "$(git -C "$RUNNER_TEMP/ms" status --porcelain -- posters assets)" ]; then
-            echo "dataset already in sync"; exit 0
-          fi
-          cd "$RUNNER_TEMP/ms"
-          git add -A posters assets
-          git -c commit.gpgsign=false -c user.name=github-actions               -c user.email=actions@users.noreply.github.com commit -qm "sync posters + js from site repo (+$added ~$updated js=$js_added)"
-          echo "remote: $(git remote -v | head -1 | sed -E 's#oauth2:[^@]*@#oauth2:***@#g')"
-          # 并发 run / 别的会话会同时推这个数据集仓库，单次 push 会被
-          # "cannot lock ref 'refs/heads/master'" 拒掉（实测 41608694447，
-          # 后续 CDN 推送与 Deploy 全被跳过）。先 fetch + rebase 再推，最多 3 轮。
-          # rebase 必须 -X theirs：数据集里的 assets/ 是本站构建产物，冲突时以本轮
-          # 构建（正在重放的提交）为准；实测 42448397259 就是 assets 冲突破在 rebase，
-          # 一 abort 整步 fail、CDN 推送全被跳过。
-          pushed=0
-          for attempt in 1 2 3; do
-            if git push "$MS_URL" HEAD:master 2>"$RUNNER_TEMP/ms-push.err"; then
-              pushed=1; break
-            fi
-            echo "push 第 $attempt 次失败，尝试同步远端后重试"
-            if git fetch -q --depth 1 "$MS_URL" master 2>/dev/null; then
-              if git -c rebase.autoStash=true rebase -X theirs FETCH_HEAD >/dev/null 2>&1; then
-                :
-              else
-                git rebase --abort >/dev/null 2>&1 || true
-                # 删除/修改型冲突 rebase -X 解决不了（我们每轮 rm 掉旧 assets/app-*.js 再拷新
-                # 哈希名，上游同轮也删改了同一批文件）。兜底：把本轮构建的整棵树挂到上游最新
-                # 提交上（soft reset 保留索引 = 本轮树），一次 commit 即无冲突。
-                # 代价：上游独有、本轮树里没有的文件（别的 run 新加的海报）先被移除；
-                # 下一轮按「目标不存在」重新补上，自愈。
-                if git fetch -q --depth 1 "$MS_URL" master 2>/dev/null                    && git reset --soft FETCH_HEAD                    && git -c commit.gpgsign=false -c user.name=github-actions                         -c user.email=actions@users.noreply.github.com                         commit --allow-empty -qm "sync posters + js (grafted on upstream)"; then
-                  echo "rebase 冲突 → 改用 graft 提交（本轮树覆盖上游树）"
-                else
-                  echo "graft 也失败，放弃本轮数据集同步"
-                  break
-                fi
-              fi
-            fi
-            sleep 5
-          done
-          if [ "$pushed" != "1" ]; then
-            sed -E 's#oauth2:[^@]*@#oauth2:***@#g' "$RUNNER_TEMP/ms-push.err" || true
-            echo "::error::push to ModelScope failed"; exit 1
-          fi
-          echo "pushed: +$added ~$updated posters"
+        run: python -u site-src/sync_posters_ms.py
 
-      # GitHub 镜像：data JSON（含 64 个详情分片）+ css/js/loader，增量推送
-      # （只推内容变化的 blob，否则每轮 8MB 会把仓库撑爆）。数据集仍是主源。
-      # 必须排在 Sync posters to ModelScope 之后：它读的是本轮构建产物
-      # site-src/site/{data,style.css,app.js,magnet-eps.js}，而 Restore state
-      # + Build pages 才产出这些文件。push_data_cdn.py 用 cwd 的 site/ 读文件
-      # （ROOT = Path.cwd()），所以这里必须给 working-directory: site-src。
-      # 失败不阻断部署（continue-on-error），但要留下 warning 注解。
       # 发布：**单一写入者**。一次 run 只产生一个提交，覆盖站点需要的全部仓库路径
       # （media/assets 固定名+哈希名、media/data 全部 JSON、media/posters 增量、
       #   site-src/site/anime 清洗后的真源、site-src/site/*.json 与 site-src/data/* 状态）。

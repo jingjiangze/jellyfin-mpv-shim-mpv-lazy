@@ -13,7 +13,8 @@ on:
       dest:
         description: "推送到数据集的目录（posters 或 posters-c）"
         required: false
-        default: "posters"
+          workflow_call:
+default: "posters"
 
 permissions:
   contents: read

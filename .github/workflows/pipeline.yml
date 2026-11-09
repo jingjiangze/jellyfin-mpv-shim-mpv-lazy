@@ -1,202 +1,78 @@
 name: pipeline
 
-# 单一编排入口：按序触发刮削链路的 catalog / detail / covers，最后触发 site-sync 部署。
-# anime-magnet **不在这里**：它自带 2 小时 cron（比 4 小时的新番磁力更新更快），
-# 由 pipeline 再触发就是双跑，且两条链路会同时往同一个 ModelScope 数据集推。
-# 两个 cron 的产物都靠 site-sync 收敛（MS 推送有 graft 兜底，见 site-sync 里那段注释）。
-# 设计要点：
-#  - 每步一律 if: always()：anime-detail 自 2026-11-01 起在 Report coverage 步骤失败
-#    （JSONDecodeError），其产物 site-src/site/anime/*.json 是陈旧的，但 covers /
-#    site-sync 用旧分片也能构建 —— 绝不能因为 detail 失败就阻断下游。
-#  - 只有 site-sync（部署终点）失败才让整个 job 失败（见文件末尾的收尾步骤）。
-#  - 被触发的 workflow 自带 concurrency group（site-sync / anime-magnet / anime-covers），
-#    与本文件的 group: pipeline 不同组，不会死锁。
+# 单一调度入口。2026-11-09 重构：原来是 4 个步骤各自 `gh workflow run` 再**轮询 gh api**
+# 发现新 run id 并等待（18×5s 找 id + 每 10s 一探），既慢又脆。现在改用 GitHub 原生
+# **可复用 workflow**（jobs.<id>.uses）：调用方 job 会一直等到被调 workflow 结束，
+# 结论直接进 needs —— 不会拿错上一轮的 run，也不需要轮询。
+#
+# 顺序（needs 构成 DAG）：catalog → detail → covers → site-sync
+# 每步都 `if: always()`：detail 自 2026-11-01 起在 Report coverage 步失败过，
+# 它的产物陈旧一点也能构建，绝不能因此断了后面的部署。
+# site-sync 是部署终点 —— 只有它失败才让整个 pipeline 失败（见末尾 summary job）。
 
 on:
   schedule:
     - cron: "5 */4 * * *"   # 每 4 小时的第 5 分钟
   workflow_dispatch:
 
+# 可复用 workflow 只能「降级」调用方权限、不能升级：这里给足
 permissions:
-  contents: read
-  actions: write
+  contents: write
+  issues: write
+  actions: read
 
 concurrency:
   group: pipeline
   cancel-in-progress: false
 
 jobs:
-  run:
+  catalog:
+    name: anime-catalog
+    if: always()
+    uses: ./.github/workflows/anime-catalog.yml
+    secrets: inherit
+
+  detail:
+    name: anime-detail
+    needs: [catalog]
+    if: always()
+    uses: ./.github/workflows/anime-detail.yml
+    secrets: inherit
+
+  covers:
+    name: anime-covers
+    needs: [detail]
+    if: always()
+    uses: ./.github/workflows/anime-covers.yml
+    secrets: inherit
+
+  sync:
+    name: site-sync（部署终点）
+    needs: [catalog, detail, covers]
+    if: always()
+    uses: ./.github/workflows/site-sync.yml
+    secrets: inherit
+
+  summary:
+    name: summary
+    needs: [catalog, detail, covers, sync]
+    if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 240
-    # 各步上限之和 20+30+30+60+75=215 > 原 200 → 最坏情况 job 在收尾判定前被砍
     steps:
-      - name: Run anime-catalog
-        id: catalog
-        if: always()
-        continue-on-error: true
-        timeout-minutes: 20
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -uo pipefail
-          wait_wf() {
-            WF="$1"; LIMIT="$2"
-            # 先记下触发前的最后一个 run，再等「出现一个新 run」，否则会拿到上一轮的旧 run
-            PREV=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-            if ! gh workflow run "$WF" --repo "$GITHUB_REPOSITORY"; then
-              echo "::error::$WF 触发失败"; return 1
-            fi
-            ID=""
-            for _ in $(seq 1 18); do
-              sleep 5
-              NEW=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-              if [ -n "$NEW" ] && [ "$NEW" != "0" ] && [ "$NEW" != "$PREV" ]; then ID="$NEW"; break; fi
-            done
-            if [ -z "$ID" ]; then echo "::error::$WF 触发后未发现新 run"; return 1; fi
-            echo "run id=$ID ($WF, prev=$PREV)"
-            for i in $(seq 1 $((LIMIT*6))); do
-              S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
-              case "$S" in
-                # 被更新的 run 抢占（concurrency 抢占 / 手动取消）不等于链路坏了：
-                # 抢占方的产物会覆盖本轮，标记 warning 继续往下走。
-                completed*cancelled*) echo "::warning::$WF 被更新的 run 抢占（superseded）"; return 0 ;;
-                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || { echo "::error::$WF 失败，后续步骤可能受影响"; return 1; } ;;
-              esac
-              sleep 10
-            done
-            echo "::warning::$WF 等待超时（${LIMIT}m）"; exit 1
-          }
-          wait_wf anime-catalog.yml 15
-
-      - name: Run anime-detail
-        id: detail
-        if: always()
-        continue-on-error: true
-        timeout-minutes: 30
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -uo pipefail
-          wait_wf() {
-            WF="$1"; LIMIT="$2"
-            # 先记下触发前的最后一个 run，再等「出现一个新 run」，否则会拿到上一轮的旧 run
-            PREV=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-            if ! gh workflow run "$WF" --repo "$GITHUB_REPOSITORY"; then
-              echo "::error::$WF 触发失败"; return 1
-            fi
-            ID=""
-            for _ in $(seq 1 18); do
-              sleep 5
-              NEW=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-              if [ -n "$NEW" ] && [ "$NEW" != "0" ] && [ "$NEW" != "$PREV" ]; then ID="$NEW"; break; fi
-            done
-            if [ -z "$ID" ]; then echo "::error::$WF 触发后未发现新 run"; return 1; fi
-            echo "run id=$ID ($WF, prev=$PREV)"
-            for i in $(seq 1 $((LIMIT*6))); do
-              S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
-              case "$S" in
-                # 被更新的 run 抢占（concurrency 抢占 / 手动取消）不等于链路坏了：
-                # 抢占方的产物会覆盖本轮，标记 warning 继续往下走。
-                completed*cancelled*) echo "::warning::$WF 被更新的 run 抢占（superseded）"; return 0 ;;
-                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || { echo "::error::$WF 失败，后续步骤可能受影响"; return 1; } ;;
-              esac
-              sleep 10
-            done
-            echo "::warning::$WF 等待超时（${LIMIT}m）"; exit 1
-          }
-          wait_wf anime-detail.yml 25
-
-      - name: Run anime-covers
-        id: covers
-        if: always()
-        continue-on-error: true
-        timeout-minutes: 30
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -uo pipefail
-          wait_wf() {
-            WF="$1"; LIMIT="$2"
-            # 先记下触发前的最后一个 run，再等「出现一个新 run」，否则会拿到上一轮的旧 run
-            PREV=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-            if ! gh workflow run "$WF" --repo "$GITHUB_REPOSITORY"; then
-              echo "::error::$WF 触发失败"; return 1
-            fi
-            ID=""
-            for _ in $(seq 1 18); do
-              sleep 5
-              NEW=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-              if [ -n "$NEW" ] && [ "$NEW" != "0" ] && [ "$NEW" != "$PREV" ]; then ID="$NEW"; break; fi
-            done
-            if [ -z "$ID" ]; then echo "::error::$WF 触发后未发现新 run"; return 1; fi
-            echo "run id=$ID ($WF, prev=$PREV)"
-            for i in $(seq 1 $((LIMIT*6))); do
-              S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
-              case "$S" in
-                # 被更新的 run 抢占（concurrency 抢占 / 手动取消）不等于链路坏了：
-                # 抢占方的产物会覆盖本轮，标记 warning 继续往下走。
-                completed*cancelled*) echo "::warning::$WF 被更新的 run 抢占（superseded）"; return 0 ;;
-                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || { echo "::error::$WF 失败，后续步骤可能受影响"; return 1; } ;;
-              esac
-              sleep 10
-            done
-            echo "::warning::$WF 等待超时（${LIMIT}m）"; exit 1
-          }
-          wait_wf anime-covers.yml 25
-
-      - name: Run site-sync
-        id: sync
-        if: always()
-        timeout-minutes: 75
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -uo pipefail
-          wait_wf() {
-            WF="$1"; LIMIT="$2"
-            # 先记下触发前的最后一个 run，再等「出现一个新 run」，否则会拿到上一轮的旧 run
-            PREV=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-            if ! gh workflow run "$WF" --repo "$GITHUB_REPOSITORY"; then
-              echo "::error::$WF 触发失败"; return 1
-            fi
-            ID=""
-            for _ in $(seq 1 18); do
-              sleep 5
-              NEW=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WF" --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-              if [ -n "$NEW" ] && [ "$NEW" != "0" ] && [ "$NEW" != "$PREV" ]; then ID="$NEW"; break; fi
-            done
-            if [ -z "$ID" ]; then echo "::error::$WF 触发后未发现新 run"; return 1; fi
-            echo "run id=$ID ($WF, prev=$PREV)"
-            for i in $(seq 1 $((LIMIT*6))); do
-              S=$(gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '"\(.status)|\(.conclusion)"' 2>/dev/null || echo "unknown|")
-              case "$S" in
-                completed*cancelled*) echo "::warning::$WF 被更新的 run 抢占（superseded）"; return 0 ;;
-                completed*) echo "$WF -> $S"; [ "${S#*|}" = "success" ] && return 0 || return 1 ;;
-              esac
-              sleep 10
-            done
-            echo "::warning::$WF 等待超时（${LIMIT}m）"; exit 1
-          }
-          wait_wf site-sync.yml 70
-
-      - name: Summary
-        if: always()
+      - name: 汇总 + 判定
         run: |
           {
             echo "## pipeline 结果"
             echo ""
-            echo "| 步骤 | 结论 |"
+            echo "| 阶段 | 结论 |"
             echo "|---|---|"
-            echo "| anime-catalog | ${{ steps.catalog.outcome }} |"
-            echo "| anime-detail | ${{ steps.detail.outcome }} |"
-            echo "| anime-covers | ${{ steps.covers.outcome }} |"
-            echo "| site-sync | ${{ steps.sync.outcome }} |"
+            echo "| anime-catalog | ${{ needs.catalog.result }} |"
+            echo "| anime-detail | ${{ needs.detail.result }} |"
+            echo "| anime-covers | ${{ needs.covers.result }} |"
+            echo "| site-sync（部署） | ${{ needs.sync.result }} |"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      # 收尾：只有部署终点 site-sync 失败才让 job 失败；其余步骤失败仅记录。
-      - name: Fail if site-sync failed
-        if: always() && steps.sync.outcome != 'success'
-        run: |
-          echo "::error::site-sync 未成功（outcome=${{ steps.sync.outcome }}），部署链路失败"
-          exit 1
+          echo "catalog=${{ needs.catalog.result }} detail=${{ needs.detail.result }} covers=${{ needs.covers.result }} sync=${{ needs.sync.result }}"
+          if [ "${{ needs.sync.result }}" != "success" ]; then
+            echo "::error::site-sync 未成功（${{ needs.sync.result }}），部署链路失败"
+            exit 1
+          fi
