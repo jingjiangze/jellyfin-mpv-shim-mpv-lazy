@@ -309,14 +309,19 @@ function yearRows(y) { return ANI.rows.filter(function (r) { return r[4] === y; 
 function byScore(a, b) { return (b[7] || 0) - (a[7] || 0); }
 function wdToday() { return ((new Date().getDay() + 6) % 7) + 1; }
 function wdPick() { return HOME.wd || wdToday(); }
+function courRows() {
+return yearRows(HOME.y).filter(function (r) {
+return !HOME.q || seasonOf(r[5]) === HOME.q;
+});
+}
 function todayRows() {
 var wd = wdPick();
-return yearRows(HOME.y).filter(function (r) { return r[6] === wd; }).sort(byScore);
+return courRows().filter(function (r) { return r[6] === wd; }).sort(byScore);
 }
 function weekTabsHtml() {
 var wd = wdPick();
 var cnt = {};
-yearRows(HOME.y).forEach(function (r) { if (r[6]) cnt[r[6]] = (cnt[r[6]] || 0) + 1; });
+courRows().forEach(function (r) { if (r[6]) cnt[r[6]] = (cnt[r[6]] || 0) + 1; });
 return '<div class="wk-tabs">' + WD.map(function (d, i) {
 var n = i + 1;
 return '<button class="wk-tab' + (wd === n ? ' on' : '') + '" type="button" data-wd="' + n + '">'
@@ -1615,13 +1620,39 @@ return '<span><b>' + (co[k] == null || co[k] === '' ? '—' : esc(String(co[k]))
 var info = [];
 if (air) info.push(['放送', air]);
 else if (year) info.push(['放送', year + ' 年']);
+var wdNo = Number(rec.weekday || 0) || 0;
+if (!wdNo && air && air.length >= 10) {
+try {
+wdNo = new Date(air.slice(0, 10) + 'T00:00:00').getDay();
+wdNo = ((wdNo + 6) % 7) + 1;
+} catch (e) { wdNo = 0; }
+}
+if (wdNo && typeof WD !== 'undefined') info.push(['星期', WD[wdNo - 1] || '']);
 if (epsN) info.push(['话数', epsN + ' 话']);
-if (type) info.push(['类型', TYPE[type] || type]);
 if (orig && orig !== title) info.push(['原名', orig]);
+if (rec.co && rec.co.length >= 3) {
+info.push(['收藏', '想看 ' + rec.co[0] + ' · 在看 ' + rec.co[1] + ' · 看过 ' + rec.co[2]]);
+}
+if (votes) info.push(['评分人数', String(votes)]);
 info.push(['来源', 'Bangumi']);            // magnet-eps.js 的 episodeCount() 读这里的「话数」
+if (rec.url) {
+info.push(['官网', '<a href="' + esc(rec.url) + '" target="_blank" rel="noopener">bgm.tv</a>']);
+}
 var infoRows = info.map(function (kv) {
-return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
+var v = String(kv[1] == null ? '' : kv[1]);
+var isHtml = kv[0] === '官网';
+return '<dt>' + esc(kv[0]) + '</dt><dd>' + (isHtml ? v : esc(v)) + '</dd>';
 }).join('');
+var rcHtml = '';
+if (rec.rc && rec.rc.length >= 10) {
+var mx = Math.max.apply(null, rec.rc) || 1;
+rcHtml = '<div class="rcbars" title="评分分布（1→10 分）">'
++ rec.rc.slice(0, 10).map(function (n, i) {
+return '<i style="height:' + Math.max(2, Math.round(28 * n / mx)) + 'px"'
++ ' title="' + (i + 1) + ' 分：' + n + ' 人"></i>';
+}).join('')
++ '</div>';
+}
 var relHtml = detailRelated(rec, id).map(function (r) {
 return animeCard(r, { showYear: 1 });
 }).join('');
@@ -1689,7 +1720,7 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b
 +   '</div>'
 +   '<aside class="dp-side">'
 +     '<section class="sect"><div class="sec-h"><h2>信息</h2></div>'
-+       '<dl class="infobox">' + infoRows + '</dl></section>'
++       '<dl class="infobox">' + infoRows + '</dl>' + rcHtml + '</section>'
 +     '<section class="sect"><div class="sec-h"><h2>相关推荐</h2>'
 +       '<span class="sec-sub">同年份 · 同类型</span></div>'
 +       '<div class="grid dp-rel">' + relHtml + '</div></section>'
@@ -2793,6 +2824,7 @@ if (ok && srcEmbedYT(box, pick[1], epNo, pick[2])) return;
 toQuark(why + ' · YouTube 不可达');
 });
 }
+function anonChain() {
 srcHint(box, '正在匹配 B 站官方番剧…');
 srcPgc(title).then(function (p) {
 if (p) {
@@ -2809,6 +2841,21 @@ if (bv && srcEmbedBvid(box, bv)) return;
 toYoutube('B 站未找到');
 }, function () { toYoutube('B 站搜索失败'); });
 });
+}
+if (tk && typeof biliPlayEp === 'function') {
+srcHint(box, '正在检查 B 站登录态…');
+srcGet('/bili/bind', tk).then(function (r) {
+var j = (r && r.j) || {};
+if (r && r.ok && j.ok && j.bound) {
+srcHint(box, 'B 站已绑定 · 用登录态播放（清晰度/会员集解锁）');
+biliPlayEp(box, id, title, epNo);
+return;
+}
+anonChain();
+}, anonChain);
+return true;
+}
+anonChain();
 return true;
 }
 window.__srcStart = srcStart;          // 65-detail 的「开始观看」用
@@ -2905,7 +2952,7 @@ srcSetRow(list, 'bili', 'B 站官方 · 免费 ' + freeN + '/' + pg.length + ' �
 { on: freeN > 0, bind: b.kind !== 'bound' });
 }
 else if (b.kind === 'bound') {
-srcSetRow(list, 'bili', 'B 站 · ' + b.uname + '（VIP' + b.vip + '）', { on: true });
+srcSetRow(list, 'bili', 'B 站 · 已绑定 ' + b.uname + '（' + (b.vip ? '大会员' : '已登录') + '）', { on: true });
 }
 else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 免登录可看', { on: true, bind: true });
 else srcSetRow(list, 'bili', 'B 站 · 检测失败 · 点此重试', { bad: true, retry: true });
