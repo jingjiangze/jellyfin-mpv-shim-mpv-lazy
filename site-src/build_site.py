@@ -166,7 +166,15 @@ def load_yt_videos():
                     merged[vid].setdefault(k2, v2)
             else:
                 merged[vid] = dict(v)
-    return list(merged.values())
+    out = list(merged.values())
+    # **一次性**预归一化：yt_for 以前对每部番都把所有视频标题重算一遍 norm+t2s
+    # （8854 番 × 7676 视频 ≈ 6800 万次正则，实测本地跑几分钟不返回）。这里算一次存 `_n`。
+    for v in out:
+        try:
+            v["_n"] = norm(_t2s(str(v.get("t") or "")))
+        except Exception:
+            v["_n"] = ""
+    return out
 
 
 # 总集篇 / 合集 / 重溫 之类不是单集，别挂进分集列表
@@ -196,7 +204,9 @@ def yt_for(norm_title, videos):
         if not vid or vid in seen:
             continue
         raw_t = str(v.get("t") or "")
-        vt = norm(_t2s(raw_t))     # 双侧都过 norm：繁体、空格、标点统一
+        vt = v.get("_n")
+        if vt is None:
+            vt = norm(_t2s(raw_t))     # 兜底（外部直接塞进来的视频列表）
         if norm_title not in vt:
             # 译名差异兜底：片名较长时用前 6 字做前缀匹配
             pre = norm_title[:6] if len(norm_title) >= 6 else ""
