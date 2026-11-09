@@ -2882,7 +2882,15 @@ if (!list) return;
 var epNo = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
 var y = data && data.yt;
 if (!data) srcSetRow(list, 'yt', 'YouTube 官方 · 检测中…');
-else if (y.kind === 'has') srcSetRow(list, 'yt', 'YouTube 官方 · ' + y.eps.length + ' 集可看', { on: true });
+else if (y.kind === 'has') {
+var cnN = 0;
+for (var yi = 0; yi < y.eps.length; yi++) {
+if (Array.isArray(y.eps[yi]) && y.eps[yi][2] === 1) cnN++;
+}
+var ytLabel = 'YouTube 官方 · ' + y.eps.length + ' 集'
++ (cnN === y.eps.length ? '可看' : (cnN ? '可看（' + cnN + ' 集大陆直连）' : '（需港澳台出口）'));
+srcSetRow(list, 'yt', ytLabel, { on: true });
+}
 else srcSetRow(list, 'yt', 'YouTube 官方 · 本季未收录');
 var b = data && data.bili;
 if (!data) srcSetRow(list, 'bili', 'B 站 · 检测中…');
