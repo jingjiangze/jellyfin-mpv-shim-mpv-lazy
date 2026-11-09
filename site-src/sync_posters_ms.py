@@ -158,7 +158,7 @@ def sync_assets():
     # 哈希名会随内容变：先清掉旧的 app-*.js / style-*.css，再拷当前这版
     for old in list(assets.glob("app-*.js")) + list(assets.glob("style-*.css")):
         old.unlink(missing_ok=True)
-    for p in sorted((SITE / "app-*.js")) + sorted((SITE / "style-*.css")):
+    for p in sorted(SITE.glob("app-*.js")) + sorted(SITE.glob("style-*.css")):
         shutil.copyfile(p, assets / p.name)
         n += 1
     for name in ("style.css", "app.js"):
