@@ -788,6 +788,7 @@ box.innerHTML = '<img class="pf-qr" id="pfqrimg" alt="B站登录二维码" src="
 + '<div id="pfbili-qractions">'
 + '<button class="mnote-btn" id="pfqrsave" type="button">保存二维码</button>'
 + '</div>';
+pfBiliWire();
 pfBiliQrText('用 B 站 App 扫码 · 180 秒内有效');
 }
 function pfBiliQrSave() {
