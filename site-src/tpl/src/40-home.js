@@ -15,9 +15,18 @@ function wdToday() { return ((new Date().getDay() + 6) % 7) + 1; }
 /* 选中的星期：默认跟随今天，用户点了 tab 就用选中的那天 */
 function wdPick() { return HOME.wd || wdToday(); }
 
+/* 首页的「今天/周几更新」只算**当季在播**：原来只按年筛（r[4]===HOME.y），
+   于是 1 月/4 月番也混进 10 月的「周日更新」里 —— 用户反馈「每周不是最新季度的」。
+   bgm / gamer 的今日更新口径都是当季，这里对齐：年 + 季度都要对上。 */
+function courRows() {
+  return yearRows(HOME.y).filter(function (r) {
+    return !HOME.q || seasonOf(r[5]) === HOME.q;
+  });
+}
+
 function todayRows() {
   var wd = wdPick();
-  return yearRows(HOME.y).filter(function (r) { return r[6] === wd; }).sort(byScore);
+  return courRows().filter(function (r) { return r[6] === wd; }).sort(byScore);
 }
 
 /* 星期 tab（照 gamer 新番表的文本 tab，不是胶囊）：周一…周日 + 当天部数。
@@ -25,7 +34,7 @@ function todayRows() {
 function weekTabsHtml() {
   var wd = wdPick();
   var cnt = {};
-  yearRows(HOME.y).forEach(function (r) { if (r[6]) cnt[r[6]] = (cnt[r[6]] || 0) + 1; });
+  courRows().forEach(function (r) { if (r[6]) cnt[r[6]] = (cnt[r[6]] || 0) + 1; });
   return '<div class="wk-tabs">' + WD.map(function (d, i) {
     var n = i + 1;
     return '<button class="wk-tab' + (wd === n ? ' on' : '') + '" type="button" data-wd="' + n + '">'

@@ -245,6 +245,10 @@
       });
     }
 
+    /* ⓪ 已绑定 B 站 → 直接用**登录态**播放（1080p / 大会员集都能出）。
+       这是我 rewiring 播放链时漏掉的一环：biliPlayEp 只被 80-bili 的旧入口引用，
+       srcStart 完全走匿名链 —— 于是「扫码绑定成功」对播放体验毫无影响（用户原话：扫码后也没用）。 */
+    function anonChain() {
     /* ① 先试**官方番剧（PGC）免费集**：官方正片 + 官方字幕，比 UGC 准（不会搜到解说/搬运）。
        盒子侧 24h 缓存 + nginx 10 分钟边缘缓存，重复点几乎零延迟；会员集只有试看，不嵌。 */
     srcHint(box, '正在匹配 B 站官方番剧…');
@@ -265,6 +269,22 @@
         toYoutube('B 站未找到');
       }, function () { toYoutube('B 站搜索失败'); });
     });
+    }
+
+    if (tk && typeof biliPlayEp === 'function') {
+      srcHint(box, '正在检查 B 站登录态…');
+      srcGet('/bili/bind', tk).then(function (r) {
+        var j = (r && r.j) || {};
+        if (r && r.ok && j.ok && j.bound) {
+          srcHint(box, 'B 站已绑定 · 用登录态播放（清晰度/会员集解锁）');
+          biliPlayEp(box, id, title, epNo);
+          return;
+        }
+        anonChain();
+      }, anonChain);
+      return true;
+    }
+    anonChain();
     return true;
   }
 
@@ -384,7 +404,8 @@
                 { on: freeN > 0, bind: b.kind !== 'bound' });
     }
     else if (b.kind === 'bound') {
-      srcSetRow(list, 'bili', 'B 站 · ' + b.uname + '（VIP' + b.vip + '）', { on: true });
+      /* 绑定后播放走登录态（biliPlayEp），所以文案要把「能看什么」说清楚 */
+      srcSetRow(list, 'bili', 'B 站 · 已绑定 ' + b.uname + '（' + (b.vip ? '大会员' : '已登录') + '）', { on: true });
     }
     /* 未登录也能看：player.bilibili.com 官方嵌入不要求账号，只是清晰度受限。
        所以文案是「免登录可看」，右侧给「登录高清」——绑定是升级，不是门槛。 */

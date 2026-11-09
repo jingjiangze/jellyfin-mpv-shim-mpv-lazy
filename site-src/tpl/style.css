@@ -1380,11 +1380,13 @@ main {
 }
 
 /* 信息表（旧结构 .infobox dl） */
+/* 信息表按 bgm 的密度收一档：标签列 72→58px、行距 6px→4px、字号小一号。
+   一屏能看完放送/星期/话数/原名/收藏/评分人数/来源/官网，不再靠大留白撑版面。 */
 .infobox {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 58px minmax(0, 1fr);
   margin: 0;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   overflow: hidden;
@@ -1392,11 +1394,17 @@ main {
 
 .infobox dt, .infobox dd {
   margin: 0;
-  padding: 6px var(--s3);
-  line-height: 1.6;
+  padding: 4px var(--s2);
+  line-height: 1.45;
   border-bottom: 1px solid var(--line);
 }
 
+.rcbars {
+  display: flex; align-items: flex-end; gap: 2px;
+  height: 32px; margin-top: 6px; padding: 0 2px;
+}
+.rcbars i { flex: 1 1 0; background: var(--accent-line); border-radius: 1px 1px 0 0; opacity: .75; }
+.rcbars i:hover { background: var(--ark); opacity: 1; }
 .infobox dt {
   color: var(--dim);
   white-space: nowrap;
@@ -3760,6 +3768,12 @@ html { scroll-behavior: smooth; }
 }
 
 /* 信息表：每条前面一个小橙方块 */
+.rcbars {
+  display: flex; align-items: flex-end; gap: 2px;
+  height: 32px; margin-top: 6px; padding: 0 2px;
+}
+.rcbars i { flex: 1 1 0; background: var(--accent-line); border-radius: 1px 1px 0 0; opacity: .75; }
+.rcbars i:hover { background: var(--ark); opacity: 1; }
 .infobox dt {
   position: relative;
   padding-left: 12px;
