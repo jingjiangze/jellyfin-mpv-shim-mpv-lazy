@@ -2699,7 +2699,7 @@ function ytKey(url) {
 var m = /[?&]v=([\w-]{6,})/.exec(url || '') || /youtu\.be\/([\w-]{6,})/.exec(url || '');
 return m ? m[1] : '';
 }
-function srcEmbedYT(box, url, ep) {
+function srcEmbedYT(box, url, ep, cn) {
 var key = ytKey(url);
 if (!key) return false;
 var slot = box.querySelector('#dpPlayer') || box;
@@ -2708,7 +2708,9 @@ if (window.__biliAbort === 'function') window.__biliAbort();
 if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
 slot.innerHTML = srcFrame('https://www.youtube-nocookie.com/embed/'
 + encodeURIComponent(key) + '?autoplay=1&rel=0&modestbranding=1');
-srcHint(box, 'YouTube 官方频道 · 播放器由 YouTube 提供（国内访问需代理，B 站源不受限）');
+srcHint(box, cn === 1
+? 'YouTube 官方频道 · 本集中国大陆可直连播放'
+: 'YouTube 官方频道 · 本集需港澳台/东南亚出口（B 站源不受地区限制）');
 return true;
 }
 function srcEmbedBvid(box, bvid) {
@@ -2786,7 +2788,8 @@ if (!eps) { toQuark(why + ' · 无官方正片'); return; }
 var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
 srcHint(box, why + ' · 检测 YouTube 可达性…');
 ytReach().then(function (ok) {
-if (ok && srcEmbedYT(box, (eps[idx] || [])[1], epNo)) return;
+var pick = eps[idx] || [];
+if (ok && srcEmbedYT(box, pick[1], epNo, pick[2])) return;
 toQuark(why + ' · YouTube 不可达');
 });
 }
@@ -3036,7 +3039,8 @@ if (key === 'yt') {
 var eps = srcYtEps(id);
 if (!eps) { srcHint(box, '本季没有官方 YouTube 正片'); return; }
 var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
-srcEmbedYT(box, (eps[idx] || [])[1], epNo);
+var pickYt = eps[idx] || [];
+srcEmbedYT(box, pickYt[1], epNo, pickYt[2]);
 return;
 }
 if (key === 'bili') {
