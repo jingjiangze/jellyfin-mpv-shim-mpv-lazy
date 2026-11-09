@@ -368,13 +368,19 @@
           pfBiliPaint(BILI_ST);
           return;
         }
-        if (j.error === 'not_bound' || r.status === 404) {
+        /* 后端「未绑定」是 **200 + {ok:true,bound:false,status:'none'}**（见 server.py
+           _bili_bind_get）。这里原来只认 404 / error:'not_bound'，未绑定用户每次都被判成
+           「读取失败（HTTP 200）」，卡片只剩「重试」—— 线上用户报的就是这个（绑定入口消失）。 */
+        if (j.ok && (j.bound === false || j.status === 'none')
+            || j.error === 'not_bound' || r.status === 404) {
           BILI_ST = { bound: false };
           pfBiliPaint(BILI_ST);
           return;
         }
         if (r.status === 401) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
-        pfBiliFail('B 站账号状态读取失败（HTTP ' + r.status + '）');
+        /* 其它异常把后端的 error 带出来，别再只报状态码（200 无从排查） */
+        pfBiliFail('B 站账号状态读取失败（HTTP ' + r.status
+                   + (j.error ? ' · ' + String(j.error).slice(0, 40) : '') + '）');
       }, function (e) {
         pfBiliFail((e && e.message) || 'B 站账号状态读取失败');
       });
