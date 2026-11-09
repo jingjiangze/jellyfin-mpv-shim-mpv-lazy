@@ -151,6 +151,25 @@
       var dup = rel.some(function (pair) { return pair[1] === k2; });
       if (!dup && (list[k2].r != null && list[k2].r !== '')) rel.push([list[k2], k2]);
     }
+    /* 「哪里能看」：TMDB watch providers 快照（build 时挂到 movies.json 的 wp 字段）。
+       条款要求署名 JustWatch，且 TMDB 不给深链 —— 链接只能指向 TMDB 自己的观看页。 */
+    var wpHtml = '';
+    if (isTm && x.wp && x.wp.regions) {
+      var REGION = { CN: '中国大陆', HK: '香港', TW: '台湾', SG: '新加坡', JP: '日本', US: '美国' };
+      var order = ['CN', 'HK', 'TW', 'SG', 'JP', 'US'];
+      var rows = [];
+      for (var wi = 0; wi < order.length; wi++) {
+        var code = order[wi], names = (x.wp.regions || {})[code];
+        if (names && names.length) rows.push([REGION[code] || code, names.join(' · ')]);
+      }
+      if (rows.length) {
+        wpHtml = '<dl class="infobox">' + rows.map(function (kv) {
+          return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
+        }).join('') + '</dl>'
+          + '<p class="dp-src">渠道数据 source: <a href="' + esc(x.wp.link || '#') + '"'
+          + ' target="_blank" rel="noopener">JustWatch / TMDB</a>（不含本站播放源）</p>';
+      }
+    }
     var relHtml = rel.map(function (pair) { return mcard(pair[0], kind, pair[1]); }).join('');
 
     m.innerHTML = '<nav class="dp-crumb"><a href="/movie">电影</a><span>/</span><b>'
@@ -188,6 +207,10 @@
             ? '<section class="sect" id="dp-trailer"><div class="sec-h"><h2>预告</h2></div>'
               + '<div class="trailer-slot" id="dpTrailerSlot">'
               + '<button class="btn pri" id="dpTrailer" type="button">▶ 播放预告（YouTube）</button></div></section>'
+            : '')
+      +     (wpHtml
+            ? '<section class="sect" id="dp-watch"><div class="sec-h"><h2>哪里能看</h2>'
+              + '<span class="sec-sub">// 合法渠道</span></div>' + wpHtml + '</section>'
             : '')
       +     '<div class="mbody" data-p="ext">'
       +       '<section class="sect" id="dp-plot"><div class="sec-h"><h2>简介</h2></div>'

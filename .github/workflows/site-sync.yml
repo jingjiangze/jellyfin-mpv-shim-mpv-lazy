@@ -78,22 +78,22 @@ jobs:
 
       - name: Fetch bilibili links
         if: ${{ env.FAST != '1' && success() }}
-        timeout-minutes: 15
-        continue-on-error: true
-        working-directory: site-src
-        env:
-          NO_LOCAL_PROXY: "1"
-          BILI_MAX: "150"
-        run: python -u fetch_bili.py
-
-      - name: Fetch bilibili links for fresh items
-        if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 25
         continue-on-error: true
         working-directory: site-src
         env:
           NO_LOCAL_PROXY: "1"
-          FRESH_BILI_MAX: "200"
+          BILI_MAX: "350"
+        run: python -u fetch_bili.py
+
+      - name: Fetch bilibili links for fresh items
+        if: ${{ env.FAST != '1' && success() }}
+        timeout-minutes: 30
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          NO_LOCAL_PROXY: "1"
+          FRESH_BILI_MAX: "300"
         run: python -u fetch_bili_fresh.py
 
       - name: Fetch magnet links
@@ -189,6 +189,17 @@ jobs:
       # 豆瓣剧情简介：电影页点开卡片要显示简介。
       # 豆瓣有 IP 级风控（subject_ip_rate_limit），失败时脚本保留上一轮数据，
       # 所以这里 continue-on-error 不会把已抓到的简介冲掉。
+      # 「哪里能看」快照（TMDB / JustWatch）：每部电影 1 次请求，默认 80 部上限。
+      # 条款要求：必须署名 JustWatch，缓存不超过 6 个月（我们每轮刷新），且 TMDB 不给深链。
+      - name: Fetch TMDB watch providers
+        if: ${{ env.FAST != '1' && success() }}
+        timeout-minutes: 8
+        continue-on-error: true
+        working-directory: site-src
+        env:
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
+        run: python -u fetch_wp.py --max 80
+
       - name: Fetch Douban intros
         if: ${{ env.FAST != '1' && success() }}
         timeout-minutes: 15

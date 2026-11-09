@@ -209,6 +209,27 @@ def yt_ep_no(title):
     return int(m.group(1) or m.group(2) or 0)
 
 
+def load_aliases():
+    """bgm 别名表 {sid: [别名…]}（fetch_bgm_alias.py 产出）。
+
+    为什么需要：只按 bgm 中文名匹配会漏掉译名不同的片 —— 实测《擅长捉弄的高木同学》
+    对不上 Ani-One 的《擅長捉弄人的高木同學》（差一个「人」字），整部番的官方正片全丢。
+    别名表里通常收了台译/日文原名/英文名，逐个别名试一次即可覆盖大多数译名差异。
+    """
+    fp = DATA / "bgm-alias.json"
+    try:
+        items = json.loads(fp.read_text(encoding="utf-8")).get("items") or {}
+    except (ValueError, OSError):
+        return {}
+    out = {}
+    for k, v in items.items():
+        if isinstance(v, list):
+            names = [str(x).strip() for x in v if str(x or "").strip()]
+            if names:
+                out[str(k)] = names[:8]          # 别名字太多会拖慢匹配，取前 8 个
+    return out
+
+
 def yt_index(videos):
     """把视频标题切成 6-gram 建倒排：{gram: [video_index,...]}。
 
@@ -296,6 +317,8 @@ def build_anime():
     shards = load_shards()
     YT_VIDEOS = load_yt_videos()
     YT_IDX = yt_index(YT_VIDEOS)
+    ALIASES = load_aliases()
+    print(f"  别名表: {len(ALIASES)} 部")
     print(f"  yt: 官方频道视频 {len(YT_VIDEOS)} 条（倒排键 {len(YT_IDX)}）")
     # B 站官方嵌入：fetch_bili.py 的 bvid 索引（id -> {bvid,title,…}）。
     # 旧索引的键是 md5（历史 data.json 体系），先按标题归一建倒排兜底；
@@ -405,9 +428,18 @@ def build_anime():
         bvid = bili_bvid(sid, cn, name)
         # **YouTube 匹配要在 if 之前算**：原来只在「AniList 命中或有 bvid」时才匹配，
         # 于是纯 YouTube 命中的番（169 部里的大多数，如老番《死神》）永远挂不上正片。
-        _yt = yt_pick(YT_VIDEOS, YT_IDX, norm(_t2s(cn or name)))
-        if not _yt and name and name != cn:
-            _yt = yt_pick(YT_VIDEOS, YT_IDX, norm(_t2s(name)))
+        # 片名候选：中文名 → 日文名 → bgm 别名（台译/英文名），命中即停
+        _cands, _seen_n = [], set()
+        for _t in [cn, name] + list(ALIASES.get(str(sid)) or []):
+            _nt = norm(_t2s(_t))
+            if len(_nt) >= 2 and _nt not in _seen_n:
+                _seen_n.add(_nt)
+                _cands.append(_nt)
+        _yt = []
+        for _nt in _cands[:8]:
+            _yt = yt_pick(YT_VIDEOS, YT_IDX, _nt)
+            if _yt:
+                break
         _yt = _yt or (a.get("yt") or [])
         if a or bvid or _yt:
             ex = [a.get("banner") or None, a.get("img") or None,
@@ -538,6 +570,18 @@ def build_movies():
 
     out = SITE / "data"
     out.mkdir(parents=True, exist_ok=True)
+    # 「哪里能看」（TMDB watch providers 快照）：按 tmdb id 挂到对应条目上，
+    # 前端只读 movies.json 一个文件即可，不再多打一次请求。
+    try:
+        _wp = json.loads((SITE / "watchproviders.json").read_text(encoding="utf-8")).get("items") or {}
+    except (ValueError, OSError):
+        _wp = {}
+    if _wp:
+        for _m in tmdb:
+            _hit = _wp.get(str(_m.get("id")))
+            if _hit:
+                _m["wp"] = _hit
+        print(f"  watch providers: {sum(1 for _m in tmdb if _m.get('wp'))} 部挂上渠道")
     mov = {"douban": douban, "tmdb": tmdb}
     mov["built"] = _stable_tag(mov)              # 同上：内容哈希，避免每轮重传
     (out / "movies.json").write_text(
