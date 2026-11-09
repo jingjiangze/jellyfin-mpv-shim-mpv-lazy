@@ -46,6 +46,35 @@ else:
     MY = set(range(a, b + 1))
 
 
+
+def _clean_text(text, cap=600):
+    """简介清洗：保留段落、按句末收口，别把整段压成一行、也别切在半句上。
+
+    旧写法 `" ".join(s.split())[:600]` 有两个硬伤：
+      ① split() 把 \n 一起吃掉 ⇒ 多段简介变成一大坨，详情页读起来像小作文；
+      ② 直接按字数切 ⇒ 常常停在「……冬月不禁感到」这种半句（实测老数据里
+         220 字截断的残留就是这么来的，[简介原文] 那批也是同一代脚本的产物）。
+    """
+    s = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    out, blank = [], False
+    for ln in s.split("\n"):
+        ln = re.sub(r"[ \t\u3000]+", " ", ln).strip()
+        if not ln:
+            if out and not blank:
+                out.append("")
+            blank = True
+            continue
+        out.append(ln)
+        blank = False
+    t = "\n".join(out).strip()
+    if len(t) > cap:
+        cut = max(t.rfind(ch, 0, cap) for ch in "。！？…）」』")
+        if cut >= cap * 0.5:
+            t = t[:cut + 1]                    # 正常情况：收在句末
+        else:
+            t = t[:cap].rstrip() + "…"         # 单句超长只能硬切：补省略号，别假装完整
+    return t
+
 def get_json(url):
     req = urllib.request.Request(url, headers={"user-agent": UA, "accept": "application/json"})
     for attempt in range(3):
@@ -89,7 +118,7 @@ def map_subject(s):
         "poster": imgs.get("large") or imgs.get("common") or imgs.get("medium") or "",
         # 简介统一空白（去 CRLF / 全角缩进 / 连续空格）后截 600 字：
         # 220 会正好切断句子（实测 s0 有 45.5% 的简介恰好停在 220 字）。
-        "overview": " ".join((s.get("summary") or "").split())[:600],
+        "overview": _clean_text(s.get("summary"), 600),
         "format": s.get("platform") or "",
         "tags": tags,
         "url": f"https://bgm.tv/subject/{s.get('id')}",

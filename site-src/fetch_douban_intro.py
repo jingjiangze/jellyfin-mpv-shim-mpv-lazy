@@ -51,6 +51,35 @@ TMDB_KEY = os.environ.get("TMDB_KEY", "99bf884d2a3e8403ae8accded44ec73c")
 TMDB_SEARCH = "https://api.tmdb.org/3/search/movie"
 
 
+
+def _clean_text(text, cap=600):
+    """简介清洗：保留段落、按句末收口，别把整段压成一行、也别切在半句上。
+
+    旧写法 `" ".join(s.split())[:600]` 有两个硬伤：
+      ① split() 把 \n 一起吃掉 ⇒ 多段简介变成一大坨，详情页读起来像小作文；
+      ② 直接按字数切 ⇒ 常常停在「……冬月不禁感到」这种半句（实测老数据里
+         220 字截断的残留就是这么来的，[简介原文] 那批也是同一代脚本的产物）。
+    """
+    s = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    out, blank = [], False
+    for ln in s.split("\n"):
+        ln = re.sub(r"[ \t\u3000]+", " ", ln).strip()
+        if not ln:
+            if out and not blank:
+                out.append("")
+            blank = True
+            continue
+        out.append(ln)
+        blank = False
+    t = "\n".join(out).strip()
+    if len(t) > cap:
+        cut = max(t.rfind(ch, 0, cap) for ch in "。！？…）」』")
+        if cut >= cap * 0.5:
+            t = t[:cut + 1]                    # 正常情况：收在句末
+        else:
+            t = t[:cap].rstrip() + "…"         # 单句超长只能硬切：补省略号，别假装完整
+    return t
+
 def tmdb_intro(title):
     q = urllib.parse.urlencode({"api_key": TMDB_KEY, "query": title, "language": "zh-CN"})
     try:
@@ -61,7 +90,7 @@ def tmdb_intro(title):
     except Exception:
         return ""
     for it in (d.get("results") or [])[:3]:
-        ov = " ".join((it.get("overview") or "").split())
+        ov = _clean_text(it.get("overview"), 600)
         # 只认中文且有实质内容的，避免把英文简介混进来
         if len(ov) >= 20 and re.search(r"[一-鿿]", ov):
             return ov[:INTRO_LEN]
@@ -111,7 +140,7 @@ def main():
             time.sleep(GAP)
         req_n += 1
         d = get_json(API.format(sid))
-        intro = " ".join(((d or {}).get("intro") or "").split())[:INTRO_LEN]
+        intro = _clean_text((d or {}).get("intro"), INTRO_LEN)
         if not intro:
             miss += 1
             continue
