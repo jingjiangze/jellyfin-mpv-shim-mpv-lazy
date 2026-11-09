@@ -288,10 +288,8 @@
     if (wdNo && typeof WD !== 'undefined') info.push(['星期', WD[wdNo - 1] || '']);
     if (epsN) info.push(['话数', epsN + ' 话']);
     if (orig && orig !== title) info.push(['原名', orig]);
-    if (rec.co && rec.co.length >= 3) {
-      info.push(['收藏', '想看 ' + rec.co[0] + ' · 在看 ' + rec.co[1] + ' · 看过 ' + rec.co[2]]);
-    }
-    if (votes) info.push(['评分人数', String(votes)]);
+    /* 收藏三态与评分人数 hero 已经有（想看/在看/看过 + N 人评分），信息块里再写一遍
+       就是「嘈杂」的来源，去掉。信息块只留 hero 没有的结构化字段。 */
     info.push(['来源', 'Bangumi']);            // magnet-eps.js 的 episodeCount() 读这里的「话数」
     if (rec.url) {
       info.push(['官网', '<a href="' + esc(rec.url) + '" target="_blank" rel="noopener">bgm.tv</a>']);

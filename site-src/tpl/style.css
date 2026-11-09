@@ -1401,6 +1401,7 @@ main {
 
 .rcbars {
   display: flex; align-items: flex-end; gap: 2px;
+  width: 100%; box-sizing: border-box;
   height: 32px; margin-top: 6px; padding: 0 2px;
 }
 .rcbars i { flex: 1 1 0; background: var(--accent-line); border-radius: 1px 1px 0 0; opacity: .75; }
@@ -3770,6 +3771,7 @@ html { scroll-behavior: smooth; }
 /* 信息表：每条前面一个小橙方块 */
 .rcbars {
   display: flex; align-items: flex-end; gap: 2px;
+  width: 100%; box-sizing: border-box;
   height: 32px; margin-top: 6px; padding: 0 2px;
 }
 .rcbars i { flex: 1 1 0; background: var(--accent-line); border-radius: 1px 1px 0 0; opacity: .75; }
