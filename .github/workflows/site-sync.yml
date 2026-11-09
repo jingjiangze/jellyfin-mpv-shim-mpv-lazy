@@ -406,9 +406,11 @@ jobs:
         run: python -u site-src/publish_all.py --yes
 
       - name: Deploy to Cloudflare Pages
-        # 镜像同步（ModelScope）失败不该挡住站点上线：数据集只是兜底源，站点本身在 CF Pages。
-        # 之前 MS 一冲突就整轮不部署，线上连续多次停在旧版（2026-11-06 实测）。
-        if: ${{ !cancelled() }}
+        # 两条约束：
+        #  · 镜像同步（ModelScope）失败不该挡住上线 —— 数据集只是兜底源，站点在 CF Pages；
+        #  · 但**构建失败绝对不能部署**：build-out 不存在时 `cp` 直接报错退出（2026-11-09
+        #    实测 name 'hashlib' 那次），更糟的情况是拿上一轮残留产物发上线。
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 10
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

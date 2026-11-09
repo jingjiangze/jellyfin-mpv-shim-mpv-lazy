@@ -15,6 +15,7 @@
   site/tmdb.json        TMDB 热门 / 正在上映（fetch_tmdb.py 产出）
 """
 import datetime as dt
+import hashlib
 import json
 import os
 import pathlib
