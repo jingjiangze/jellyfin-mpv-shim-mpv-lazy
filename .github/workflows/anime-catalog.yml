@@ -3,12 +3,9 @@ name: anime-catalog
 # 全量索引：从 bangumi-data 拿「所有动画 + 它们的 bgm.tv id」，写 site-src/data/catalog.json。
 # 为什么不直接查 Bangumi 搜索接口：空关键词 total 被硬截断在 1000，date/air_date 过滤实测失效。
 on:
-  # 定时统一由 pipeline.yml 触发（这里原来还挂着 cron，会与 pipeline 双跑）
-  _disabled_schedule: 
-    - cron: "20 17 * * *"   # 每天 01:20（北京时间）
-    workflow_call:
-workflow_dispatch:
-
+  # 定时统一由 pipeline.yml 触发；这里只留手动与「被 pipeline 调用」
+  workflow_dispatch:
+  workflow_call:
 permissions:
   contents: write
 

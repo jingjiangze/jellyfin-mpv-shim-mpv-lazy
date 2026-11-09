@@ -4,18 +4,9 @@ name: anime-covers
 # 8 个 job 并行下载，collect job 统一提交到数据集仓库（并发 push 同一个 LFS 仓库会冲突，所以必须收口）。
 # 定时统一由 .github/workflows/pipeline.yml 触发（保留 dispatch 供手工重跑）
 on:
+  # 定时统一由 pipeline.yml 触发；这里只留手动与「被 pipeline 调用」
   workflow_dispatch:
-    inputs:
-      cover_size:
-        description: "封面尺寸：c=中图~8.7KB（日常），l=大图~77.7KB（高清全量刷新一次）"
-        required: false
-        default: "c"
-      dest:
-        description: "推送到数据集的目录（posters 或 posters-c）"
-        required: false
-          workflow_call:
-default: "posters"
-
+  workflow_call:
 permissions:
   contents: read
 

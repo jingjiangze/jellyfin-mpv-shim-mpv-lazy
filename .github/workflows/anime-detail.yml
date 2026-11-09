@@ -3,17 +3,9 @@ name: anime-detail
 # 全量详情：把 catalog 里的 bgm id 按 64 个分片抓 /v0/subjects/{id}，
 # 16 个 job 并行，每个 job 处理 4 个分片；collect job 统一提交，避免 16 个 job 抢同一个 ref。
 on:
+  # 定时统一由 pipeline.yml 触发；这里只留手动与「被 pipeline 调用」
   workflow_dispatch:
-    inputs:
-      only_recent:
-        description: "只补最近 5 年（true/false）"
-        required: false
-        default: "false"
-  # 定时统一由 pipeline.yml 触发；原来的 cron  workflow_call:
- 已删（会与 pipeline 双跑）
-  schedule_disabled: 
-    - cron: "40 18 * * *"   # 每天 02:40（北京时间）
-
+  workflow_call:
 permissions:
   contents: write
 
