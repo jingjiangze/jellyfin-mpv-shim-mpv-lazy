@@ -192,7 +192,8 @@ jobs:
       # 「哪里能看」快照（TMDB / JustWatch）：每部电影 1 次请求，默认 80 部上限。
       # 条款要求：必须署名 JustWatch，缓存不超过 6 个月（我们每轮刷新），且 TMDB 不给深链。
       - name: Fetch TMDB watch providers
-        if: ${{ env.FAST != '1' && success() }}
+        # fast 也跑：只有 80 次请求（~30s），但缺了它电影页就没有「哪里能看」
+        if: ${{ success() }}
         timeout-minutes: 8
         continue-on-error: true
         working-directory: site-src
