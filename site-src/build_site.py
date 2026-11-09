@@ -34,6 +34,17 @@ TODAY = dt.date.today()
 WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 
+def _stable_tag(payload):
+    """内容哈希当版本标记：数据没变 → 标记不变 → 发布的 blob 也不变（构建可 no-op）。
+
+    原来这里写的是构建时间，等于**每轮必变**：anime.json / movies.json 每次都被当成
+    "新文件"重新上传（实测第二轮 run 仍然 CHANGE 这两个文件），仓库每天因此多约 1MB 垃圾。
+    前端从来没人读这两个文件里的 built 字段（全仓 grep 无消费者），换成内容哈希最省事。
+    """
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
+
+
 def min_css(text):
     while "/*" in text:
         a = text.index("/*")
@@ -288,9 +299,10 @@ def build_anime():
     _yt_n = sum(1 for v in extra.values() if isinstance(v, list) and len(v) > 4 and v[4])
     print(f"  yt 匹配: {_yt_n} 部挂上官方正片（RSS {len(YT_VIDEOS)} 条）")
     rows.sort(key=lambda r: (-(r[4] or 0), -(r[7] or 0)))
-    payload = {"built": BUILD_TAG, "poster": f"{MODELSCOPE}/posters/bgm-",
+    payload = {"poster": f"{MODELSCOPE}/posters/bgm-",
                "posterSd": f"{MODELSCOPE}/posters-c/bgm-",
                "year": TODAY.year, "extra": extra, "rows": rows}
+    payload["built"] = _stable_tag(payload)      # 内容哈希，不是时间（见 _stable_tag）
     out = SITE / "data"
     out.mkdir(parents=True, exist_ok=True)
     (out / "anime.json").write_text(
@@ -406,9 +418,10 @@ def build_movies():
 
     out = SITE / "data"
     out.mkdir(parents=True, exist_ok=True)
+    mov = {"douban": douban, "tmdb": tmdb}
+    mov["built"] = _stable_tag(mov)              # 同上：内容哈希，避免每轮重传
     (out / "movies.json").write_text(
-        json.dumps({"built": BUILD_TAG, "douban": douban, "tmdb": tmdb},
-                   ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        json.dumps(mov, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     n_intro = sum(1 for d in douban if d["intro"])
     n_ov = sum(1 for t in tmdb if t["ov"])
     print(f"movies: douban {len(douban)} / tmdb {len(tmdb)} / "

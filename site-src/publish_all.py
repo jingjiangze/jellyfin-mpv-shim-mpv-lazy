@@ -124,7 +124,7 @@ def plan():
     """(仓库路径, 本地路径) 清单 + 需要删除的路径集合。"""
     if not BUILD.is_dir():
         print(f"::error::缺构建产物 {BUILD}")
-        return None, []
+        return None, set(), set()
 
     pairs = []
     # A. CDN 镜像：固定名资源
@@ -153,17 +153,28 @@ def plan():
     for p in sorted(DATA_STATE.glob("*.json")):
         _add(pairs, f"site-src/data/{p.name}", p, required=False)
     _add(pairs, "site-src/poster_cache.json", ROOT / "site-src" / "poster_cache.json", required=False)
-    return pairs, keep_hash
+    keep_data = {p.name for p in (BUILD / "data").glob("*.json")}
+    return pairs, keep_hash, keep_data
 
 
-def deletions(remote_paths, keep_hash):
+def deletions(remote_paths, keep_hash, keep_data=()):
+    """自管理的清理：旧哈希名资源 + 旧哈希名数据索引。
+
+    · media/assets 里不在本版清单里的 app-/style- 哈希名（每版换名，不删会无限积累）
+    · media/data 里旧的 index-<hash>.json / library-<hash>.json（HTML 只引当前那份）
+    · media/magnet-eps.js（旧 loader 路径，前端已改读 media/assets/）
+    media/ 根目录历史遗留的 app-<hash>.js 不动（无引用，但删仓文件要单独授权）。
+    """
     out = ["media/magnet-eps.js"]
+    keep = set(keep_hash) | set(keep_data)
     for path in remote_paths:
-        if not path.startswith("media/assets/") or UNTOUCHED.match(path):
-            continue
         name = path.rsplit("/", 1)[-1]
-        if HASH_RE.match(name) and name not in keep_hash:
-            out.append(path)
+        if path.startswith("media/assets/") and not UNTOUCHED.match(path):
+            if HASH_RE.match(name) and name not in keep:
+                out.append(path)
+        elif path.startswith("media/data/") and name not in keep:
+            if re.match(r"^(index|library)-[0-9a-f]{10}\.json$", name):
+                out.append(path)
     return [p for p in dict.fromkeys(out) if p in remote_paths]
 
 
@@ -174,7 +185,7 @@ def main():
         return 1
 
     sync_state_back()
-    pairs, keep_hash = plan()
+    pairs, keep_hash, keep_data = plan()
     if pairs is None:
         return 1
 
@@ -198,7 +209,7 @@ def main():
         remote = {e["path"]: e["sha"] for e in tree.get("tree", []) if e.get("type") == "blob"}
 
         changed = [e for e in entries if remote.get(e["repo"]) != e["sha"]]
-        dels = deletions(remote, keep_hash)
+        dels = deletions(remote, keep_hash, keep_data)
         print(f"changed {len(changed)} / unchanged {len(entries) - len(changed)} / delete {len(dels)}"
               f"（head {head[:8]}）")
         for e in changed[:25]:
