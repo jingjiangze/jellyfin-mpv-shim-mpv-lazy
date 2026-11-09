@@ -121,4 +121,4 @@ libmpv 路径下 shim **同样**把 `config_dir` 钉在 `%APPDATA%\jellyfin-mpv-
 
 ## License
 
-MIT
+**GPL-3.0-or-later** — 全文见 [`LICENSE`](LICENSE)。可自由使用与修改；分发衍生作品须同样以 GPL-3.0-or-later 开源并提供源代码。
