@@ -428,6 +428,35 @@ SHELL_INLINE = ('<div class="mask" id="mask"></div>'
                 '<main class="wrap" id="main"><div id="modal" class="dp"></div></main>')
 SHELLS = {"modal": SHELL_MODAL, "inline": SHELL_INLINE}
 
+LEGACY_PLOT_MARK = "[简介原文]"
+
+
+def clean_overview(rec):
+    """拆开历史脏数据：「中文简介 + [简介原文] + 日文原文（还被截断）」→ 正文只留中文。
+
+    标记不是现在任何脚本写的（早期版本写进 overview 字段，实测 228/8316 条仍是这形态，
+    translate_overviews 只翻「还是日文的」条目，所以这批永远不会自愈）。构建期清一次，
+    部署出去的分片就干净了；前端 00-base 的 splitPlot 是第二道防线（旧缓存/旧分片）。
+    原文不丢：落进 overview_ja，详情页给「原文」折叠块。
+    """
+    ov = rec.get("overview")
+    if not isinstance(ov, str) or not ov:
+        return False
+    changed = False
+    i = ov.find(LEGACY_PLOT_MARK)
+    if i >= 0:
+        rec["overview"] = ov[:i].strip()
+        if not str(rec.get("overview_ja") or "").strip():
+            rec["overview_ja"] = ov[i + len(LEGACY_PLOT_MARK):].strip()
+        changed = True
+    cur = str(rec.get("overview") or "").replace("\r\n", "\n")
+    new = re.sub(r"\n{3,}", "\n\n", cur).strip()
+    if new != rec.get("overview"):
+        rec["overview"] = new
+        changed = True
+    return changed
+
+
 PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>__TITLE__</title><link rel=preconnect href=https://modelscope.cn crossorigin><link rel=preconnect href=https://cdn-lfs-cn-1.modelscope.cn crossorigin><meta name=color-scheme content="dark light"><script>try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script><style>html{background:#f6f6fa}html[data-theme=dark]{background:#101013}</style><link rel=stylesheet href="/style-__CV__.css" onerror="var l=document.createElement('link');l.rel='stylesheet';l.href='https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/style-__CV__.css';document.head.appendChild(l)"><link rel=preload as=script href="https://modelscope.cn/datasets/jingjiangze/Anime-JPG/resolve/master/assets/app-__JV__.js"><script>(function(){
   /* 资源加载：每类资源一份「候选链」，命中即停 + 单候选超时。
      血泪三条（都踩过，别再改回去）：
@@ -537,12 +566,32 @@ def main():
     for old in ddir.glob("s[0-9]*.json"):
         old.unlink()
     n = 0
+    cleaned = 0
     for p in sorted((SITE / "anime").glob("*.json")):
         try:
-            shutil.copy2(p, ddir / f"s{p.stem}.json")
+            recs = json.loads(p.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if not isinstance(recs, list):
+            continue
+        touched = False
+        for rec in recs:
+            if isinstance(rec, dict) and clean_overview(rec):
+                touched = True
+        out = ddir / f"s{p.stem}.json"
+        try:
+            if touched:
+                # 有改动就重写（紧凑分隔符，和原分片同尺寸量级）
+                out.write_text(json.dumps(recs, ensure_ascii=False, separators=(",", ":")),
+                               encoding="utf-8")
+                cleaned += 1
+            else:
+                shutil.copy2(p, out)          # 无改动保持原样，省 IO
             n += 1
         except OSError:
             pass
+    if cleaned:
+        print(f"overview cleaned in {cleaned} shards")
     # 分片缺失会让详情弹窗（简介/标签/评分分布）大面积失效：生产是 64 片，
     # 少于 60 说明这一轮的数据不完整，宁可让构建失败也不要发一个残废站点。
     if n < 60:

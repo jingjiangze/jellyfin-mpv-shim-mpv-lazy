@@ -1548,6 +1548,14 @@ main {
   white-space: pre-wrap;
 }
 
+/* 简介「原文」折叠块：老数据 overview 里混着的日文原文（splitPlot 拆出来放这里），
+   默认收起，不占正文视线；展开后按小一号字 + 弱色，和正文区分。 */
+.plot-ja { margin: var(--s2) 0 0; max-width: 68ch; }
+.plot-ja > summary { cursor: pointer; font-size: var(--fs-sm); color: var(--accent); }
+.plot-ja > summary:hover { text-decoration: underline; }
+.plot-ja > p { margin: var(--s1) 0 0; font-size: var(--fs-sm); line-height: 1.7;
+  color: var(--dim); white-space: pre-wrap; }
+
 /* ---------------------------------------------------------------- 11 标签胶囊 */
 .tagpills, .tags {
   display: flex;

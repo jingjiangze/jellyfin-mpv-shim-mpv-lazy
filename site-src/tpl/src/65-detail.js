@@ -395,7 +395,15 @@
 
     /* 简介：与弹窗同一套处理 —— 原文分段残留的空行在 pre-wrap 下会撑出大块空白 */
     var plot = m.querySelector('#plot');
-    if (plot) plot.textContent = String(rec.overview || '暂无简介').replace(/\n{3,}/g, '\n\n');
+    if (plot) {
+      /* 正文只放中文；老数据里 [简介原文] 那份日文收进折叠块（splitPlot 在 00-base） */
+      var pv = splitPlot(rec.overview, rec.overview_ja);
+      plot.textContent = pv.zh;
+      var sect = plot.parentNode;
+      var oldJa = sect ? sect.querySelector('.plot-ja') : null;
+      if (oldJa) sect.removeChild(oldJa);
+      if (pv.ja && sect) sect.insertAdjacentHTML('beforeend', plotJaHtml(pv.ja));
+    }
     renderTags(rec, m.querySelector('#tags'));
     /* 标签计数是另一份小表（tagcounts.json），晚到就只重画标签，与弹窗同一处理 */
     ensureTagCounts(function () { renderTags(rec, m.querySelector('#tags')); });
