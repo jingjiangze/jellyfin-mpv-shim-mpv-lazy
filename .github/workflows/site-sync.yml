@@ -219,6 +219,40 @@ jobs:
       # 必须排在 Translate 之后：Translate 写的是 site/anime/*.json（真源），
       # 只有这条 Git Data API 路径能可靠落盘；后面的 Publish data + posters + state
       # 有 rebase 冲突静默跳过的分支，实测丢过整轮 1,624 条翻译（run 41678297541）。
+      # 官方频道正片索引（两份都从盒子取；CI runner 直连 YouTube 是 404，盒子有 mihomo 隧道）：
+      #   yt.json       4 小时 RSS：每频道最新 15 条，追新
+      #   yt-full.json  每日 yt-dlp 枚举 uploads 播放列表：每频道 100 条，与历史并集 → 整季回填
+      # 写临时文件、校验通过才 mv：盒子抖动时保留上一版（历史上直接 rm 掉把 YouTube 源打没）。
+      - name: Fetch official YouTube episodes
+        if: ${{ env.FAST != '1' && success() }}
+        timeout-minutes: 4
+        continue-on-error: true
+        working-directory: site-src
+        run: |
+          set -uo pipefail
+          pull() {
+            TMP="$RUNNER_TEMP/$1"
+            rm -f "$TMP"
+            if ! curl -sfk -m 40 "https://120.48.56.189/ytdata/$1" -o "$TMP"; then
+              echo "::warning::$1 拉取失败，保留上一版"
+              return 0
+            fi
+            if python - "$TMP" "$1" <<'PYEOF'
+          import json, sys
+          d = json.loads(open(sys.argv[1], encoding="utf-8").read())
+          vids = d.get("videos")
+          assert isinstance(vids, list) and vids, "videos 缺失或为空"
+          bad = [v for v in vids[:50] if not str((v or {}).get("v") or "")]
+          assert not bad, "前 50 条里有缺 videoId 的"
+          print("  %s: %d 条" % (sys.argv[2], len(vids)))
+          PYEOF
+            then mv -f "$TMP" "site/$1"
+            else echo "::warning::$1 内容不合法，保留上一版"
+            fi
+          }
+          pull yt.json
+          pull yt-full.json
+
       - name: Build pages
         id: build
         timeout-minutes: 6

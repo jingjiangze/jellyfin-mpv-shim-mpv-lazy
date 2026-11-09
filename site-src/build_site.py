@@ -137,42 +137,84 @@ def _t2s(s):
 
 
 def load_yt_videos():
-    """官方频道 RSS 视频（fetch_yt_rss.py 产出）；缺失/坏数据一律当空。"""
-    fp = SITE / "yt.json"
-    if not fp.is_file():
-        return []
-    try:
-        return json.loads(fp.read_text(encoding="utf-8")).get("videos") or []
-    except (ValueError, OSError):
-        return []
+    """官方频道视频索引：yt-full.json（盒子 yt-dlp 全量枚举，整季） + yt.json（4h RSS，追新）。
+
+    两份按 video id 合并：RSS 条目带 ts 且更新鲜，同 id 时优先它；全量索引补历史集数 ——
+    只靠 RSS（每频道 15 条）时整季回填是不可能的，数据 API 又要 key（用户没有）。
+    缺文件 / 坏数据一律当空，不影响构建。
+    """
+    merged = {}
+    for name in ("yt.json", "yt-full.json"):
+        fp = SITE / name
+        if not fp.is_file():
+            continue
+        try:
+            vids = json.loads(fp.read_text(encoding="utf-8")).get("videos") or []
+        except (ValueError, OSError):
+            continue
+        for v in vids:
+            vid = str((v or {}).get("v") or "")
+            if not vid:
+                continue
+            if vid in merged:
+                for k2, v2 in v.items():
+                    merged[vid].setdefault(k2, v2)
+            else:
+                merged[vid] = dict(v)
+    return list(merged.values())
+
+
+# 总集篇 / 合集 / 重溫 之类不是单集，别挂进分集列表
+YT_EP_NOISE = re.compile(r"合集|全集|重溫|重温|回顧|回顾|總集篇|总集篇|一口氣|一口气|marathon|compilation", re.I)
+EP_NO_RE = re.compile(r"第\s*(\d{1,4})\s*[話话集期]|\bEP?\.?\s*(\d{1,3})\b", re.I)
+
+
+def yt_ep_no(title):
+    """从标题里抽集号；抽不到返回 0。"""
+    m = EP_NO_RE.search(str(title or ""))
+    if not m:
+        return 0
+    return int(m.group(1) or m.group(2) or 0)
 
 
 def yt_for(norm_title, videos):
-    """片名包含匹配（双向都试），只收带集数标记的视频（第N話/集/EP）。
+    """片名匹配（包含 / 前 6 字兜底）+ 只收带集数标记的正片，**按集号升序**返回。
 
-    视频按时间倒序排，一部番最多挂 30 条 —— 太长会让 anime.json 膨胀。
+    以前直接取 RSS 原序（最新在前）→ 前端 `eps[epNo-1]` 实际取到的是"倒数第几集"。
+    现在按标题集号升序、同集号只留一条（短标题优先，正片 vs 长标题合集），上限 60 集。
     """
     if not norm_title or len(norm_title) < 2:
         return []
-    ep_re = re.compile(r"第\s*\d+\s*[話话集期]|EP?\.?\s*\d{1,3}", re.I)
     out, seen = [], set()
     for v in videos:
         vid = str(v.get("v") or "")
-        vt = norm(_t2s(str(v.get("t") or "")))     # 双侧都过 norm：繁体、空格、标点统一
-        if vid in seen:
+        if not vid or vid in seen:
             continue
+        raw_t = str(v.get("t") or "")
+        vt = norm(_t2s(raw_t))     # 双侧都过 norm：繁体、空格、标点统一
         if norm_title not in vt:
-            # 译名差异兜底：片名较长时用前 6 字做前缀匹配（「歡迎光臨遊之家」类
-            # Ani-One 译名与 Bangumi 不一致时，靠开头一段仍能对上）
+            # 译名差异兜底：片名较长时用前 6 字做前缀匹配
             pre = norm_title[:6] if len(norm_title) >= 6 else ""
             if not pre or pre not in vt:
                 continue
-        if not ep_re.search(vt):
+        if not EP_NO_RE.search(vt):
+            continue
+        if YT_EP_NOISE.search(raw_t):
             continue
         seen.add(vid)
-        out.append([str(v.get("t") or "")[:80],
-                    "https://www.youtube.com/watch?v=" + vid])
-    return out[:30]
+        out.append((yt_ep_no(raw_t), len(raw_t), raw_t[:80],
+                    "https://www.youtube.com/watch?v=" + vid))
+    out.sort(key=lambda r: (r[0] or 9999, r[1]))     # 集号升序；同集号短标题（正片）优先
+    picked, got = [], set()
+    for ep, _n, title, url in out:
+        if ep and ep in got:
+            continue
+        if ep:
+            got.add(ep)
+        picked.append([title, url])
+        if len(picked) >= 60:
+            break
+    return picked
 
 
 def build_anime():
