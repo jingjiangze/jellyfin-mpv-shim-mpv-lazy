@@ -253,6 +253,9 @@
       + '<div id="pfbili-qractions">'
       + '<button class="mnote-btn" id="pfqrsave" type="button">保存二维码</button>'
       + '</div>';
+    /* 这一段是**新插进 DOM** 的保存按钮：pfBiliPaint 那次 wire 早就跑过了，
+       不在这里补一次，按钮就是个死按钮（实测点了没反应/不下载）。 */
+    pfBiliWire();
     pfBiliQrText('用 B 站 App 扫码 · 180 秒内有效');
   }
 
