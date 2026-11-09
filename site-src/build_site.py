@@ -337,7 +337,11 @@ def build_anime():
             # 第 5 槽 = 官方 YouTube 正片分集 [[标题, 链接], …]（RSS 频道匹配为主）。
             # 第 6 槽 = B 站官方嵌入的 bvid（fetch_bili.py 索引）。
             # 空数组也写入：前端据 ex[4] 区分「无官方片源」与「还没探测」。
-            _yt = yt_for(norm(_t2s(cn or name)), YT_VIDEOS) or (a.get("yt") or [])
+            # 中文名优先；中文名没匹配上再用**日文原名**试一次（频道常用日文/繁中混排标题）
+            _yt = yt_for(norm(_t2s(cn or name)), YT_VIDEOS)
+            if not _yt and name and name != cn:
+                _yt = yt_for(norm(_t2s(name)), YT_VIDEOS)
+            _yt = _yt or (a.get("yt") or [])
             ex = [a.get("banner") or None, a.get("img") or None,
                   a.get("trailer") or None, a.get("next_at") or None,
                   _yt, bvid or None]
