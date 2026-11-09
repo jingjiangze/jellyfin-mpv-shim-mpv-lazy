@@ -337,21 +337,19 @@ def build_anime():
                      d.get("rating"), d.get("episodes") or 0, 1 if d else 0, has_mag, day,
                      (d or {}).get("rank") or 0])
 
-        # 只给能匹配到 AniList 的条目挂补充字段，避免索引膨胀。
-        # 固定槽位 [banner, img, trailer, next_at]，缺项填 null —— 前端按 ex[1]
-        # 取封面、ex[2] 取预告。以前是「有才 append」，缺 banner 时整体前移，
-        # 实测 32 条（名侦探柯南 / 海贼王等）把 next_at 时间戳当成了 YouTube id。
+        # 补充字段固定槽位 [banner, img, trailer, next_at, yt[], bvid]，缺项填 null ——
+        # 前端按 ex[1] 取封面、ex[2] 取预告、ex[4] 取官方正片。以前是「有才 append」，
+        # 缺 banner 时整体前移（实测 32 条把 next_at 时间戳当成了 YouTube id）。
+        # 第 5 槽 = 官方 YouTube 正片分集 [[标题, 链接], …]；第 6 槽 = B 站官方 bvid。
         a = al.get(norm(cn)) or al.get(norm(name)) or {}
         bvid = bili_bvid(sid, cn, name)
-        if a or bvid:
-            # 第 5 槽 = 官方 YouTube 正片分集 [[标题, 链接], …]（RSS 频道匹配为主）。
-            # 第 6 槽 = B 站官方嵌入的 bvid（fetch_bili.py 索引）。
-            # 空数组也写入：前端据 ex[4] 区分「无官方片源」与「还没探测」。
-            # 中文名优先；中文名没匹配上再用**日文原名**试一次（频道常用日文/繁中混排标题）
-            _yt = yt_for(norm(_t2s(cn or name)), YT_VIDEOS)
-            if not _yt and name and name != cn:
-                _yt = yt_for(norm(_t2s(name)), YT_VIDEOS)
-            _yt = _yt or (a.get("yt") or [])
+        # **YouTube 匹配要在 if 之前算**：原来只在「AniList 命中或有 bvid」时才匹配，
+        # 于是纯 YouTube 命中的番（169 部里的大多数，如老番《死神》）永远挂不上正片。
+        _yt = yt_for(norm(_t2s(cn or name)), YT_VIDEOS)
+        if not _yt and name and name != cn:
+            _yt = yt_for(norm(_t2s(name)), YT_VIDEOS)
+        _yt = _yt or (a.get("yt") or [])
+        if a or bvid or _yt:
             ex = [a.get("banner") or None, a.get("img") or None,
                   a.get("trailer") or None, a.get("next_at") or None,
                   _yt, bvid or None]
