@@ -81,8 +81,13 @@ def min_js(text):
 
 
 def norm(s):
+    """归一化标题：小写 + 去掉空白/标点/**CJK 括号与引号**。
+
+    必须包含《》〈〉「」『』—— 官方频道标题常写成「《葬送的芙莉莲》第1话」，
+    之前不剥这些符号，`片名 in 视频标题` 永远不成立（实测 YouTube 覆盖被压到 6 部）。
+    """
     s = str(s or "").lower()
-    s = re.sub(r"[\s\-_.·・:：!！?？,，。'\"()\[\]【】（）]", "", s)
+    s = re.sub(r"[\s\-_.·・:：!！?？,，。'\"()\[\]【】（）《》〈〉「」『』“”‘’]", "", s)
     return s
 
 
@@ -332,7 +337,7 @@ def build_anime():
             # 第 5 槽 = 官方 YouTube 正片分集 [[标题, 链接], …]（RSS 频道匹配为主）。
             # 第 6 槽 = B 站官方嵌入的 bvid（fetch_bili.py 索引）。
             # 空数组也写入：前端据 ex[4] 区分「无官方片源」与「还没探测」。
-            _yt = yt_for(norm(cn or name), YT_VIDEOS) or (a.get("yt") or [])
+            _yt = yt_for(norm(_t2s(cn or name)), YT_VIDEOS) or (a.get("yt") or [])
             ex = [a.get("banner") or None, a.get("img") or None,
                   a.get("trailer") or None, a.get("next_at") or None,
                   _yt, bvid or None]
