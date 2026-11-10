@@ -512,6 +512,12 @@
       + '<p class="qbhint">用 B 站 App 扫码，绑定后本页播放会走你的账号（1080p、大会员集）。</p>'
       + '<div class="qbqr" id="bbqr"><p class="authhint">二维码生成中…</p></div>'
       + '<p class="qbhint" id="bbmsg" role="status" aria-live="polite"></p>'
+      + '<details class="qbsess"><summary>二维码扫不了？改用粘贴 SESSDATA</summary>'
+      +   '<p class="qbhint">电脑浏览器登录 bilibili.com → F12 → Application（存储）→ Cookies → bilibili.com → '
+      +   '复制 <b>SESSDATA</b> 的值，粘到下面。</p>'
+      +   '<textarea id="bbsess" rows="3" spellcheck="false" placeholder="SESSDATA=…（也可以只粘值）"></textarea>'
+      +   '<div class="qbsess-acts"><button class="btn pri" id="bbsessdo" type="button">绑定</button></div>'
+      + '</details>'
       + '</div>';
     document.body.appendChild(mask);
 
@@ -537,24 +543,41 @@
           if (stopped) return;
           var j = (r && r.j) || {};
           var st = String(j.state || '');
-          if (st === 'ok') {
-            stop();
-            close();
-            var host = document.querySelector('#modal') || document;
-            var panel = host.querySelector ? host.querySelector('.dp-srcs') : null;
-            /* 先重探、再写提示：srcMount 会把 #srcHint 重置成「按可用性排序」，
-               顺序反了用户就看不到「已绑定·重新点播放」这句（实测踩过）。 */
-            if (panel) srcMount(host, panel.getAttribute('data-bgm') || '', '', 1, true);
-            setTimeout(function () {
-              srcHint(host, 'B 站已绑定（' + (j.uname || '已登录') + '）· 重新点播放即为高清/会员集');
-            }, 60);
-            return;
-          }
+          if (st === 'ok') { onBound(j.uname); return; }
           if (st === 'scanned') msg('已扫码，请在手机上确认');
           else if (st === 'expired') { msg('二维码已过期，关掉重开一次'); stop(); }
         }, function () { busy = false; });
       }, 2000);
     }
+
+    function onBound(uname) {
+      stop();
+      close();
+      var host = document.querySelector('#modal') || document;
+      var panel = host.querySelector ? host.querySelector('.dp-srcs') : null;
+      if (panel) srcMount(host, panel.getAttribute('data-bgm') || '', '', 1, true);
+      setTimeout(function () {
+        srcHint(host, 'B 站已绑定（' + (uname || '已登录') + '）· 重新点播放即为高清/会员集');
+      }, 60);
+    }
+
+    var sessDo = document.getElementById('bbsessdo');
+    if (sessDo) sessDo.onclick = function () {
+      var ta = document.getElementById('bbsess');
+      var raw = String((ta && ta.value) || '').trim();
+      var m = /(?:^|[;\s])SESSDATA\s*=\s*([^;\s"']+)/i.exec(raw);
+      var val = m ? m[1] : raw.replace(/^SESSDATA\s*=\s*/i, '').replace(/[;,"'\s]+$/, '');
+      if (!val) { msg('先粘贴 SESSDATA'); return; }
+      msg('正在验证…');
+      sessDo.disabled = true;
+      srcAuth('/bili/bind', 'POST', { sess: val }).then(function (r) {
+        sessDo.disabled = false;
+        var j = (r && r.j) || {};
+        if (r && r.ok && j.ok) { onBound(j.uname); return; }
+        msg(j.error === 'invalid_sess' ? 'SESSDATA 无效或已过期，重新复制一次'
+            : (j.error === 'missing sess' ? '没读到 SESSDATA' : '绑定失败：' + (j.error || ('HTTP ' + (r && r.status)))));
+      }, function () { sessDo.disabled = false; msg('绑定失败，请重试'); });
+    };
 
     srcAuth('/bili/qr/start', 'POST', {}).then(function (r) {
       if (stopped) return;

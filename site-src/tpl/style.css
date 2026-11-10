@@ -3587,6 +3587,18 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
   background: transparent;
 }
 
+/* B 站扫码弹窗里的「粘贴 SESSDATA」兜底（二维码在云端 IP 上可能被风控） */
+.qbsess { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
+.qbsess > summary { cursor: pointer; font-size: var(--fs-sm); color: var(--accent); }
+.qbsess > summary:hover { text-decoration: underline; }
+.qbsess textarea {
+  width: 100%; box-sizing: border-box; margin-top: var(--s2);
+  font: 12px/1.5 var(--mono, ui-monospace, monospace);
+  padding: var(--s2); border: 1px solid var(--line); border-radius: 2px;
+  background: var(--card); color: var(--fg); resize: vertical;
+}
+.qbsess-acts { display: flex; justify-content: flex-end; margin-top: var(--s2); }
+
 /* B 站扫码弹窗：二维码图片 180px 居中 + 保存按钮 */
 .qbqr { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .qbqr > img {
