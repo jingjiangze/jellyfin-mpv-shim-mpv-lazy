@@ -57,6 +57,30 @@
     });
   }
 
+  /* 带 Bearer 的写请求（B 站扫码 start/poll 用）。契约与 srcGet 一致：
+     失败/非 JSON 一律退化成 {status, ok:false, j:{}}，调用方不必 try/catch。 */
+  function srcAuth(path, method, body) {
+    var tk = (typeof authToken === 'function' && authToken()) || '';
+    var headers = { 'content-type': 'application/json' };
+    if (tk) headers.authorization = 'Bearer ' + tk;
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
+    var opt = { method: method || 'POST', headers: headers };
+    if (body && method !== 'GET') opt.body = JSON.stringify(body);
+    if (ctl) opt.signal = ctl.signal;
+    return fetch(SRC_BASE + path, opt).then(function (r) {
+      clearTimeout(timer);
+      return r.text().then(function (t) {
+        var j = null;
+        try { j = JSON.parse(t); } catch (e) { j = null; }
+        return { status: Number(r.status) || 0, ok: !!r.ok, j: (j && typeof j === 'object') ? j : {} };
+      });
+    }, function () {
+      clearTimeout(timer);
+      return { status: 0, ok: false, j: {} };
+    });
+  }
+
   /* 当前集在网盘里是否真有文件：复用 75 的挑集逻辑（片名归一 + 集号 + 取体积最大），
      保证「已转存」的判定与点开播放时一致，不另写一套口径。 */
   function srcProbeBili(tk, title) {
@@ -469,6 +493,103 @@
     try { window.location.href = url; } catch (e2) { /* 忽略 */ }
   }
 
+  /* B 站「登录高清」：**站内弹窗扫码**，不再新开标签跳到「我的」页再自己找入口
+     （用户反馈「登录高清还是没有」——点了只是换了个标签页，看不出发生了什么）。
+     流程与 45-user 的卡片一致：/bili/qr/start 出二维码 → 每 2s 轮询 /bili/qr/poll →
+     ok 后关窗、重探播放源，并提示「重开播放即为高清/会员集」。 */
+  function openBiliBindPanel() {
+    if (document.getElementById('bbmask')) return;
+    if (typeof authToken === 'function' && !authToken()) {
+      if (typeof openAuthPanel === 'function') openAuthPanel('email');
+      return;
+    }
+    var mask = document.createElement('div');
+    mask.className = 'authmask qbmask';
+    mask.id = 'bbmask';
+    mask.innerHTML = '<div class="authcard qbcard" role="dialog" aria-modal="true">'
+      + '<button class="authx" type="button" aria-label="关闭">×</button>'
+      + '<h3 class="qbtitle">登录 B 站（换高清 / 会员集）</h3>'
+      + '<p class="qbhint">用 B 站 App 扫码，绑定后本页播放会走你的账号（1080p、大会员集）。</p>'
+      + '<div class="qbqr" id="bbqr"><p class="authhint">二维码生成中…</p></div>'
+      + '<p class="qbhint" id="bbmsg" role="status" aria-live="polite"></p>'
+      + '</div>';
+    document.body.appendChild(mask);
+
+    var timer = 0, tries = 0, key = '', busy = false, stopped = false;
+    function stop() { stopped = true; if (timer) { clearInterval(timer); timer = 0; } }
+    function close() { stop(); if (mask.parentNode) mask.parentNode.removeChild(mask); document.removeEventListener('keydown', onKey); }
+    function onKey(ev) { if (ev.key === 'Escape') close(); }
+    function msg(t) { var el = document.getElementById('bbmsg'); if (el) el.textContent = t || ''; }
+
+    mask.onclick = function (ev) {
+      var t = ev.target;
+      if (t === mask || (t && String(t.className || '').indexOf('authx') >= 0)) close();
+    };
+    document.addEventListener('keydown', onKey);
+
+    function poll() {
+      timer = setInterval(function () {
+        if (stopped || !key || busy) return;
+        if (++tries > 90) { msg('二维码已过期，关掉重开一次'); stop(); return; }
+        busy = true;
+        srcGet('/bili/qr/poll?key=' + encodeURIComponent(key), authToken()).then(function (r) {
+          busy = false;
+          if (stopped) return;
+          var j = (r && r.j) || {};
+          var st = String(j.state || '');
+          if (st === 'ok') {
+            stop();
+            close();
+            var host = document.querySelector('#modal') || document;
+            srcHint(host, 'B 站已绑定（' + (j.uname || '已登录') + '）· 重新点播放即为高清/会员集');
+            var panel = host.querySelector ? host.querySelector('.dp-srcs') : null;
+            if (panel) srcMount(host, panel.getAttribute('data-bgm') || '', '', 1, true);
+            return;
+          }
+          if (st === 'scanned') msg('已扫码，请在手机上确认');
+          else if (st === 'expired') { msg('二维码已过期，关掉重开一次'); stop(); }
+        }, function () { busy = false; });
+      }, 2000);
+    }
+
+    srcAuth('/bili/qr/start', 'POST', {}).then(function (r) {
+      if (stopped) return;
+      var j = (r && r.j) || {};
+      if (!r || !r.ok || !j.ok || !j.png) {
+        msg(r && r.status === 429 ? '操作太频繁，等一分钟再试' :
+            (r && r.status === 503 ? '服务端缺少二维码组件，请到「我的」页用粘贴 SESSDATA' : '二维码生成失败'));
+        return;
+      }
+      key = String(j.key_id || '');
+      var box = document.getElementById('bbqr');
+      if (box) {
+        box.innerHTML = '<img alt="B站登录二维码" src="' + esc(j.png) + '">'
+          + '<button class="mnote-btn" id="bbqrsave" type="button">保存二维码</button>';
+        var sv = document.getElementById('bbqrsave');
+        if (sv) sv.onclick = function () { srcSaveDataUri(j.png, 'bilibili-login-qr.png'); };
+      }
+      msg('用 B 站 App 扫码 · 180 秒内有效');
+      poll();
+    }, function () { msg('二维码生成失败，请重试'); });
+  }
+
+  /* data: URI → Blob 下载（手机长按 data URI 常保存不了，见 45-user 的同名逻辑） */
+  function srcSaveDataUri(src, filename) {
+    var m = /^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/=\s]+)$/i.exec(String(src || ''));
+    if (!m) return;
+    try {
+      var bin = atob(m[2].replace(/\s+/g, ''));
+      var buf = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      var type = m[1].toLowerCase() === 'png' ? 'image/png' : 'image/jpeg';
+      var url = URL.createObjectURL(new Blob([buf], { type: type }));
+      var a = document.createElement('a');
+      a.href = url; a.download = filename || 'qr.png';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 20000);
+    } catch (e) { /* 忽略：用户还能长按图片 */ }
+  }
+
   /* 夸克网盘绑定：**内嵌弹窗**，不再新开标签页（用户反馈「怎么还跳转页面」）。
      盒子 /qr 页面没有 X-Frame-Options，可以直接 iframe；加 &embed=1 让它收掉页头，
      绑定成功后它 postMessage({type:'quark-bound'}) —— 我们关窗 + 重探播放源，
@@ -535,11 +656,10 @@
         return;
       }
       if (act === 'bind-bili') {
-        /* B 站绑定是按站点 uid 存的（bili_bind 表 uid 主键），没登录就没有「归属」，
-           直接跳 /user 只会看到一句登录引导 —— 这里先弹登录面板，登录完再回主页绑定。 */
-        if (typeof authToken === 'function' && authToken()) srcOpenUrl(SRC_USER);
+        /* 原来这里 srcOpenUrl('/user') 新开标签 —— 用户反馈「登录高清还是没有」，
+           因为跳过去只是「我的」页，还得自己找卡片扫。改成站内弹窗扫码。 */
+        if (typeof authToken === 'function' && authToken()) openBiliBindPanel();
         else if (typeof openAuthPanel === 'function') openAuthPanel('email');
-        else srcOpenUrl(SRC_USER);
       }
       return;
     }

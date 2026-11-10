@@ -3587,6 +3587,14 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
   background: transparent;
 }
 
+/* B 站扫码弹窗：二维码图片 180px 居中 + 保存按钮 */
+.qbqr { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.qbqr > img {
+  width: 180px; height: 180px; background: #fff; border-radius: 8px; display: block;
+}
+.qbqr > .authhint { margin: 0; }
+.qbqr > .mnote-btn { align-self: center; }
+
 /* 夸克绑定弹窗：站内 iframe 扫码（不再新开标签页） */
 .qbcard { width: min(420px, 94vw); padding: var(--s4); }
 .qbtitle { margin: 0 0 6px; font-size: var(--fs-lg); }
