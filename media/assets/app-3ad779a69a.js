@@ -3083,9 +3083,11 @@ if (st === 'ok') {
 stop();
 close();
 var host = document.querySelector('#modal') || document;
-srcHint(host, 'B 站已绑定（' + (j.uname || '已登录') + '）· 重新点播放即为高清/会员集');
 var panel = host.querySelector ? host.querySelector('.dp-srcs') : null;
 if (panel) srcMount(host, panel.getAttribute('data-bgm') || '', '', 1, true);
+setTimeout(function () {
+srcHint(host, 'B 站已绑定（' + (j.uname || '已登录') + '）· 重新点播放即为高清/会员集');
+}, 60);
 return;
 }
 if (st === 'scanned') msg('已扫码，请在手机上确认');
