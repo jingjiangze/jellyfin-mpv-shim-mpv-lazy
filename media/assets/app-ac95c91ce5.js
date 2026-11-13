@@ -1920,6 +1920,7 @@ prt.innerHTML = '<div class="rdist" id="rdist"><div class="rdhead">星级分布�
 prt.innerHTML = '<p class="plot">暂无评分分布</p>';
 }
 }
+setTimeout(function () { if (typeof window.__hlsPreload === 'function') window.__hlsPreload(); }, 1200);
 var wb = m.querySelector('#watch');
 if (wb) wb.onclick = function () {
 if (window.__srcStart && window.__srcStart(m, id, title, curEp)) return;
@@ -2813,6 +2814,7 @@ hlsFail('hls:' + String(data.details || data.type || 'error'));
 });
 }
 }
+window.__hlsPreload = function () { loadHls(function () { }); };
 return {
 open: function (ctx) {
 GEN += 1;
