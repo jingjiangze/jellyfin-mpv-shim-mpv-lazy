@@ -2578,15 +2578,66 @@ if (CUR && CUR.ctx && typeof CUR.ctx.onPickEp === 'function') CUR.ctx.onPickEp(e
 };
 });
 }
-function mountVideo(url, startAt) {
+var HLS = null, HLS_PEND = null;
+function hlsSrcs() {
+var base = (typeof SRC_BASE === 'string' && SRC_BASE) ? SRC_BASE : 'https://120.48.56.189';
+return [base + '/ext/hls.js',
+'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js',
+'https://unpkg.com/hls.js@1.5.17/dist/hls.min.js',
+'https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.17/hls.min.js'];
+}
+function loadHls(cb) {
+if (window.Hls) { cb(true); return; }
+if (HLS_PEND) { HLS_PEND.push(cb); return; }
+HLS_PEND = [cb];
+var list = hlsSrcs(), i = 0;
+function done(ok) {
+var q = HLS_PEND || []; HLS_PEND = null;
+for (var k = 0; k < q.length; k++) { try { q[k](ok); } catch (e) { } }
+}
+function next() {
+if (i >= list.length) { done(false); return; }
+var el = document.createElement('script');
+var fin = false;
+var t = setTimeout(function () { if (fin) return; fin = true; el.onload = el.onerror = null; if (el.parentNode) el.parentNode.removeChild(el); next(); }, 6000);
+el.onload = function () {
+if (fin) return; fin = true; clearTimeout(t);
+if (window.Hls) { done(true); return; }
+if (el.parentNode) el.parentNode.removeChild(el);
+next();
+};
+el.onerror = function () {
+if (fin) return; fin = true; clearTimeout(t);
+if (el.parentNode) el.parentNode.removeChild(el);
+next();
+};
+el.src = list[i++];
+document.head.appendChild(el);
+}
+next();
+}
+function hlsFail(detail) {
+if (!CUR) return;
+if (CUR.ctx && typeof CUR.ctx.onPlayErr === 'function') { try { CUR.ctx.onPlayErr(detail || 'hls'); return; } catch (e) { } }
+status(stHtml('error', { msg: '视频加载失败（网络或源已过期）' }));
+wireStatus('error');
+}
+function killHls() {
+if (HLS) { try { HLS.destroy(); } catch (e) { } HLS = null; }
+}
+function mountVideo(url, startAt, opt) {
 var s = slot();
 if (!s || !CUR) return;
 clear();
+killHls();
+CUR.hlsOk = false;
 var v = document.createElement('video');
 v.setAttribute('controls', '');
 v.setAttribute('autoplay', '');
 v.setAttribute('playsinline', '');
-v.src = url;
+var isHls = (opt && opt.hls) || /\.m3u8(\?|#|$)/i.test(String(url || ''));
+var nativeHls = !!(v.canPlayType && v.canPlayType('application/vnd.apple.mpegurl'));
+if (!isHls || nativeHls) v.src = url;
 if (startAt > 0) v.currentTime = startAt;   // loadedmetadata 前赋值也能生效
 v.style.width = '100%';
 v.style.aspectRatio = '16 / 9';
@@ -2615,10 +2666,36 @@ if (CUR && CUR.ctx && typeof CUR.ctx.onEnded === 'function') CUR.ctx.onEnded();
 });
 v.addEventListener('error', function () {
 if (!CUR) return;
+if (CUR.ctx && typeof CUR.ctx.onPlayErr === 'function') { hlsFail('video'); return; }
 status(stHtml('error', { msg: '视频加载失败（网络或源已过期）' }));
 wireStatus('error');
 if (CUR.ctx && typeof CUR.ctx.onRetry === 'function') { /* 重试按钮已给 */ }
 });
+if (isHls && !nativeHls) {
+var myGen = CUR.gen;
+loadHls(function (ok) {
+if (!CUR || CUR.gen !== myGen) return;
+if (!ok || !window.Hls) { hlsFail('hls-load'); return; }
+try {
+HLS = new window.Hls({ maxBufferLength: 30, manifestLoadingTimeOut: 9000 });
+HLS.loadSource(url);
+HLS.attachMedia(v);
+var guard = setTimeout(function () {
+if (CUR && CUR.gen === myGen && !(CUR.hlsOk)) { hlsFail('hls-timeout'); }
+}, 12000);
+HLS.on(window.Hls.Events.MANIFEST_PARSED, function () {
+if (CUR) CUR.hlsOk = true;
+clearTimeout(guard);
+try { var pr = v.play(); if (pr && pr.catch) pr.catch(function () { }); } catch (e) { }
+});
+HLS.on(window.Hls.Events.ERROR, function (ev, data) {
+if (!data || !data.fatal) return;
+clearTimeout(guard);
+hlsFail('hls:' + String(data.details || data.type || 'error'));
+});
+} catch (e) { hlsFail('hls-init'); }
+});
+}
 }
 return {
 open: function (ctx) {
@@ -2661,12 +2738,13 @@ if (CUR && CUR.last) report((slot() && slot().querySelector('video') || {}).curr
 },
 play: function (url, label, opt) {
 if (!CUR || !url) return;
-mountVideo(url, (opt && Number(opt.startAt)) || 0);
+mountVideo(url, (opt && Number(opt.startAt)) || 0, opt);
 },
 isCurrent: function (tok) { return !!(tok && CUR && tok.gen === CUR.gen); },
 close: function () {
 if (CUR) { try { report(0, 0, false); } catch (e) { } }
 CUR = null;
+killHls();
 clear();
 }
 };
@@ -2675,8 +2753,8 @@ window.QPlayer = QPlayer;
 var SRC_BASE = 'https://120.48.56.189';
 var SRC_TTL = 60 * 1000;                       // 探测结果缓存时长
 var SRC_USER = '/user';                       // B 站绑定在个人主页
-var SRC_KEYS = ['yt', 'bili', 'magnet'];
-var SRC_NAME = { yt: 'YouTube 官方', bili: 'B 站', magnet: '网盘' };
+var SRC_KEYS = ['bili', 'ext', 'yt', 'magnet'];
+var SRC_NAME = { bili: 'B 站', ext: '外部线路', yt: 'YouTube 官方', magnet: '网盘' };
 var SRC_BIND = { bili: '登录高清', magnet: '绑定网盘' };
 var SRC_MEM = {};                              // "<id>:<ep>" -> {ts, data, pend}
 var SRC_MGEN = 0;                              // 每 mount 一次自增：异步结果只落最新那一代
@@ -2846,6 +2924,7 @@ function srcStart(box, id, title, ep) {
 var epNo = Math.max(1, Math.floor(Number(ep) || 1));
 var slot = box.querySelector('#dpPlayer') || box;
 var tk = (typeof authToken === 'function') ? authToken() : '';
+if (typeof window.__extAbort === 'function') window.__extAbort();   // 作废上一轮在途的外部源探测
 function toQuark(why) {
 srcHint(box, why + ' · 使用网盘源');
 if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
@@ -2873,12 +2952,19 @@ srcHint(box, '第 ' + epNo + ' 集是 B 站大会员集（仅试看）· 已换�
 }
 }
 if (srcEmbedBili(box, id)) return;
+extStep(function (why) {
 srcHint(box, '正在 B 站搜索「' + title + '」…');
 biliFindBvid(title).then(function (bv) {
 if (bv && srcEmbedBvid(box, bv)) return;
-toYoutube('B 站未找到');
-}, function () { toYoutube('B 站搜索失败'); });
+toYoutube(why + ' · B 站未找到');
+}, function () { toYoutube(why + ' · B 站搜索失败'); });
 });
+});
+}
+function extStep(next) {
+if (typeof extStart !== 'function') { next('无外部源'); return; }
+srcHint(box, '正在匹配外部播放源…');
+extStart(box, id, title, epNo, function (why) { next(why || '外部源未收录'); });
 }
 if (tk && typeof biliPlayEp === 'function') {
 srcHint(box, '正在检查 B 站登录态…');
@@ -2908,9 +2994,16 @@ var ytEps = srcYtEps(id);
 rec.pend = Promise.all([
 Promise.resolve(ytEps ? { kind: 'has', eps: ytEps } : { kind: 'none' }),
 srcProbeBili(tk, title),
-srcProbeMagnet(title, id, ep)
+srcProbeMagnet(title, id, ep),
+(typeof extFind === 'function')
+? (function () {
+var m = typeof extMeta === 'function' ? extMeta(id) : { year: 0, orig: '' };
+return extFind(title, m.year, m.orig, !!force).then(function (d) { return { data: d }; },
+function () { return { data: null }; });
+})()
+: Promise.resolve({ data: null })
 ]).then(function (arr) {
-var data = { yt: arr[0], bili: arr[1], magnet: arr[2] };
+var data = { yt: arr[0], bili: arr[1], magnet: arr[2], ext: arr[3] };
 if (SRC_MEM[key] === rec) { rec.data = data; rec.ts = Date.now(); }   // 代次没被重探顶掉才落缓存
 return data;
 });
@@ -2997,6 +3090,19 @@ srcSetRow(list, 'bili', 'B 站 · 已绑定 ' + b.uname + '（' + (b.vip ? '大�
 }
 else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 免登录可看', { on: true, bind: true });
 else srcSetRow(list, 'bili', 'B 站 · 检测失败 · 点此重试', { bad: true, retry: true });
+var x = data && data.ext;
+if (!data) srcSetRow(list, 'ext', '外部线路 · 检测中…');
+else {
+var xp = (typeof extProbeText === 'function') ? extProbeText(x && x.data, epNo)
+: { kind: 'error', why: '' };
+if (xp.kind === 'has') {
+srcSetRow(list, 'ext', '外部线路 · ' + xp.n + ' 个源可播（第 ' + epNo + ' 集）', { on: true });
+} else if (xp.kind === 'error') {
+srcSetRow(list, 'ext', '外部线路 · 检测失败 · 点此重试', { bad: true, retry: true });
+} else {
+srcSetRow(list, 'ext', '外部线路 · 本集无资源');
+}
+}
 var mg = data && data.magnet;
 if (!data) srcSetRow(list, 'magnet', '网盘 · 检测中…', { bind: true });
 else if (mg.kind === 'has') srcSetRow(list, 'magnet', '网盘 · 第 ' + epNo + ' 集可转存', { on: true, bind: true });
@@ -3233,6 +3339,12 @@ if (!box) return;
 if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
 if (typeof window.__qpAbort === 'function') window.__qpAbort();
 if (typeof window.__biliAbort === 'function') window.__biliAbort();
+if (typeof window.__extAbort === 'function') window.__extAbort();
+if (key === 'ext') {                          // 外部线路：按盒子给的优先级自动播 + 线路内自动降级
+if (typeof extStart !== 'function') return;
+extStart(box, id, title, epNo, function (why) { srcHint(box, why || '外部源未收录'); });
+return;
+}
 if (key === 'yt') {
 var eps = srcYtEps(id);
 if (!eps) { srcHint(box, '本季没有官方 YouTube 正片'); return; }
@@ -3250,6 +3362,136 @@ var q = box.querySelector('#dpPlayer') || box;
 if (typeof openQuarkPlay === 'function') openQuarkPlay(q, id, title);
 }
 }
+var EXT_TTL = 10 * 60 * 1000;              // 与盒子 6h 缓存错开：前端只压 10 分钟
+var EXT_MEM = {};
+var EXT_GEN = 0;                            // 每次开播/切源自增：异步结果只落最新一代
+function extMeta(id) {
+var rows = (typeof ANI !== 'undefined' && ANI.rows) ? ANI.rows : [];
+for (var i = 0; i < rows.length; i++) {
+if (rows[i][0] === id) {
+return { orig: rows[i][1] || '', year: rows[i][4] || 0, epsN: rows[i][8] || 0 };
+}
+}
+return { orig: '', year: 0, epsN: 0 };
+}
+function extFind(title, year, orig, force) {
+var key = String(title) + '|' + (year || 0) + '|' + (orig || '');
+var now = Date.now(), mem = EXT_MEM[key];
+if (!force && mem && now - mem.ts < EXT_TTL) return mem.pend || Promise.resolve(mem.data);
+var rec = { ts: now, data: null, pend: null };
+EXT_MEM[key] = rec;
+var qs = '?t=' + encodeURIComponent(title)
++ (year ? '&y=' + encodeURIComponent(String(year)) : '')
++ (orig ? '&o=' + encodeURIComponent(orig) : '')
++ (force ? '&force=1' : '');
+rec.pend = srcGet('/ext/find' + qs, '').then(function (r) {
+var j = (r && r.j) || {};
+var ok = !!(r && r.ok && j.ok);
+var data = {
+items: ok ? (j.items || []) : [],
+miss: !ok || !!j.miss,
+err: ok ? '' : (r && r.status ? ('HTTP ' + r.status) : 'network')
+};
+if (EXT_MEM[key] === rec) { rec.data = data; rec.ts = Date.now(); }
+return data;
+}, function () {
+var data = { items: [], miss: true, err: 'network' };
+if (EXT_MEM[key] === rec) { rec.data = data; rec.ts = Date.now(); }
+return data;
+});
+return rec.pend;
+}
+function extCands(data, ep) {
+var out = [], items = (data && data.items) || [];
+for (var i = 0; i < items.length; i++) {
+var it = items[i], eps = it.eps || [];
+for (var k = 0; k < eps.length; k++) {
+if (Number(eps[k].ep) === Number(ep) && eps[k].url) {
+out.push({ p: it.p, name: it.name, url: String(eps[k].url), n: it.n, src: it.src });
+break;
+}
+}
+}
+return out;
+}
+function extEpList(data) {
+var seen = {}, out = [];
+var items = (data && data.items) || [];
+for (var i = 0; i < items.length; i++) {
+var eps = items[i].eps || [];
+for (var k = 0; k < eps.length; k++) {
+var n = Number(eps[k].ep);
+if (n > 0 && !seen[n]) { seen[n] = 1; out.push({ ep: n }); }
+}
+}
+out.sort(function (a, b) { return a.ep - b.ep; });
+return out;
+}
+function extProbeText(data, ep) {
+if (!data) return { kind: 'waits' };
+if (data.err && !data.items.length) return { kind: 'error', why: data.err };
+var cand = extCands(data, ep);
+if (!cand.length) return { kind: 'none', n: (data.items || []).length };
+return { kind: 'has', n: cand.length, eps: extEpList(data).length, name: cand[0].name };
+}
+function extStart(box, id, title, ep, onFail) {
+var epNo = Math.max(1, Math.floor(Number(ep) || 1));
+var gen = ++EXT_GEN;
+var meta = extMeta(id);
+srcHint(box, '正在匹配外部播放源…');
+extFind(title, meta.year, meta.orig, false).then(function (data) {
+if (gen !== EXT_GEN) return;
+var cand = extCands(data, epNo);
+if (!cand.length) {
+if (typeof onFail === 'function') onFail(data && data.err ? ('外部源不可用 ' + data.err) : '外部源未收录');
+return;
+}
+extPlay(box, id, title, epNo, data, cand, 0);
+}, function () {
+if (gen === EXT_GEN && typeof onFail === 'function') onFail('外部源不可用');
+});
+}
+function extPlayEp(box, id, title, ep, data) {
+var cand = extCands(data, ep);
+if (!cand.length) {
+srcHint(box, '第 ' + ep + ' 集外部源还没更新');
+return;
+}
+extPlay(box, id, title, ep, data, cand, 0);
+}
+function extPlay(box, id, title, ep, data, cand, idx) {
+if (!window.QPlayer || !box) return;
+var cur = cand[idx];
+if (!cur) return;
+var tok = QPlayer.open({
+m: box,
+id: id,
+title: title,
+ep: ep,
+sources: [],
+onPickEp: function (e) { extPlayEp(box, id, title, Number(e) || 1, data); },
+onEnded: function () {
+var nx = ep + 1;
+if (extCands(data, nx).length) extPlayEp(box, id, title, nx, data);
+},
+onPlayErr: function (why) {
+if (!(window.QPlayer && QPlayer.isCurrent(tok))) return;
+if (idx + 1 < cand.length) {
+srcHint(box, '「' + cur.name + '」线路不可用（' + why + '）· 自动换下一条');
+extPlay(box, id, title, ep, data, cand, idx + 1);
+return;
+}
+QPlayer.state('error', { msg: '外部线路都不可用（' + (why || 'error') + '）' });
+}
+});
+QPlayer.setEpisodes(extEpList(data), ep, '');
+srcHint(box, '外部线路 · ' + cur.name + ' · 第 ' + ep + ' 集'
++ (idx ? '（已自动换源 ' + (idx + 1) + '/' + cand.length + '）' : ''));
+QPlayer.play(cur.url, cur.name, { hls: true });
+}
+window.__extFind = extFind;
+window.__extStart = extStart;
+window.__extAbort = function () { EXT_GEN += 1; };
 var BILI = {};          // id -> {bvid, aid, pages:[{page,cid,part}]}
 var BILI_P = {};        // id -> 在途的 resolve：同 id 并发共用一次请求
 var BILI_BASE = 'https://120.48.56.189/bili/';
