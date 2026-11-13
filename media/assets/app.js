@@ -658,7 +658,7 @@ return '<div class="sec-h"><h2>我的</h2><span class="sec-sub">未登录</span>
 + '<div class="empty">登录后查看我的主页 —— 追番、观看进度和账号设置都在这里</div>'
 + '<div class="pf-acts-note">'
 + '<p><b>B 站扫码绑定</b>：绑定结果记在你的账号下（每人对自己的绑定负责），登录后才会出现扫码按钮。</p>'
-+ '<p><b>夸克网盘</b>：绑在站点服务器上，全站共用一份，绑定入口在播放源面板。</p>'
++ '<p><b>夸克网盘</b>：绑在站点服务器上，全站共用一份，入口是本页的「绑定夸克网盘」按钮。</p>'
 + '</div>'
 + '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录 / 注册</button></div>';
 }
@@ -1089,6 +1089,12 @@ p.hidden = p.getAttribute('data-pane') !== want;
 };
 });
 }
+function applyUserTab() {
+var m = /[?&]tab=(fav|cont)/.exec(location.search || '');
+if (!m) return;
+var b = document.querySelector('.pf-tabs .mtab[data-tab="' + m[1] + '"]');
+if (b) b.click();
+}
 function renderUser() {
 var main = $('#main');
 if (!main) return;
@@ -1101,6 +1107,7 @@ if (USER) {
 main.innerHTML = userHTML(USER);
 bindUserActions();
 loadPfBili();
+applyUserTab();
 return;
 }
 if (!main.querySelector('.pf-hero')) main.innerHTML = '<div class="loading">加载中…</div>';
@@ -1109,6 +1116,7 @@ USER = u;
 main.innerHTML = userHTML(u);
 bindUserActions();
 loadPfBili();
+applyUserTab();
 }).catch(function (e) {
 main.innerHTML = '<div class="empty">' + esc((e && e.message) || '资料加载失败')
 + '</div><div class="pf-actions"><a class="btn" href="user">重试</a></div>';
@@ -1130,13 +1138,10 @@ grid.innerHTML = found.length
 ? found.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('')
 : '<p class="plot">站内目录没有匹配项 —— 看下面的全网源。</p>';
 }
-function srchExt(q, force) {
-if (typeof srcGet !== 'function') return Promise.resolve({ groups: [] });
-var path = '/ext/search?q=' + encodeURIComponent(q) + (force ? '&force=1' : '');
-return srcGet(path, '').then(function (r) {
-var j = (r && r.j) || {};
-if (!r || !r.ok || !j.ok) return { groups: [], err: r && r.status ? ('HTTP ' + r.status) : 'network' };
-return { groups: j.groups || [], total: j.total || 0, err: '', short: !!j.short };
+function srchExt(q) {
+if (typeof window.__extSearch !== 'function') return Promise.resolve({ groups: [] });
+return window.__extSearch(q, 30).then(function (gs) {
+return { groups: gs || [], total: (gs || []).length, err: '' };
 }, function () { return { groups: [], err: 'network' }; });
 }
 function srchRow(g, i) {
@@ -1193,14 +1198,13 @@ list.innerHTML = GROUPS.length ? GROUPS.map(srchRow).join('')
 function playGroup(i) {
 var g = GROUPS[i];
 if (!g) return;
-var data = { items: g.items || [] };
-var cand = extCands(data, 1);
-if (!cand.length) { extSub.textContent = '这部没有可播放的线路'; return; }
+var items = g.items || [];
+if (!extCands(items, 1).length) { extSub.textContent = '这部没有可播放的线路'; return; }
 if (typeof window.__extAbort === 'function') window.__extAbort();
 var wrap = $('#srchPlayWrap');
 if (wrap) wrap.hidden = false;
 try { wrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { }
-extPlay(wrap || $('#srchPlay'), 'search:' + g.name, g.name, 1, data, cand, 0);
+extPlayEp(wrap || $('#srchPlay'), 'search:' + g.name, g.name, 1, items);
 }
 list.onclick = function (ev) {
 var t = ev.target;
@@ -1817,11 +1821,11 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b
 + '</section>'
 + '<div class="dp-grid">'
 +   '<div class="dp-main">'
-+     srcPanelHtml(id, title, curEp)
 +     '<div class="dp-watch">'
 +       '<div class="dp-player" id="dpPlayer" style="--cover:url(' + esc(posterHd(id)) + ')"></div>'
 +       '<div class="mbody dp-eps" data-p="detail"></div>'
 +     '</div>'
++     '<p class="dp-stat" id="dpStat"></p>'
 +     (ex[2]
 ? '<section class="sect" id="dp-trailer"><div class="sec-h"><h2>预告</h2></div>'
 + '<div class="trailer-slot" id="dpTrailerSlot">'
@@ -1863,7 +1867,6 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b
 m.setAttribute('data-bgm', String(id));
 document.body.removeAttribute('data-ext-detail');   // 回到番剧详情：磁力层恢复挂载
 document.title = title + ' · 番组计划';
-srcPanelMount(m, id, title, curEp);
 var plot = m.querySelector('#plot');
 if (plot) {
 var pv = splitPlot(rec.overview, rec.overview_ja);
@@ -1937,6 +1940,7 @@ var dpslot = m.querySelector('#dpPlayer');
 if (dpslot) {
 dpslot.onclick = function () {
 if (dpslot.childNodes.length) return;
+if (window.__srcStart && window.__srcStart(m, id, title, curEp)) return;
 openQuarkPlay(dpslot, id, title);
 };
 }
@@ -2047,7 +2051,6 @@ m.innerHTML = '<button class="x" type="button" aria-label="关闭">×</button>'
 +     '</div>'
 +   '</div>'
 + '</div>'
-+ srcPanelHtml(id, title, curEp)
 + '<div class="mtabs">'
 +   '<button class="mtab on" data-p="detail" type="button">详情</button>'
 +   '<button class="mtab" data-p="rt" type="button">评价</button>'
@@ -2104,8 +2107,6 @@ ensureTagCounts(function () {
 if (gen !== MODAL_GEN || !rec) return;
 renderTags(rec, host.querySelector('#tags'));
 });
-bindBili(id, title, r[4] || '');
-srcPanelMount(m, id, title, curEp);
 var sfx = id % 64;
 var pr = shardCache[sfx];
 if (!pr) {
@@ -2866,16 +2867,6 @@ clear();
 })();
 window.QPlayer = QPlayer;
 var SRC_BASE = 'https://120.48.56.189';
-var SRC_TTL = 60 * 1000;                       // 探测结果缓存时长
-var SRC_USER = '/user';                       // B 站绑定在个人主页
-var SRC_KEYS = ['bili', 'ext', 'yt', 'magnet'];
-var SRC_NAME = { bili: 'B 站', ext: '外部线路', yt: 'YouTube 官方', magnet: '网盘' };
-var SRC_BIND = { bili: '登录高清', magnet: '绑定网盘' };
-var SRC_MEM = {};                              // "<id>:<ep>" -> {ts, data, pend}
-var SRC_MGEN = 0;                              // 每 mount 一次自增：异步结果只落最新那一代
-function srcToken() {
-try { return localStorage.getItem('gh_token') || ''; } catch (e) { return ''; }
-}
 function srcGet(path, tk) {
 var headers = {};
 if (tk) headers.authorization = 'Bearer ' + tk;
@@ -2896,60 +2887,16 @@ clearTimeout(timer);
 return { status: 0, ok: false, j: {} };
 });
 }
-function srcAuth(path, method, body) {
-var tk = (typeof authToken === 'function' && authToken()) || '';
-var headers = { 'content-type': 'application/json' };
-if (tk) headers.authorization = 'Bearer ' + tk;
-var ctl = typeof AbortController === 'function' ? new AbortController() : null;
-var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
-var opt = { method: method || 'POST', headers: headers };
-if (body && method !== 'GET') opt.body = JSON.stringify(body);
-if (ctl) opt.signal = ctl.signal;
-return fetch(SRC_BASE + path, opt).then(function (r) {
-clearTimeout(timer);
-return r.text().then(function (t) {
-var j = null;
-try { j = JSON.parse(t); } catch (e) { j = null; }
-return { status: Number(r.status) || 0, ok: !!r.ok, j: (j && typeof j === 'object') ? j : {} };
-});
-}, function () {
-clearTimeout(timer);
-return { status: 0, ok: false, j: {} };
-});
+function srcHint(host, text) {
+if (!host || !host.querySelector) {
+try { host = document; } catch (e) { return; }
 }
-function srcProbeBili(tk, title) {
-var pgcP = (typeof srcPgc === 'function') ? srcPgc(title) : Promise.resolve(null);
-return Promise.all([srcGet('/bili/bind', tk), pgcP]).then(function (pair) {
-var r = pair[0], j = (r && r.j) || {}, pgc = pair[1];
-var kind;
-if (r && r.ok && j.ok && j.bound) {
-kind = { kind: 'bound', uname: String(j.uname || '已绑定'), vip: Number(j.vip_type) || 0 };
-} else if (r && (r.status === 404 || r.status === 401)) {
-kind = { kind: 'unbound' };
-} else if (j.bound === false || j.error === 'not_bound' || j.ok === false) {
-kind = { kind: 'unbound' };
-} else {
-kind = { kind: 'error' };
-}
-if (pgc) { kind.pgc = pgc; if (kind.kind === 'error') kind.kind = 'unbound'; }
-return kind;
-});
-}
-function srcProbeMagnet(title, id, ep) {
-var api = window.__epsApi;
-if (!api || typeof api.resolveEntry !== 'function') return Promise.resolve({ kind: 'none' });
-return api.resolveEntry(title, id).then(function (entry) {
-var list = typeof qpEpList === 'function' ? qpEpList(entry) : [];
-for (var i = 0; i < list.length; i++) {
-if (Number(list[i].ep) === Number(ep) && list[i].magnet) return { kind: 'has' };
-}
-return { kind: 'none' };
-}, function () { return { kind: 'error' }; });
-}
-function srcYtEps(id) {
-var ex = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
-var eps = ex && ex[4];
-return (eps && eps.length) ? eps : null;
+var stat = host.querySelector ? host.querySelector('#dpStat') : null;
+if (stat) { stat.textContent = text || ''; return; }
+var panel = host.querySelector('.dp-srcs');
+if (!panel && host.className && String(host.className).indexOf('dp-srcs') >= 0) panel = host;
+var h = panel ? panel.querySelector('.sec-sub') : null;
+if (h) h.textContent = text;
 }
 function srcFrame(src, allow) {
 return '<div class="dpv-frame"><iframe src="' + src + '"'
@@ -2961,26 +2908,31 @@ function ytKey(url) {
 var m = /[?&]v=([\w-]{6,})/.exec(url || '') || /youtu\.be\/([\w-]{6,})/.exec(url || '');
 return m ? m[1] : '';
 }
+function srcPlayerSlot(box) {
+return (box && box.querySelector ? box.querySelector('#dpPlayer') : null) || box;
+}
+function srcAbortOthers() {
+if (window.__qpAbort === 'function') window.__qpAbort();
+if (window.__biliAbort === 'function') window.__biliAbort();
+if (typeof window.__extAbort === 'function') window.__extAbort();
+if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
+}
 function srcEmbedYT(box, url, ep, cn) {
 var key = ytKey(url);
 if (!key) return false;
-var slot = box.querySelector('#dpPlayer') || box;
-if (window.__qpAbort === 'function') window.__qpAbort();
-if (window.__biliAbort === 'function') window.__biliAbort();
-if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
+var slot = srcPlayerSlot(box);
+srcAbortOthers();
 slot.innerHTML = srcFrame('https://www.youtube-nocookie.com/embed/'
 + encodeURIComponent(key) + '?autoplay=1&rel=0&modestbranding=1');
 srcHint(box, cn === 1
 ? 'YouTube 官方频道 · 本集中国大陆可直连播放'
-: 'YouTube 官方频道 · 本集需港澳台/东南亚出口（B 站源不受地区限制）');
+: 'YouTube 官方频道 · 本集需港澳台/东南亚出口');
 return true;
 }
 function srcEmbedBvid(box, bvid) {
 if (!bvid) return false;
-if (window.__qpAbort === 'function') window.__qpAbort();
-if (window.__biliAbort === 'function') window.__biliAbort();
-if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
-var slot = box.querySelector('#dpPlayer') || box;
+var slot = srcPlayerSlot(box);
+srcAbortOthers();
 slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?bvid='
 + encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1');
 srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
@@ -2988,10 +2940,8 @@ return true;
 }
 function srcEmbedPgc(box, sid, ep, epNo) {
 if (!box || !sid || !ep || !ep.id) return false;
-if (window.__qpAbort === 'function') window.__qpAbort();
-if (window.__biliAbort === 'function') window.__biliAbort();
-if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
-var slot = box.querySelector('#dpPlayer') || box;
+var slot = srcPlayerSlot(box);
+srcAbortOthers();
 slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?episodeId='
 + encodeURIComponent(ep.id) + '&seasonId=' + encodeURIComponent(sid)
 + '&autoplay=1&high_quality=1&danmaku=1');
@@ -3014,8 +2964,20 @@ return biliGet('find', { t: title }).then(function (f) {
 if (!f || !f.found || !f.bvid) return '';
 var t = String(f.title || '');
 if (typeof BILI_NOISE === 'object' && BILI_NOISE.test && BILI_NOISE.test(t)) return '';
+if (!srcTitleOk(t, title)) return '';
 return String(f.bvid);
 }, function () { return ''; });
+}
+function srcTitleOk(cand, title) {
+var a = nrm(String(cand || '')), b = nrm(String(title || ''));
+if (!a || !b) return false;
+if (b.length < 2) return a.indexOf(b) >= 0;
+return a.indexOf(b) >= 0 || b.indexOf(a) >= 0;
+}
+function srcYtEps(id) {
+var ex = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
+var eps = ex && ex[4];
+return (eps && eps.length) ? eps : null;
 }
 var YT_REACH = null;
 function ytReach() {
@@ -3032,17 +2994,17 @@ mode: 'no-cors', cache: 'no-store', signal: ctl ? ctl.signal : undefined
 function () { clearTimeout(timer); fin(false); });
 } catch (e) { clearTimeout(timer); fin(false); }
 });
-setTimeout(function () { YT_REACH = null; }, 10 * 60 * 1000);   // 10 分钟后重新探
+setTimeout(function () { YT_REACH = null; }, 10 * 60 * 1000);
 return YT_REACH;
 }
 function srcStart(box, id, title, ep) {
 var epNo = Math.max(1, Math.floor(Number(ep) || 1));
-var slot = box.querySelector('#dpPlayer') || box;
 var tk = (typeof authToken === 'function') ? authToken() : '';
-if (typeof window.__extAbort === 'function') window.__extAbort();   // 作废上一轮在途的外部源探测
+if (typeof window.__extAbort === 'function') window.__extAbort();
+if (!box) return false;
 function toQuark(why) {
 srcHint(box, why + ' · 使用网盘源');
-if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+if (typeof openQuarkPlay === 'function') openQuarkPlay(srcPlayerSlot(box), id, title);
 if (!tk && typeof openAuthPanel === 'function') openAuthPanel('email');
 }
 function toYoutube(why) {
@@ -3056,18 +3018,21 @@ if (ok && srcEmbedYT(box, pick[1], epNo, pick[2])) return;
 toQuark(why + ' · YouTube 不可达');
 });
 }
+function toExt(next) {
+if (typeof extStart !== 'function') { next('无外部源'); return; }
+srcHint(box, '正在匹配外部线路…');
+extStart(box, id, title, epNo, function (why) { next(why || '外部源未收录'); });
+}
 function anonChain() {
 srcHint(box, '正在匹配 B 站官方番剧…');
 srcPgc(title).then(function (p) {
 if (p) {
 var row = p.eps[Math.max(0, epNo - 1)] || p.eps[0];
 if (row && !row.vip && srcEmbedPgc(box, p.sid, row, epNo)) return;
-if (row && row.vip) {
-srcHint(box, '第 ' + epNo + ' 集是 B 站大会员集（仅试看）· 已换下一个源');
-}
+if (row && row.vip) srcHint(box, '第 ' + epNo + ' 集是 B 站大会员集（仅试看）· 已换下一个源');
 }
 if (srcEmbedBili(box, id)) return;
-extStep(function (why) {
+toExt(function (why) {
 srcHint(box, '正在 B 站搜索「' + title + '」…');
 biliFindBvid(title).then(function (bv) {
 if (bv && srcEmbedBvid(box, bv)) return;
@@ -3076,17 +3041,12 @@ toYoutube(why + ' · B 站未找到');
 });
 });
 }
-function extStep(next) {
-if (typeof extStart !== 'function') { next('无外部源'); return; }
-srcHint(box, '正在匹配外部播放源…');
-extStart(box, id, title, epNo, function (why) { next(why || '外部源未收录'); });
-}
 if (tk && typeof biliPlayEp === 'function') {
 srcHint(box, '正在检查 B 站登录态…');
 srcGet('/bili/bind', tk).then(function (r) {
 var j = (r && r.j) || {};
 if (r && r.ok && j.ok && j.bound) {
-srcHint(box, 'B 站已绑定 · 用登录态播放（清晰度/会员集解锁）');
+srcHint(box, 'B 站已绑定 · 用登录态播放');
 biliPlayEp(box, id, title, epNo);
 return;
 }
@@ -3097,284 +3057,7 @@ return true;
 anonChain();
 return true;
 }
-window.__srcStart = srcStart;          // 65-detail 的「开始观看」用
-function srcProbe(id, title, ep, force) {
-var key = String(id) + ':' + String(ep);
-var now = Date.now(), mem = SRC_MEM[key];
-if (!force && mem && now - mem.ts < SRC_TTL) return mem.pend || Promise.resolve(mem.data);
-var rec = { ts: now, data: null, pend: null };
-SRC_MEM[key] = rec;
-var tk = srcToken();
-var ytEps = srcYtEps(id);
-rec.pend = Promise.all([
-Promise.resolve(ytEps ? { kind: 'has', eps: ytEps } : { kind: 'none' }),
-srcProbeBili(tk, title),
-srcProbeMagnet(title, id, ep),
-(typeof extFind === 'function')
-? (function () {
-var m = typeof extMeta === 'function' ? extMeta(id) : { year: 0, orig: '' };
-return extFind(title, m.year, m.orig, !!force).then(function (d) { return { data: d }; },
-function () { return { data: null }; });
-})()
-: Promise.resolve({ data: null })
-]).then(function (arr) {
-var data = { yt: arr[0], bili: arr[1], magnet: arr[2], ext: arr[3] };
-if (SRC_MEM[key] === rec) { rec.data = data; rec.ts = Date.now(); }   // 代次没被重探顶掉才落缓存
-return data;
-});
-return rec.pend;
-}
-function srcPanelHtml(id, title, ep) {
-var rows = SRC_KEYS.map(function (k) {
-return '<span class="qp-line-row" data-row="' + k + '">'
-+ '<button class="qp-line" type="button" data-src="' + k + '">'
-+ esc(SRC_NAME[k]) + ' · 检测中…</button>'
-+ '<button class="btn" type="button" data-act="bind-' + k + '" hidden>'
-+ esc(SRC_BIND[k] || '绑定') + '</button>'
-+ '</span>';
-}).join('');
-return '<section class="dp-srcs" data-open="1" data-bgm="' + esc(id) + '">'
-+ '<div class="sec-h"><h2>播放源</h2>'
-+ '<span class="sec-sub" id="srcHint">按可用性排序</span></div>'
-+ '<div class="qp-line-list" id="srcList">' + rows + '</div>'
-+ '</section>';
-}
-function srcCls(el, cls, on) {
-if (!el) return;
-var parts = String(el.className || '').split(/\s+/), has = false, out = [];
-for (var i = 0; i < parts.length; i++) {
-if (!parts[i]) continue;
-if (parts[i] === cls) { has = true; if (!on) continue; }
-out.push(parts[i]);
-}
-if (on && !has) out.push(cls);
-el.className = out.join(' ');
-}
-function srcRowOf(list, key) {
-var rows = list ? list.querySelectorAll('.qp-line-row') : [];
-for (var i = 0; i < rows.length; i++) {
-if (String(rows[i].getAttribute('data-row') || '') === key) return rows[i];
-}
-return null;
-}
-function srcSetRow(list, key, text, opt) {
-var row = srcRowOf(list, key);
-if (!row) return;
-opt = opt || {};
-var btn = row.querySelector('.qp-line');
-if (btn) {
-btn.textContent = text;
-srcCls(btn, 'on', !!opt.on);
-srcCls(btn, 'is-bad', !!opt.bad);
-}
-row.setAttribute('data-fail', opt.retry ? '1' : '0');
-row.hidden = !!opt.hide;
-var bind = row.querySelector('.btn');
-if (bind) bind.hidden = !opt.bind;
-}
-function srcPaint(panel, id, ep, data) {
-var list = panel ? panel.querySelector('.qp-line-list') : null;
-if (!list) return;
-var epNo = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
-var y = data && data.yt;
-if (!data) srcSetRow(list, 'yt', 'YouTube 官方 · 检测中…');
-else if (y.kind === 'has') {
-var cnN = 0, hdN = 0;
-for (var yi = 0; yi < y.eps.length; yi++) {
-var e0 = y.eps[yi];
-if (Array.isArray(e0) && e0[2] === 1) cnN++;
-if (Array.isArray(e0) && e0[3] === 1) hdN++;
-}
-var ytLabel = 'YouTube 官方 · ' + y.eps.length + ' 集'
-+ (hdN ? ' · 1080p' : '')
-+ (cnN === y.eps.length ? '可看' : (cnN ? '（' + cnN + ' 集大陆直连）' : '（需港澳台出口）'));
-srcSetRow(list, 'yt', ytLabel, { on: true });
-}
-else srcSetRow(list, 'yt', 'YouTube 官方 · 本季未收录');
-var b = data && data.bili;
-if (!data) srcSetRow(list, 'bili', 'B 站 · 检测中…');
-else if (b.pgc && b.pgc.found) {
-var pg = b.pgc.eps || [];
-var freeN = 0;
-for (var pi = 0; pi < pg.length; pi++) if (!pg[pi].vip) freeN++;
-srcSetRow(list, 'bili', 'B 站官方 · 免费 ' + freeN + '/' + pg.length + ' 集',
-{ on: freeN > 0, bind: b.kind !== 'bound' });
-}
-else if (b.kind === 'bound') {
-srcSetRow(list, 'bili', 'B 站 · 已绑定 ' + b.uname + '（' + (b.vip ? '大会员' : '已登录') + '）', { on: true });
-}
-else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 免登录可看', { on: true, bind: true });
-else srcSetRow(list, 'bili', 'B 站 · 检测失败 · 点此重试', { bad: true, retry: true });
-var x = data && data.ext;
-if (!data) srcSetRow(list, 'ext', '外部线路 · 检测中…');
-else {
-var xp = (typeof extProbeText === 'function') ? extProbeText(x && x.data, epNo)
-: { kind: 'error', why: '' };
-if (xp.kind === 'has') {
-srcSetRow(list, 'ext', '外部线路 · ' + xp.n + ' 个源可播（第 ' + epNo + ' 集）', { on: true });
-} else if (xp.kind === 'error') {
-srcSetRow(list, 'ext', '外部线路 · 检测失败 · 点此重试', { bad: true, retry: true });
-} else {
-srcSetRow(list, 'ext', '外部线路 · 本集无资源');
-}
-}
-var mg = data && data.magnet;
-if (!data) srcSetRow(list, 'magnet', '网盘 · 检测中…', { bind: true });
-else if (mg.kind === 'has') srcSetRow(list, 'magnet', '网盘 · 第 ' + epNo + ' 集可转存', { on: true, bind: true });
-else if (mg.kind === 'none') srcSetRow(list, 'magnet', '网盘 · 本集无资源', { bind: true });
-else srcSetRow(list, 'magnet', '网盘 · 检测失败 · 点此重试', { bad: true, retry: true, bind: true });
-}
-function srcHint(host, text) {
-var panel = host && host.querySelector ? host.querySelector('.dp-srcs') : null;
-if (!panel && host && host.className && String(host.className).indexOf('dp-srcs') >= 0) panel = host;
-var h = panel ? panel.querySelector('.sec-sub') : null;
-if (h) h.textContent = text;
-}
-function srcMount(host, id, title, ep, force) {
-if (!host || !host.querySelector) return;
-var panel = host.querySelector('.dp-srcs');
-if (!panel) return;
-var list = panel.querySelector('.qp-line-list');
-if (!list) return;
-var epNo = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
-var gen = ++SRC_MGEN;
-panel.setAttribute('data-mgen', String(gen));
-list.onclick = function (ev) { srcClick(host, list, ev, id, title, epNo); };
-srcHint(host, '按可用性排序');
-if (!force) {
-var key = String(id) + ':' + String(epNo), mem = SRC_MEM[key];
-if (mem && mem.data && Date.now() - mem.ts < SRC_TTL) {
-srcPaint(panel, id, epNo, mem.data);       // 60s 内二次 mount：不重探、立刻有文案
-return;
-}
-}
-srcPaint(panel, id, epNo, null);
-srcProbe(id, title, epNo, force).then(function (data) {
-if (panel.getAttribute('data-mgen') !== String(gen)) return;   // 已被重探/重画取代
-srcPaint(panel, id, epNo, data);
-});
-}
-function srcPanelMount(host, id, title, ep) { srcMount(host, id, title, ep, false); }
-function srcOpenUrl(url) {
-try {
-if (typeof window.open === 'function') {
-var w = window.open(url, '_blank', 'noopener');
-if (w) return;
-}
-} catch (e) { /* 被拦截：退化成同页跳转 */ }
-try { window.location.href = url; } catch (e2) { /* 忽略 */ }
-}
-function openBiliBindPanel() {
-if (document.getElementById('bbmask')) return;
-if (typeof authToken === 'function' && !authToken()) {
-if (typeof openAuthPanel === 'function') openAuthPanel('email');
-return;
-}
-var mask = document.createElement('div');
-mask.className = 'authmask qbmask';
-mask.id = 'bbmask';
-mask.innerHTML = '<div class="authcard qbcard" role="dialog" aria-modal="true">'
-+ '<button class="authx" type="button" aria-label="关闭">×</button>'
-+ '<h3 class="qbtitle">登录 B 站（换高清 / 会员集）</h3>'
-+ '<p class="qbhint">用 B 站 App 扫码，绑定后本页播放会走你的账号（1080p、大会员集）。</p>'
-+ '<div class="qbqr" id="bbqr"><p class="authhint">二维码生成中…</p></div>'
-+ '<p class="qbhint" id="bbmsg" role="status" aria-live="polite"></p>'
-+ '<details class="qbsess"><summary>二维码扫不了？改用粘贴 SESSDATA</summary>'
-+   '<p class="qbhint">电脑浏览器登录 bilibili.com → F12 → Application（存储）→ Cookies → bilibili.com → '
-+   '复制 <b>SESSDATA</b> 的值，粘到下面。</p>'
-+   '<textarea id="bbsess" rows="3" spellcheck="false" placeholder="SESSDATA=…（也可以只粘值）"></textarea>'
-+   '<div class="qbsess-acts"><button class="btn pri" id="bbsessdo" type="button">绑定</button></div>'
-+ '</details>'
-+ '</div>';
-document.body.appendChild(mask);
-var timer = 0, tries = 0, key = '', busy = false, stopped = false;
-function stop() { stopped = true; if (timer) { clearInterval(timer); timer = 0; } }
-function close() { stop(); if (mask.parentNode) mask.parentNode.removeChild(mask); document.removeEventListener('keydown', onKey); }
-function onKey(ev) { if (ev.key === 'Escape') close(); }
-function msg(t) { var el = document.getElementById('bbmsg'); if (el) el.textContent = t || ''; }
-mask.onclick = function (ev) {
-var t = ev.target;
-if (t === mask || (t && String(t.className || '').indexOf('authx') >= 0)) close();
-};
-document.addEventListener('keydown', onKey);
-function poll() {
-timer = setInterval(function () {
-if (stopped || !key || busy) return;
-if (++tries > 90) { msg('二维码已过期，关掉重开一次'); stop(); return; }
-busy = true;
-srcGet('/bili/qr/poll?key=' + encodeURIComponent(key), authToken()).then(function (r) {
-busy = false;
-if (stopped) return;
-var j = (r && r.j) || {};
-var st = String(j.state || '');
-if (st === 'ok') { onBound(j.uname); return; }
-if (st === 'scanned') msg('已扫码，请在手机上确认');
-else if (st === 'expired') { msg('二维码已过期，关掉重开一次'); stop(); }
-}, function () { busy = false; });
-}, 2000);
-}
-function onBound(uname) {
-stop();
-close();
-var host = document.querySelector('#modal') || document;
-var panel = host.querySelector ? host.querySelector('.dp-srcs') : null;
-if (panel) srcMount(host, panel.getAttribute('data-bgm') || '', '', 1, true);
-setTimeout(function () {
-srcHint(host, 'B 站已绑定（' + (uname || '已登录') + '）· 重新点播放即为高清/会员集');
-}, 60);
-}
-var sessDo = document.getElementById('bbsessdo');
-if (sessDo) sessDo.onclick = function () {
-var ta = document.getElementById('bbsess');
-var raw = String((ta && ta.value) || '').trim();
-var m = /(?:^|[;\s])SESSDATA\s*=\s*([^;\s"']+)/i.exec(raw);
-var val = m ? m[1] : raw.replace(/^SESSDATA\s*=\s*/i, '').replace(/[;,"'\s]+$/, '');
-if (!val) { msg('先粘贴 SESSDATA'); return; }
-msg('正在验证…');
-sessDo.disabled = true;
-srcAuth('/bili/bind', 'POST', { sess: val }).then(function (r) {
-sessDo.disabled = false;
-var j = (r && r.j) || {};
-if (r && r.ok && j.ok) { onBound(j.uname); return; }
-msg(j.error === 'invalid_sess' ? 'SESSDATA 无效或已过期，重新复制一次'
-: (j.error === 'missing sess' ? '没读到 SESSDATA' : '绑定失败：' + (j.error || ('HTTP ' + (r && r.status)))));
-}, function () { sessDo.disabled = false; msg('绑定失败，请重试'); });
-};
-srcAuth('/bili/qr/start', 'POST', {}).then(function (r) {
-if (stopped) return;
-var j = (r && r.j) || {};
-if (!r || !r.ok || !j.ok || !j.png) {
-msg(r && r.status === 429 ? '操作太频繁，等一分钟再试' :
-(r && r.status === 503 ? '服务端缺少二维码组件，请到「我的」页用粘贴 SESSDATA' : '二维码生成失败'));
-return;
-}
-key = String(j.key_id || '');
-var box = document.getElementById('bbqr');
-if (box) {
-box.innerHTML = '<img alt="B站登录二维码" src="' + esc(j.png) + '">'
-+ '<button class="mnote-btn" id="bbqrsave" type="button">保存二维码</button>';
-var sv = document.getElementById('bbqrsave');
-if (sv) sv.onclick = function () { srcSaveDataUri(j.png, 'bilibili-login-qr.png'); };
-}
-msg('用 B 站 App 扫码 · 180 秒内有效');
-poll();
-}, function () { msg('二维码生成失败，请重试'); });
-}
-function srcSaveDataUri(src, filename) {
-var m = /^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/=\s]+)$/i.exec(String(src || ''));
-if (!m) return;
-try {
-var bin = atob(m[2].replace(/\s+/g, ''));
-var buf = new Uint8Array(bin.length);
-for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-var type = m[1].toLowerCase() === 'png' ? 'image/png' : 'image/jpeg';
-var url = URL.createObjectURL(new Blob([buf], { type: type }));
-var a = document.createElement('a');
-a.href = url; a.download = filename || 'qr.png';
-document.body.appendChild(a); a.click(); document.body.removeChild(a);
-setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 20000);
-} catch (e) { /* 忽略：用户还能长按图片 */ }
-}
+window.__srcStart = srcStart;
 function openQuarkBindPanel() {
 if (document.getElementById('qbmask')) return;
 if (typeof authToken === 'function' && !authToken()) {
@@ -3402,13 +3085,7 @@ if (String(ev.origin).indexOf('120.48.56.189') < 0) return;
 var d = ev.data || {};
 if (d && d.type === 'quark-bound' && d.ok) {
 cleanup();
-var host = document.querySelector('#modal') || document;
-srcHint(host, '夸克网盘已绑定 · 重探播放源…');
-var panel = host.querySelector ? host.querySelector('.dp-srcs') : null;
-if (panel) {
-var bgm = panel.getAttribute('data-bgm') || '';
-srcMount(host, bgm, '', 1, true);       // force 重探
-}
+srcHint(document, '夸克网盘已绑定');
 }
 }
 function onKey(ev) { if (ev.key === 'Escape') cleanup(); }
@@ -3419,68 +3096,11 @@ if (t === mask || (t && String(t.className || '').indexOf('authx') >= 0)) cleanu
 window.addEventListener('message', onMsg);
 document.addEventListener('keydown', onKey);
 }
-function srcClick(host, list, ev, id, title, ep) {
-var t = ev && ev.target ? ev.target : null;
-while (t && t !== list) {
-if (t.getAttribute && (t.getAttribute('data-src') || t.getAttribute('data-act'))) break;
-t = t.parentNode;
-}
-if (!t || t === list) return;
-var act = t.getAttribute('data-act');
-if (act) {                                    // 绑定入口：只导航，不播放
-if (act === 'bind-magnet') {
-if (typeof authToken === 'function' && authToken()) openQuarkBindPanel();
-else if (typeof openAuthPanel === 'function') openAuthPanel('email');
-return;
-}
-if (act === 'bind-bili') {
-if (typeof authToken === 'function' && authToken()) openBiliBindPanel();
-else if (typeof openAuthPanel === 'function') openAuthPanel('email');
-}
-return;
-}
-var key = t.getAttribute('data-src');
-if (!key) return;
-var row = t.parentNode;
-if (row && String(row.getAttribute('data-fail') || '') === '1') {
-srcMount(host, id, title, ep, true);        // 失败行：点一下重探
-return;
-}
-srcPlay(key, host, id, title, ep);
-}
-function srcPlay(key, m, id, title, ep) {
-var epNo = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
-var box = m && m.querySelector ? m : (typeof $ === 'function' ? $('#modal') : null);
-if (!box) return;
-if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
-if (typeof window.__qpAbort === 'function') window.__qpAbort();
-if (typeof window.__biliAbort === 'function') window.__biliAbort();
-if (typeof window.__extAbort === 'function') window.__extAbort();
-if (key === 'ext') {                          // 外部线路：按盒子给的优先级自动播 + 线路内自动降级
-if (typeof extStart !== 'function') return;
-extStart(box, id, title, epNo, function (why) { srcHint(box, why || '外部源未收录'); });
-return;
-}
-if (key === 'yt') {
-var eps = srcYtEps(id);
-if (!eps) { srcHint(box, '本季没有官方 YouTube 正片'); return; }
-var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
-var pickYt = eps[idx] || [];
-srcEmbedYT(box, pickYt[1], epNo, pickYt[2]);
-return;
-}
-if (key === 'bili') {
-srcStart(box, id, title, epNo);
-return;
-}
-if (key === 'magnet') {                        // 磁力 → 转存后在线播放（夸克在幕后，不列出）
-var q = box.querySelector('#dpPlayer') || box;
-if (typeof openQuarkPlay === 'function') openQuarkPlay(q, id, title);
-}
-}
-var EXT_TTL = 10 * 60 * 1000;              // 与盒子 6h 缓存错开：前端只压 10 分钟
-var EXT_MEM = {};
-var EXT_GEN = 0;                            // 每次开播/切源自增：异步结果只落最新一代
+var EXT_TTL = 10 * 60 * 1000;                 // 同一关键词的原始响应缓存
+var EXT_GEN = 0;
+var EXT_PROV = null, EXT_PROV_P = null, EXT_PROV_TS = 0;
+var EXT_RAW = {};                             // "p|wd" -> {ts, list}
+var EXT_LAST_KEY = 'anime_ext_last_prov';
 function extMeta(id) {
 var rows = (typeof ANI !== 'undefined' && ANI.rows) ? ANI.rows : [];
 for (var i = 0; i < rows.length; i++) {
@@ -3490,49 +3110,250 @@ return { orig: rows[i][1] || '', year: rows[i][4] || 0, epsN: rows[i][8] || 0 };
 }
 return { orig: '', year: 0, epsN: 0 };
 }
-function extFind(title, year, orig, force) {
-var key = String(title) + '|' + (year || 0) + '|' + (orig || '');
-var now = Date.now(), mem = EXT_MEM[key];
-if (!force && mem && now - mem.ts < EXT_TTL) return mem.pend || Promise.resolve(mem.data);
-var rec = { ts: now, data: null, pend: null };
-EXT_MEM[key] = rec;
-var qs = '?t=' + encodeURIComponent(title)
-+ (year ? '&y=' + encodeURIComponent(String(year)) : '')
-+ (orig ? '&o=' + encodeURIComponent(orig) : '')
-+ (force ? '&force=1' : '');
-rec.pend = srcGet('/ext/find' + qs, '').then(function (r) {
+function extProviders() {
+if (EXT_PROV && Date.now() - EXT_PROV_TS < 3600 * 1000) return Promise.resolve(EXT_PROV);
+if (EXT_PROV_P) return EXT_PROV_P;
+EXT_PROV_P = srcGet('/ext/list', '').then(function (r) {
 var j = (r && r.j) || {};
-var ok = !!(r && r.ok && j.ok);
-var data = {
-items: ok ? (j.items || []) : [],
-miss: !ok || !!j.miss,
-err: ok ? '' : (r && r.status ? ('HTTP ' + r.status) : 'network')
-};
-if (EXT_MEM[key] === rec) { rec.data = data; rec.ts = Date.now(); }
-return data;
-}, function () {
-var data = { items: [], miss: true, err: 'network' };
-if (EXT_MEM[key] === rec) { rec.data = data; rec.ts = Date.now(); }
-return data;
-});
-return rec.pend;
+var arr = (r && r.ok && j.ok && j.providers) ? j.providers : [];
+if (arr.length) { EXT_PROV = arr; EXT_PROV_TS = Date.now(); }
+EXT_PROV_P = null;
+return EXT_PROV || [];
+}, function () { EXT_PROV_P = null; return EXT_PROV || []; });
+return EXT_PROV_P;
 }
-function extCands(data, ep) {
-var out = [], items = (data && data.items) || [];
-for (var i = 0; i < items.length; i++) {
-var it = items[i], eps = it.eps || [];
-for (var k = 0; k < eps.length; k++) {
-if (Number(eps[k].ep) === Number(ep) && eps[k].url) {
-out.push({ p: it.p, name: it.name, url: String(eps[k].url), n: it.n, src: it.src });
-break;
+function extRaw(pid, wd) {
+var key = pid + '|' + wd, rec = EXT_RAW[key];
+if (rec && Date.now() - rec.ts < EXT_TTL) return Promise.resolve(rec.list);
+return srcGet('/ext/raw?p=' + encodeURIComponent(pid) + '&wd=' + encodeURIComponent(wd), '')
+.then(function (r) {
+var j = (r && r.j) || {};
+var list = (r && r.ok && j.list) ? j.list : [];
+EXT_RAW[key] = { ts: Date.now(), list: list };
+return list;
+}, function () { return []; });
 }
+var EXT_T2S = (function () {
+var pairs = ('藥药 蘭兰 灣湾 們们 兒儿 動动 畫画 話话 劇剧 場场 見见 聽听 實实 國国 會会 ' +
+'來来 後后 間间 開开 關关 門门 問问 時时 點点 長长 東东 車车 馬马 龍龙 戰战 鬥斗 ' +
+'進进 擊击 劍剑 愛爱 戀恋 與与 為为 無无 雙双 頭头 髮发 臉脸 夢梦 願愿 殺杀 靈灵 ' +
+'異异 術术 師师 傳传 記记 總总 節节 約约 區区 學学 園园 鐵铁 銀银 鋼钢 彈弹 獵猎 ' +
+'僕仆 執执 線线 聲声 優优 體体 隊队 寶宝').split(' ');
+var o = {};
+for (var i = 0; i < pairs.length; i++) o[pairs[i].charAt(0)] = pairs[i].charAt(1);
+return o;
+})();
+var EXT_PUNCT = /[\s\-_.·・:：!！?？,，。'"()（）\[\]【】《》〈〉「」『』“”‘’~～&+/|]+/g;
+function extNorm(s) {
+var t = String(s == null ? '' : s).toLowerCase(), out = '';
+for (var i = 0; i < t.length; i++) { var c = t.charAt(i); out += (EXT_T2S[c] || c); }
+return out.replace(EXT_PUNCT, '');
+}
+var EXT_CN = { '一': 1, '二': 2, '两': 2, '兩': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
+var EXT_ROMAN = { 'Ⅱ': 2, 'Ⅲ': 3, 'Ⅳ': 4, 'Ⅴ': 5, 'Ⅵ': 6, 'Ⅶ': 7, 'Ⅷ': 8, 'Ⅸ': 9 };
+var EXT_RE_SEASON = /第\s*([一二三四五六七八九十两兩\d]{1,3})\s*[季期部]|\bseason\s*(\d{1,2})\b|\b(\d{1,2})(?:st|nd|rd|th)\s*season\b|\bpart\.?\s*(\d{1,2})\b|[ⅡⅢⅣⅤⅥⅦⅧⅨ]|\bS(\d{1,2})\b/;
+var EXT_RE_SEASON2 = /\bseason\s*(\d{1,2})\b|\b(\d{1,2})(?:st|nd|rd|th)\s*season\b|\bpart\.?\s*(\d{1,2})\b|\bS(\d{1,2})\b/i;
+function extSeason(s) {
+s = String(s || '');
+var m = EXT_RE_SEASON.exec(s) || EXT_RE_SEASON2.exec(s);
+if (m) {
+for (var i = 1; i < m.length; i++) {
+var g = m[i];
+if (!g) continue;
+g = String(g).trim();
+if (EXT_CN[g]) return EXT_CN[g];
+if (/^\d+$/.test(g)) return Number(g);
+if (EXT_ROMAN[g]) return EXT_ROMAN[g];
+}
+return 1;
+}
+for (var k in EXT_ROMAN) if (s.indexOf(k) >= 0) return EXT_ROMAN[k];
+return 0;
+}
+function extBase(s) {
+s = String(s || '');
+s = s.replace(/[\(（\[【][^\)）\]】]{0,40}[\)）\]】]/g, '');
+s = s.replace(/第\s*[一二三四五六七八九十两兩\d]{1,3}\s*[季期部]/g, '');
+s = s.replace(/\bseason\s*\d{1,2}\b/gi, '');
+s = s.replace(/\b\d{1,2}(?:st|nd|rd|th)\s*season\b/gi, '');
+s = s.replace(/\bpart\.?\s*\d{1,2}\b/gi, '');
+s = s.replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨ]/g, '');
+s = s.replace(/\bS\d{1,2}\b/g, '');
+s = s.replace(/(19|20)\d{2}\s*年?/g, '');
+return s.replace(/^\s+|\s+$/g, '');
+}
+var EXT_NOISE = /解说|解說|速看|盘点|盤點|吐槽|真人|cosplay|\bcos\b|预告|預告|\bPV\b|花絮|特典|制作决定|製作決定|舞台剧|舞台劇|漫剪|混剪/i;
+var EXT_MOVIE = /剧场版|劇場版|电影|電影|movie/i;
+var EXT_MARK = /完结篇|完結篇|总集篇|總集篇|特别篇|特別篇|前篇|后篇|後篇|番外|\bOVA\b|\bOAD\b|特别编辑|特別編輯|总集|總集|[（(]\s*[上中下]\s*[)）]|[（(]\s*(?:前|后|後)篇\s*[)）]/i;
+function extAltNames(v) {
+var out = [], keys = ['vod_name', 'vod_sub'];
+for (var i = 0; i < keys.length; i++) {
+var raw = String(v[keys[i]] || '');
+var parts = raw.split(/[\/／|｜]/);
+for (var k = 0; k < parts.length; k++) {
+var p = parts[k];
+if (!p || !p.trim()) continue;
+out.push([extBase(p), extSeason(p)]);
 }
 }
 return out;
 }
-function extEpList(data) {
+function extMatch(names, season, year, v) {
+var cname = String(v.vod_name || '');
+if (!cname || EXT_NOISE.test(cname)) return 0;
+var candMovie = EXT_MOVIE.test(cname);
+var siteMovie = false;
+for (var i0 = 0; i0 < names.length; i0++) if (EXT_MOVIE.test(names[i0][0] || '')) siteMovie = true;
+if (candMovie && !siteMovie) return 0;
+var cm = EXT_MARK.exec(cname);
+if (cm) {
+var hit = false;
+for (var i1 = 0; i1 < names.length; i1++) {
+if (String(names[i1][0] || '').toLowerCase().indexOf(String(cm[0]).toLowerCase()) >= 0) hit = true;
+}
+if (!hit) return 0;
+}
+var best = 0, alts = extAltNames(v);
+for (var a = 0; a < alts.length; a++) {
+var nb = extNorm(alts[a][0]);
+if (nb.length < 2) continue;
+var craw = alts[a][1], cseason = craw || 1;
+for (var s = 0; s < names.length; s++) {
+var ns = extNorm(names[s][0]);
+if (ns.length < 2) continue;
+var sseason = names[s][1] || 0;
+var exact = (nb === ns), contain = false, ok = false;
+if (sseason) {
+if (cseason !== (sseason || 1)) continue;
+contain = (nb.indexOf(ns) >= 0 || ns.indexOf(nb) >= 0) && Math.min(nb.length, ns.length) >= 3;
+ok = exact || contain;
+} else {
+ok = exact && craw <= 1;
+}
+if (!ok) continue;
+var sc = exact ? 2 : 1;
+var y = String(v.vod_year || '');
+if (year && /^\d+$/.test(y) && Math.abs(Number(y) - Number(year)) <= 1) sc += 1;
+if (sc > best) best = sc;
+}
+}
+return best;
+}
+var EXT_RE_EP = [/第\s*(\d{1,4})\s*[集话話回期]/, /\b[Ee][Pp]?\s*(\d{1,4})\b/, /^\s*(\d{1,4})\s*$/, /(\d{1,4})/];
+function extParseEp(name) {
+var s = String(name || '');
+for (var i = 0; i < EXT_RE_EP.length; i++) {
+var m = EXT_RE_EP[i].exec(s);
+if (m) { var n = Number(m[1]); if (n > 0 && n <= 2000) return n; }
+}
+return 0;
+}
+function extEpMap(group) {
+var out = {}, seq = 0, ents = String(group || '').split('#');
+for (var i = 0; i < ents.length; i++) {
+var ent = ents[i];
+if (!ent || !ent.trim()) continue;
+seq += 1;
+var parts = ent.split('$');
+if (parts.length < 2) continue;
+var url = String(parts[1] || '').trim();
+if (url.indexOf('http') !== 0) continue;
+var ep = extParseEp(parts[0]) || seq;
+if (!out[ep]) out[ep] = url;
+}
+return out;
+}
+function extPlayEps(v) {
+var froms = String(v.vod_play_from || '').split('$$$');
+var groups = String(v.vod_play_url || '').split('$$$');
+var best = null, bestKey = -1;
+for (var i = 0; i < groups.length; i++) {
+var frm = String(froms[i] || '').toLowerCase();
+var looksHls = frm.indexOf('m3u8') >= 0 || String(groups[i]).toLowerCase().indexOf('.m3u8') >= 0;
+if (!looksHls) continue;
+var m = extEpMap(groups[i]);
+var n = 0;
+for (var k in m) n++;
+if (!n) continue;
+if (n > bestKey) { bestKey = n; best = m; }
+}
+var out = [];
+if (!best) return out;
+for (var ep in best) out.push({ ep: Number(ep), url: best[ep] });
+out.sort(function (a, b) { return a.ep - b.ep; });
+return out;
+}
+function extSolve(prov, variants, names, season, year) {
+var i = 0;
+function step() {
+if (i >= variants.length) return Promise.resolve(null);
+var wd = String(variants[i++] || '').replace(/\s+/g, '');
+if (!wd) return step();
+return extRaw(prov.p, wd).then(function (list) {
+if (!list || !list.length) return step();
+var pick = null, score = 0;
+for (var k = 0; k < list.length; k++) {
+var v = list[k];
+var sc = extMatch(names, season, year, v);
+if (sc > score) { score = sc; pick = v; }
+}
+if (!pick) return step();
+var eps = extPlayEps(pick);
+if (!eps.length) return step();
+return {
+p: prov.p, name: prov.name,
+src: String(pick.vod_name || ''),
+remarks: String(pick.vod_remarks || ''),
+n: eps.length, eps: eps
+};
+});
+}
+return step();
+}
+function extQuery(title, year, orig, onItem) {
+return extProviders().then(function (provs) {
+if (!provs.length) return [];
+var names = [[extBase(title), extSeason(title)]];
+if (orig) names.push([extBase(orig), extSeason(orig) || extSeason(title)]);
+var season = extSeason(title), variants = [title], b = extBase(title);
+if (extNorm(b) !== extNorm(title)) variants.push(b);
+if (orig) variants.push(orig);
+var items = [];
+var jobs = provs.map(function (p, idx) {
+return extSolve(p, variants, names, season, year).then(function (it) {
+if (!it) return;
+it.pri = idx;
+items.push(it);
+if (typeof onItem === 'function') onItem(it, items.slice());
+}, function () { });
+});
+return Promise.all(jobs).then(function () {
+items.sort(function (a, b2) { return a.pri - b2.pri; });
+return items;
+});
+});
+}
+function extLastProv() {
+try { return localStorage.getItem(EXT_LAST_KEY) || ''; } catch (e) { return ''; }
+}
+function extSetLastProv(p) {
+try { localStorage.setItem(EXT_LAST_KEY, String(p || '')); } catch (e) { }
+}
+function extEpOf(item, ep) {
+var eps = (item && item.eps) || [];
+for (var i = 0; i < eps.length; i++) if (Number(eps[i].ep) === Number(ep)) return eps[i].url;
+return '';
+}
+function extCands(items, ep) {
+var out = [];
+for (var i = 0; i < items.length; i++) {
+var u = extEpOf(items[i], ep);
+if (u) out.push({ p: items[i].p, name: items[i].name, url: u, src: items[i].src, n: items[i].n, eps: items[i].eps });
+}
+return out;
+}
+function extEpList(items) {
 var seen = {}, out = [];
-var items = (data && data.items) || [];
 for (var i = 0; i < items.length; i++) {
 var eps = items[i].eps || [];
 for (var k = 0; k < eps.length; k++) {
@@ -3543,71 +3364,200 @@ if (n > 0 && !seen[n]) { seen[n] = 1; out.push({ ep: n }); }
 out.sort(function (a, b) { return a.ep - b.ep; });
 return out;
 }
-function extProbeText(data, ep) {
-if (!data) return { kind: 'waits' };
-if (data.err && !data.items.length) return { kind: 'error', why: data.err };
-var cand = extCands(data, ep);
-if (!cand.length) return { kind: 'none', n: (data.items || []).length };
-return { kind: 'has', n: cand.length, eps: extEpList(data).length, name: cand[0].name };
-}
 function extStart(box, id, title, ep, onFail) {
 var epNo = Math.max(1, Math.floor(Number(ep) || 1));
 var gen = ++EXT_GEN;
 var meta = extMeta(id);
-srcHint(box, '正在匹配外部播放源…');
-extFind(title, meta.year, meta.orig, false).then(function (data) {
-if (gen !== EXT_GEN) return;
-var cand = extCands(data, epNo);
-if (!cand.length) {
-if (typeof onFail === 'function') onFail(data && data.err ? ('外部源不可用 ' + data.err) : '外部源未收录');
-return;
-}
-extPlay(box, id, title, epNo, data, cand, 0);
-}, function () {
-if (gen === EXT_GEN && typeof onFail === 'function') onFail('外部源不可用');
+var items = [], done = false, started = false, grace = 0, pending = null;
+var last = extLastProv();
+function ranked() {
+var list = items.slice();
+list.sort(function (a, b) {
+var la = (a.p === last ? -0.5 : 0), lb = (b.p === last ? -0.5 : 0);
+return (a.pri + la) - (b.pri + lb);
 });
+return list;
 }
-function extPlayEp(box, id, title, ep, data) {
-var cand = extCands(data, ep);
-if (!cand.length) {
-srcHint(box, '第 ' + ep + ' 集外部源还没更新');
-return;
+function cands() { return extCands(ranked(), epNo); }
+function tryPlay(force) {
+if (started || gen !== EXT_GEN) return false;
+var c = cands();
+if (!c.length) return false;
+if (!force && !done && ranked()[0] && ranked()[0].pri > 0) return false;
+if (!play(c, 0)) return false;
+started = true;
+return true;
 }
-extPlay(box, id, title, ep, data, cand, 0);
-}
-function extPlay(box, id, title, ep, data, cand, idx) {
-if (!window.QPlayer || !box) return;
-var cur = cand[idx];
-if (!cur) return;
-var tok = QPlayer.open({
-m: box,
-id: id,
-title: title,
-ep: ep,
-sources: [],
-onPickEp: function (e) { extPlayEp(box, id, title, Number(e) || 1, data); },
+function play(c, i) {
+var cur = c[i];
+if (!cur) return false;
+var tok = window.QPlayer ? QPlayer.open({
+m: box, id: id, title: title, ep: epNo, sources: [],
+onPickEp: function (e) { extPlayEp(box, id, title, Number(e) || 1, ranked()); },
 onEnded: function () {
-var nx = ep + 1;
-if (extCands(data, nx).length) extPlayEp(box, id, title, nx, data);
+var nx = epNo + 1;
+if (extCands(ranked(), nx).length) extPlayEp(box, id, title, nx, ranked());
 },
 onPlayErr: function (why) {
 if (!(window.QPlayer && QPlayer.isCurrent(tok))) return;
-if (idx + 1 < cand.length) {
-srcHint(box, '「' + cur.name + '」线路不可用（' + why + '）· 自动换下一条');
-extPlay(box, id, title, ep, data, cand, idx + 1);
+var c2 = cands();
+if (i + 1 < c2.length) {
+srcHint(box, '「' + cur.name + '」不可用（' + why + '）· 换下一条');
+play(c2, i + 1);
+return;
+}
+if (!done && pending) {
+srcHint(box, '「' + cur.name + '」不可用 · 等其余线路…');
+pending.then(function () {
+if (gen !== EXT_GEN) return;
+var c3 = cands();
+if (c3.length > c2.length) play(c3, c2.length);
+else QPlayer.state('error', { msg: '外部线路都不可用' });
+});
 return;
 }
 QPlayer.state('error', { msg: '外部线路都不可用（' + (why || 'error') + '）' });
 }
+}) : null;
+if (!tok) return false;
+QPlayer.setEpisodes(extEpList(items), epNo, '');
+srcHint(box, '外部线路 · ' + cur.name + ' · 第 ' + epNo + ' 集' + (i ? '（自动换源 ' + (i + 1) + '/' + c.length + '）' : ''));
+QPlayer.play(cur.url, cur.name, { hls: true });
+extSetLastProv(cur.p);
+return true;
+}
+srcHint(box, '正在匹配外部线路…');
+pending = extQuery(title, meta.year, meta.orig, function (it, all) {
+if (gen !== EXT_GEN) return;
+items = all;
+if (started) return;
+if (!grace) grace = setTimeout(function () { grace = 0; tryPlay(true); }, 900);
+if (it.pri === 0 || it.p === last) {
+if (grace) { clearTimeout(grace); grace = 0; }
+tryPlay(true);
+}
+}).then(function (all) {
+if (gen !== EXT_GEN) return all;
+items = all; done = true;
+if (grace) { clearTimeout(grace); grace = 0; }
+if (!started && !tryPlay(true)) {
+if (typeof onFail === 'function') onFail(items.length ? '外部源本集无资源' : '外部源未收录');
+}
+return all;
 });
-QPlayer.setEpisodes(extEpList(data), ep, '');
-srcHint(box, '外部线路 · ' + cur.name + ' · 第 ' + ep + ' 集'
-+ (idx ? '（已自动换源 ' + (idx + 1) + '/' + cand.length + '）' : ''));
+return pending;
+}
+function extPlayEp(box, id, title, ep, items) {
+var cand = extCands(items || [], ep);
+if (!cand.length) { srcHint(box, '第 ' + ep + ' 集外部源还没更新'); return; }
+if (typeof window.__extAbort === 'function') window.__extAbort();
+var gen = ++EXT_GEN;
+var tok = QPlayer.open({
+m: box, id: id, title: title, ep: ep, sources: [],
+onPickEp: function (e) { extPlayEp(box, id, title, Number(e) || 1, items); },
+onEnded: function () {
+var nx = ep + 1;
+if (extCands(items || [], nx).length) extPlayEp(box, id, title, nx, items);
+},
+onPlayErr: function (why) {
+if (!(window.QPlayer && QPlayer.isCurrent(tok))) return;
+var c = extCands(items || [], ep);
+var done = 0;
+(function next() {
+done += 1;
+if (done >= c.length) { QPlayer.state('error', { msg: '外部线路都不可用（' + (why || 'error') + '）' }); return; }
+playAt(done);
+})();
+function playAt(i) {
+var cur = c[i];
+var t2 = QPlayer.open({
+m: box, id: id, title: title, ep: ep, sources: [],
+onPickEp: function (e) { extPlayEp(box, id, title, Number(e) || 1, items); },
+onEnded: function () { var nx = ep + 1; if (extCands(items || [], nx).length) extPlayEp(box, id, title, nx, items); },
+onPlayErr: function () { if (QPlayer.isCurrent(t2)) next(); }
+});
+QPlayer.setEpisodes(extEpList(items || []), ep, '');
+srcHint(box, '外部线路 · ' + cur.name + ' · 第 ' + ep + ' 集（换源 ' + (i + 1) + '/' + c.length + '）');
 QPlayer.play(cur.url, cur.name, { hls: true });
 }
-window.__extFind = extFind;
+}
+});
+QPlayer.setEpisodes(extEpList(items || []), ep, '');
+srcHint(box, '外部线路 · ' + cand[0].name + ' · 第 ' + ep + ' 集');
+QPlayer.play(cand[0].url, cand[0].name, { hls: true });
+extSetLastProv(cand[0].p);
+}
+function extSearchGroups(q, limit) {
+var nq = extNorm(q);
+if (nq.length < 2) return Promise.resolve([]);
+return extProviders().then(function (provs) {
+var jobs = provs.map(function (p, idx) {
+return extRaw(p.p, String(q).replace(/s+/g, '')).then(function (list) {
+var out = [];
+for (var i = 0; i < list.length; i++) {
+var v = list[i], cname = String(v.vod_name || '');
+if (!cname || EXT_NOISE.test(cname)) continue;
+var nc = extNorm(cname);
+if (nc.indexOf(nq) < 0 && nq.indexOf(nc) < 0) continue;
+var eps = extPlayEps(v);
+if (!eps.length) continue;
+out.push({ pri: idx, p: p.p, name: p.name, src: cname,
+remarks: String(v.vod_remarks || ''), year: String(v.vod_year || ''),
+type: String(v.type_name || ''), n: eps.length, eps: eps });
+}
+return out;
+});
+});
+return Promise.all(jobs).then(function (arrs) {
+var groups = {}, order = [];
+for (var a = 0; a < arrs.length; a++) {
+for (var i2 = 0; i2 < arrs[a].length; i2++) {
+var it = arrs[a][i2];
+var key = extNorm(extBase(it.src)) + '|' + (extSeason(it.src) || 1);
+var g = groups[key];
+if (!g) {
+g = { name: it.src, year: it.year, type: it.type, remarks: it.remarks, items: [], epsN: 0 };
+groups[key] = g; order.push(key);
+}
+var dup = -1;
+for (var k = 0; k < g.items.length; k++) if (g.items[k].p === it.p) { dup = k; break; }
+if (dup < 0) g.items.push(it);
+else if (it.n > g.items[dup].n) g.items[dup] = it;
+if (it.n > g.epsN) g.epsN = it.n;
+}
+}
+var out = [];
+for (var o = 0; o < order.length; o++) {
+var gg = groups[order[o]];
+gg.items.sort(function (x, y) { return x.pri - y.pri; });
+out.push(gg);
+}
+out.sort(function (x, y) {
+return (y.items.length - x.items.length) || (y.epsN - x.epsN) || (x.name.length - y.name.length);
+});
+out = out.slice(0, limit || 30);
+var budget = 6000;
+for (var z = 0; z < out.length; z++) {
+for (var w = 0; w < out[z].items.length; w++) {
+var ii = out[z].items[w];
+ii.eps = ii.eps.slice(0, 120);
+if (budget <= 0) ii.eps = ii.eps.slice(0, 5);
+else budget -= ii.eps.length;
+}
+}
+return out;
+});
+});
+}
+window.__extSearch = extSearchGroups;
 window.__extStart = extStart;
 window.__extAbort = function () { EXT_GEN += 1; };
+window.__extQuery = extQuery;
+window.__extEps = function (v) { return extPlayEps(v); };
+window.__extMatch = extMatch;
+window.__extBase = extBase;
+window.__extSeason = extSeason;
+window.__extNorm = extNorm;
 var BILI = {};          // id -> {bvid, aid, pages:[{page,cid,part}]}
 var BILI_P = {};        // id -> 在途的 resolve：同 id 并发共用一次请求
 var BILI_BASE = 'https://120.48.56.189/bili/';
@@ -4313,13 +4263,46 @@ return r.j;
 var u = (d && d.ok && d.user) || null;
 if (!u) { var e = new Error('login_required'); e.auth = 1; throw e; }
 AUTH_LOGIN = String(u.login || '');
-el.title = '我的主页';
+el.title = '我的';
 var av = u.avatar
 ? '<img class="av" src="' + esc(u.avatar) + '" alt="">'
 : '<span class="avt">' + esc(String(u.login || '?').slice(0, 1).toUpperCase()) + '</span>';
-el.innerHTML = av + '<b>' + esc(u.login) + '</b>';
-el.onclick = function () { location.href = 'user'; };
-el.classList.add('is-user');
+el.innerHTML = av + '<b>' + esc(u.login) + '</b><i class="caret"></i>'
++ '<div class="umenu" id="umenu" hidden>'
++   '<div class="um-head">' + av + '<span>' + esc(u.login) + '</span></div>'
++   '<a href="user">个人主页</a>'
++   '<a href="user?tab=fav">我的追番</a>'
++   '<a href="user?tab=cont">观看记录</a>'
++   '<a href="user#pfbili">账号绑定</a>'
++   '<button type="button" id="umlogout">退出登录</button>'
++ '</div>';
+el.className = 'cnt is-user';
+bindUserMenu(el);
+function bindUserMenu(box) {
+var menu = box.querySelector('#umenu');
+function show(on) { if (menu) menu.hidden = !on; }
+box.onclick = function (e) {
+var t = e.target;
+if (t && t.id === 'umlogout') { logoutAccount(); return; }
+if (t && t.tagName === 'A') return;          // 链接走默认跳转
+e.stopPropagation();
+show(menu ? menu.hidden : false);
+};
+var hover = false;
+try { hover = window.matchMedia && window.matchMedia('(hover: hover)').matches; } catch (e) { }
+if (hover) {
+box.addEventListener('mouseenter', function () { show(true); });
+box.addEventListener('mouseleave', function () { show(false); });
+}
+if (!window.__umenuOutside) {
+window.__umenuOutside = 1;
+document.addEventListener('click', function (ev) {
+var el2 = document.getElementById('cnt');
+var m2 = el2 && el2.querySelector('#umenu');
+if (m2 && el2 && !el2.contains(ev.target)) m2.hidden = true;
+});
+}
+}
 }).catch(function (e) {
 if (e && e.auth) { try { localStorage.removeItem(TOKEN_KEY); } catch (err) { /* 忽略 */ } }
 paintLoginEntry(el);
@@ -4329,7 +4312,7 @@ function bootHeader() {
 var P = PAGE;
 var ph = P === 'movie' ? '搜索电影…' : (P === 'search' ? '搜全网片名，回车' : '搜索番剧…');
 var nav = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'], ['/movie', 'movie', '电影'],
-['/rank', 'rank', '排行榜'], ['/search', 'search', '全网搜索'], ['/user', 'user', '我的']]
+['/rank', 'rank', '排行榜']]
 .map(function (x) {
 return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
 }).join('');
@@ -4341,7 +4324,7 @@ tabbar.id = 'tabbar';
 document.body.appendChild(tabbar);
 }
 var items = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'],
-['/movie', 'movie', '电影'], ['/user', 'user', '我的']];
+['/movie', 'movie', '电影']];
 tabbar.style.setProperty('--tabn', String(items.length));
 tabbar.innerHTML = items
 .map(function (x) {
