@@ -74,9 +74,6 @@
       +     '</div>'
       +   '</div>'
       + '</div>'
-      /* 播放源聚合面板：放在 .mtabs 之前、.trailer.qplayer 之外（面板自带 .qp-line-list，
-         塞进播放器 root 会和 76 的 renderLines 抢同一个选择器） */
-      + srcPanelHtml(id, title, curEp)
       + '<div class="mtabs">'
       +   '<button class="mtab on" data-p="detail" type="button">详情</button>'
       +   '<button class="mtab" data-p="rt" type="button">评价</button>'
@@ -148,9 +145,6 @@
       if (gen !== MODAL_GEN || !rec) return;
       renderTags(rec, host.querySelector('#tags'));
     });
-    bindBili(id, title, r[4] || '');
-    /* 播放源面板：只探测不播放；挂载点在面板已进 DOM 之后（60s 内重开同一部不重探） */
-    srcPanelMount(m, id, title, curEp);
     var sfx = id % 64;
     var pr = shardCache[sfx];
     if (!pr) {

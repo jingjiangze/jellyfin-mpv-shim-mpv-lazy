@@ -519,14 +519,47 @@
       var u = (d && d.ok && d.user) || null;
       if (!u) { var e = new Error('login_required'); e.auth = 1; throw e; }
       AUTH_LOGIN = String(u.login || '');
-      el.title = '我的主页';
+      el.title = '我的';
       var av = u.avatar
         ? '<img class="av" src="' + esc(u.avatar) + '" alt="">'
         : '<span class="avt">' + esc(String(u.login || '?').slice(0, 1).toUpperCase()) + '</span>';
-      el.innerHTML = av + '<b>' + esc(u.login) + '</b>';
-      /* 点头像区块不再开账号面板，跳个人主页（改密 / 退出都在那边） */
-      el.onclick = function () { location.href = 'user'; };
-      el.classList.add('is-user');
+      el.innerHTML = av + '<b>' + esc(u.login) + '</b><i class="caret"></i>'
+        + '<div class="umenu" id="umenu" hidden>'
+        +   '<div class="um-head">' + av + '<span>' + esc(u.login) + '</span></div>'
+        +   '<a href="user">个人主页</a>'
+        +   '<a href="user?tab=fav">我的追番</a>'
+        +   '<a href="user?tab=cont">观看记录</a>'
+        +   '<a href="user#pfbili">账号绑定</a>'
+        +   '<button type="button" id="umlogout">退出登录</button>'
+        + '</div>';
+      el.className = 'cnt is-user';
+      bindUserMenu(el);
+      function bindUserMenu(box) {
+        var menu = box.querySelector('#umenu');
+        function show(on) { if (menu) menu.hidden = !on; }
+        box.onclick = function (e) {
+          var t = e.target;
+          if (t && t.id === 'umlogout') { logoutAccount(); return; }
+          if (t && t.tagName === 'A') return;          // 链接走默认跳转
+          e.stopPropagation();
+          show(menu ? menu.hidden : false);
+        };
+        /* 桌面 hover 展开（B 站/A 站的习惯），触屏设备只认点击 */
+        var hover = false;
+        try { hover = window.matchMedia && window.matchMedia('(hover: hover)').matches; } catch (e) { }
+        if (hover) {
+          box.addEventListener('mouseenter', function () { show(true); });
+          box.addEventListener('mouseleave', function () { show(false); });
+        }
+        if (!window.__umenuOutside) {
+          window.__umenuOutside = 1;
+          document.addEventListener('click', function (ev) {
+            var el2 = document.getElementById('cnt');
+            var m2 = el2 && el2.querySelector('#umenu');
+            if (m2 && el2 && !el2.contains(ev.target)) m2.hidden = true;
+          });
+        }
+      }
     }).catch(function (e) {
       if (e && e.auth) { try { localStorage.removeItem(TOKEN_KEY); } catch (err) { /* 忽略 */ } }
       paintLoginEntry(el);
@@ -541,7 +574,7 @@
        主色块由 CSS 画（白字压 #00B4D8 对比度不够，用深墨字）。
        「全网搜索」= 站内目录 + 十家采集源，点进去是独立页面（/search）。 */
     var nav = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'], ['/movie', 'movie', '电影'],
-      ['/rank', 'rank', '排行榜'], ['/search', 'search', '全网搜索'], ['/user', 'user', '我的']]
+      ['/rank', 'rank', '排行榜']]
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');
@@ -555,7 +588,7 @@
       document.body.appendChild(tabbar);
     }
     var items = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'],
-      ['/movie', 'movie', '电影'], ['/user', 'user', '我的']];
+      ['/movie', 'movie', '电影']];
     /* 列数跟项数走，增删导航项不用再改 CSS */
     tabbar.style.setProperty('--tabn', String(items.length));
     tabbar.innerHTML = items

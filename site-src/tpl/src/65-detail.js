@@ -368,9 +368,6 @@
       + '</section>'
       + '<div class="dp-grid">'
       +   '<div class="dp-main">'
-      /* 播放源聚合面板：必须在 .dp-watch / .trailer.qplayer 之外（76 的 renderLines
-         在播放器 root 内查 .qp-line-list，放进去两边抢同一个选择器） */
-      +     srcPanelHtml(id, title, curEp)
       +     '<div class="dp-watch">'
       /* 空态给封面 + 播放钮（gamer 的播放器未开始时就是一张封面），点「开始观看」后
          由 75/76 把这里整段换掉；--cover 只给 CSS 用，不参与逻辑 */
@@ -378,6 +375,8 @@
       /* 磁力锚点：必须是 #modal 里第一个 .mbody[data-p="detail"]（magnet-eps.js 取首个并 append） */
       +       '<div class="mbody dp-eps" data-p="detail"></div>'
       +     '</div>'
+      /* 播放状态行（原来写在播放源面板的 sec-sub 里；面板已删，改挂这里） */
+      +     '<p class="dp-stat" id="dpStat"></p>'
       /* 预告（YouTube 官方源，ex[2] 有才出）：点按钮才注 iframe，页面加载不带第三方 JS */
       +     (ex[2]
             ? '<section class="sect" id="dp-trailer"><div class="sec-h"><h2>预告</h2></div>'
@@ -420,9 +419,6 @@
     m.setAttribute('data-bgm', String(id));
     document.body.removeAttribute('data-ext-detail');   // 回到番剧详情：磁力层恢复挂载
     document.title = title + ' · 番组计划';
-    /* 播放源面板：只探测不播放（3 个状态 GET 由 78 自己发；60s 内二次调用不重探）。
-       放在整段 DOM 落地之后：面板要按 data-bgm 认自己这一代。 */
-    srcPanelMount(m, id, title, curEp);
 
     /* 简介：与弹窗同一套处理 —— 原文分段残留的空行在 pre-wrap 下会撑出大块空白 */
     var plot = m.querySelector('#plot');
@@ -518,6 +514,8 @@
     if (dpslot) {
       dpslot.onclick = function () {
         if (dpslot.childNodes.length) return;
+        /* 封面点击与「开始观看」同一条自动链（原来直接跳网盘，绕过了 B 站/外部源） */
+        if (window.__srcStart && window.__srcStart(m, id, title, curEp)) return;
         openQuarkPlay(dpslot, id, title);
       };
     }

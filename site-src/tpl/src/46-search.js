@@ -26,14 +26,12 @@
       : '<p class="plot">站内目录没有匹配项 —— 看下面的全网源。</p>';
   }
 
-  /* 盒子 /ext/search：失败一律退化成 {groups:[]}，页面只显示提示，不弹错 */
-  function srchExt(q, force) {
-    if (typeof srcGet !== 'function') return Promise.resolve({ groups: [] });
-    var path = '/ext/search?q=' + encodeURIComponent(q) + (force ? '&force=1' : '');
-    return srcGet(path, '').then(function (r) {
-      var j = (r && r.j) || {};
-      if (!r || !r.ok || !j.ok) return { groups: [], err: r && r.status ? ('HTTP ' + r.status) : 'network' };
-      return { groups: j.groups || [], total: j.total || 0, err: '', short: !!j.short };
+  /* 全网：浏览器并发拉十家原始数据、本地合组（服务器只转发，不做检测）。
+     失败退化成 {groups:[]}，页面只显示提示，不弹错。 */
+  function srchExt(q) {
+    if (typeof window.__extSearch !== 'function') return Promise.resolve({ groups: [] });
+    return window.__extSearch(q, 30).then(function (gs) {
+      return { groups: gs || [], total: (gs || []).length, err: '' };
     }, function () { return { groups: [], err: 'network' }; });
   }
 
@@ -95,15 +93,14 @@
     function playGroup(i) {
       var g = GROUPS[i];
       if (!g) return;
-      var data = { items: g.items || [] };
-      var cand = extCands(data, 1);
-      if (!cand.length) { extSub.textContent = '这部没有可播放的线路'; return; }
+      var items = g.items || [];
+      if (!extCands(items, 1).length) { extSub.textContent = '这部没有可播放的线路'; return; }
       if (typeof window.__extAbort === 'function') window.__extAbort();
       var wrap = $('#srchPlayWrap');
       if (wrap) wrap.hidden = false;
       try { wrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { }
       /* 传外层 #srchPlayWrap：它同时含 .dp-srcs 与 #dpPlayer，hint 才落得到 */
-      extPlay(wrap || $('#srchPlay'), 'search:' + g.name, g.name, 1, data, cand, 0);
+      extPlayEp(wrap || $('#srchPlay'), 'search:' + g.name, g.name, 1, items);
     }
 
     list.onclick = function (ev) {

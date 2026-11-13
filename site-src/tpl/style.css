@@ -3939,3 +3939,28 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   .nav-bar, .nav-bar i { transition: none; }
 }
+
+/* ================================================================ 顶栏「我的」下拉（2026-11-14）
+   菜单里的「我的」「全网搜索」按钮已移除：登录态改由右上角头像进入（B 站/A 站习惯），
+   未登录仍是「登录」按钮。面板类名与 90-boot.js 的 userMenuHtml 一一对应。 */
+#cnt.is-user { position: relative; display: inline-flex; align-items: center; gap: 6px;
+  height: var(--ctl-h); padding: 0 10px; border: 1px solid transparent; border-radius: 999px; }
+#cnt.is-user:hover, #cnt.is-user:focus-within { background: var(--card2); border-color: var(--line); }
+#cnt .caret { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 5px solid var(--dim); margin-left: 2px; }
+.umenu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 190px; padding: 6px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: 0 12px 32px rgba(0,0,0,.28); z-index: 80; }
+.umenu[hidden] { display: none; }
+.umenu .um-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--line); color: var(--fg); font-size: var(--fs-sm); font-weight: 600; }
+.umenu .um-head .av, .umenu .um-head .avt { width: 28px; height: 28px; margin: 0; }
+.umenu a, .umenu button { display: block; width: 100%; text-align: left; padding: 8px 10px;
+  border: 0; border-radius: var(--r-xs); background: none; color: var(--fg2);
+  font-size: var(--fs-sm); cursor: pointer; text-decoration: none; }
+.umenu a:hover, .umenu button:hover { background: var(--card2); color: var(--accent); }
+.umenu #umlogout { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px;
+  border-radius: 0 0 var(--r-xs) var(--r-xs); }
+
+/* 播放状态行（详情页播放器下方；原来写在已删除的播放源面板里） */
+.dp-stat { margin: 6px 0 14px; min-height: 1.2em; font-size: var(--fs-sm); color: var(--dim); }

@@ -79,7 +79,7 @@
       + '<div class="empty">登录后查看我的主页 —— 追番、观看进度和账号设置都在这里</div>'
       + '<div class="pf-acts-note">'
       + '<p><b>B 站扫码绑定</b>：绑定结果记在你的账号下（每人对自己的绑定负责），登录后才会出现扫码按钮。</p>'
-      + '<p><b>夸克网盘</b>：绑在站点服务器上，全站共用一份，绑定入口在播放源面板。</p>'
+      + '<p><b>夸克网盘</b>：绑在站点服务器上，全站共用一份，入口是本页的「绑定夸克网盘」按钮。</p>'
       + '</div>'
       + '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录 / 注册</button></div>';
   }
@@ -592,6 +592,14 @@
 
   /* 页面入口（90-boot.js 的 boot 链与 repaint 都调这里）。
      失败一律出可读兜底，不白屏；USER 有缓存时不重复请求。 */
+  /* 顶栏「我的」下拉里的「我的追番 / 观看记录」→ user?tab=fav|cont：进来后自动切页签 */
+  function applyUserTab() {
+    var m = /[?&]tab=(fav|cont)/.exec(location.search || '');
+    if (!m) return;
+    var b = document.querySelector('.pf-tabs .mtab[data-tab="' + m[1] + '"]');
+    if (b) b.click();
+  }
+
   function renderUser() {
     var main = $('#main');
     if (!main) return;
@@ -604,6 +612,7 @@
       main.innerHTML = userHTML(USER);
       bindUserActions();
       loadPfBili();
+      applyUserTab();
       return;
     }
     if (!main.querySelector('.pf-hero')) main.innerHTML = '<div class="loading">加载中…</div>';
@@ -612,6 +621,7 @@
       main.innerHTML = userHTML(u);
       bindUserActions();
       loadPfBili();
+      applyUserTab();
     }).catch(function (e) {
       main.innerHTML = '<div class="empty">' + esc((e && e.message) || '资料加载失败')
         + '</div><div class="pf-actions"><a class="btn" href="user">重试</a></div>';
