@@ -1114,6 +1114,121 @@ main.innerHTML = '<div class="empty">' + esc((e && e.message) || '资料加载�
 + '</div><div class="pf-actions"><a class="btn" href="user">重试</a></div>';
 });
 }
+function srchQ() {
+try { return (new URLSearchParams(location.search).get('q') || '').trim(); } catch (e) { return ''; }
+}
+function srchLocal(q, grid, sub) {
+if (!grid) return;
+if (!q) { grid.innerHTML = ''; if (sub) sub.textContent = ''; return; }
+var nq = nrm(q), found = [];
+for (var i = 0; i < ANI.rows.length && found.length < 60; i++) {
+var r = ANI.rows[i];
+if (nrm(r[1] + ' ' + (r[2] || '')).indexOf(nq) !== -1) found.push(r);
+}
+if (sub) sub.textContent = found.length ? (found.length + ' 部') : '没收录';
+grid.innerHTML = found.length
+? found.map(function (r) { return animeCard(r, { showYear: 1 }); }).join('')
+: '<p class="plot">站内目录没有匹配项 —— 看下面的全网源。</p>';
+}
+function srchExt(q, force) {
+if (typeof srcGet !== 'function') return Promise.resolve({ groups: [] });
+var path = '/ext/search?q=' + encodeURIComponent(q) + (force ? '&force=1' : '');
+return srcGet(path, '').then(function (r) {
+var j = (r && r.j) || {};
+if (!r || !r.ok || !j.ok) return { groups: [], err: r && r.status ? ('HTTP ' + r.status) : 'network' };
+return { groups: j.groups || [], total: j.total || 0, err: '', short: !!j.short };
+}, function () { return { groups: [], err: 'network' }; });
+}
+function srchRow(g, i) {
+var srcs = (g.items || []).length;
+var meta = [g.year, g.type, g.remarks].filter(Boolean).join(' · ');
+return '<div class="qp-line-row" data-g="' + i + '">'
++ '<button class="qp-line" type="button" data-act="play">' + esc(g.name)
++ ' · ' + srcs + ' 个源 · ' + (g.epsN || 0) + ' 集'
++ (meta ? '（' + esc(meta) + '）' : '') + '</button>'
++ '<button class="btn" type="button" data-act="play">播放</button>'
++ '</div>';
+}
+function renderSearch() {
+var main = $('#main');
+var q0 = srchQ();
+main.innerHTML = '<section class="sect">'
++   '<div class="sec-h"><h2>全网搜索</h2><span class="sec-sub" id="locSub"></span></div>'
++   '<div class="grid" id="locGrid"></div>'
++ '</section>'
++ '<section class="sect"><div class="sec-h"><h2>全网源</h2>'
++   '<span class="sec-sub" id="extSub">输入片名后回车</span></div>'
++   '<div class="dp-srcs" id="srchPlayWrap" hidden>'
++     '<div class="sec-h"><h2>播放</h2><span class="sec-sub" id="srchHint"></span></div>'
++     '<div id="srchPlay"><div class="dp-player" id="dpPlayer"></div></div>'
++   '</div>'
++   '<div class="dp-srcs"><div class="qp-line-list" id="extList"></div></div>'
++ '</section>';
+var grid = $('#locGrid'), locSub = $('#locSub');
+var list = $('#extList'), extSub = $('#extSub');
+var qEl = $('#q');
+var GROUPS = [], GEN = 0;
+function runExt(v) {
+if (!v) { list.innerHTML = ''; extSub.textContent = '输入片名后回车'; return; }
+if (String(v).replace(/s+/g, '').length < 2) {
+GROUPS = []; list.innerHTML = '';
+extSub.textContent = '至少输入 2 个字';
+return;
+}
+var gen = ++GEN;
+extSub.textContent = '正在查外部源…';
+list.innerHTML = '';
+srchExt(v).then(function (d) {
+if (gen !== GEN) return;
+GROUPS = d.groups || [];
+if (d.err) { extSub.textContent = '外部源不可用（' + d.err + '），稍后再试'; return; }
+if (d.short) { extSub.textContent = '至少输入 2 个字'; return; }
+extSub.textContent = GROUPS.length
+? (GROUPS.length + ' 部' + (d.total > GROUPS.length ? '（共 ' + d.total + '，显示前 ' + GROUPS.length + '）' : ''))
+: '没找到';
+list.innerHTML = GROUPS.length ? GROUPS.map(srchRow).join('')
+: '<p class="plot">外部源没有匹配的片名。换个说法（如只输入主标题）再试试。</p>';
+});
+}
+function playGroup(i) {
+var g = GROUPS[i];
+if (!g) return;
+var data = { items: g.items || [] };
+var cand = extCands(data, 1);
+if (!cand.length) { extSub.textContent = '这部没有可播放的线路'; return; }
+if (typeof window.__extAbort === 'function') window.__extAbort();
+var wrap = $('#srchPlayWrap');
+if (wrap) wrap.hidden = false;
+try { wrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { }
+extPlay(wrap || $('#srchPlay'), 'search:' + g.name, g.name, 1, data, cand, 0);
+}
+list.onclick = function (ev) {
+var t = ev.target;
+while (t && t !== list && !(t.getAttribute && t.getAttribute('data-act'))) t = t.parentNode;
+if (!t || t === list) return;
+var row = t.parentNode;
+var i = Number(row && row.getAttribute ? row.getAttribute('data-g') : -1);
+if (i >= 0) playGroup(i);
+};
+if (qEl) {
+qEl.value = q0;
+qEl.onkeydown = function (ev) {
+if (ev.key !== 'Enter') return;
+ev.preventDefault();
+var v = String(qEl.value || '').trim();
+try { history.replaceState(null, '', '/search' + (v ? '?q=' + encodeURIComponent(v) : '')); } catch (e) { }
+srchLocal(v, grid, locSub);
+runExt(v);
+};
+qEl.oninput = function () {
+var v = String(qEl.value || '').trim();
+clearTimeout(qEl.__t);
+qEl.__t = setTimeout(function () { srchLocal(v, grid, locSub); }, 220);
+};
+}
+srchLocal(q0, grid, locSub);
+if (q0) runExt(q0);
+}
 var BROWSE = { view: [], shown: 0, page: 120, busy: false };
 function renderBrowse(mode) {
 var grid = $('#grid');
@@ -3111,6 +3226,7 @@ else srcSetRow(list, 'magnet', '网盘 · 检测失败 · 点此重试', { bad: 
 }
 function srcHint(host, text) {
 var panel = host && host.querySelector ? host.querySelector('.dp-srcs') : null;
+if (!panel && host && host.className && String(host.className).indexOf('dp-srcs') >= 0) panel = host;
 var h = panel ? panel.querySelector('.sec-sub') : null;
 if (h) h.textContent = text;
 }
@@ -4211,9 +4327,9 @@ paintLoginEntry(el);
 }
 function bootHeader() {
 var P = PAGE;
-var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
+var ph = P === 'movie' ? '搜索电影…' : (P === 'search' ? '搜全网片名，回车' : '搜索番剧…');
 var nav = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'], ['/movie', 'movie', '电影'],
-['/rank', 'rank', '排行榜'], ['/user', 'user', '我的']]
+['/rank', 'rank', '排行榜'], ['/search', 'search', '全网搜索'], ['/user', 'user', '我的']]
 .map(function (x) {
 return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
 }).join('');
@@ -4244,6 +4360,16 @@ paintAuth();
 applyTheme(currentTheme());
 var thm = $('#thm');
 if (thm) thm.onclick = toggleTheme;
+var qbox = $('#q');
+if (qbox && P !== 'search') {
+qbox.addEventListener('keydown', function (ev) {
+if (ev.key !== 'Enter') return;
+var v = String(qbox.value || '').trim();
+if (!v) return;
+ev.preventDefault();
+location.href = '/search?q=' + encodeURIComponent(v);
+});
+}
 syncHeaderH();
 if (window.addEventListener) window.addEventListener('resize', syncHeaderH);
 }
@@ -4382,6 +4508,8 @@ bindSearch(renderRank);
 renderUser();
 } else if (PAGE === 'detail') {
 renderDetail();
+} else if (PAGE === 'search') {
+renderSearch();
 } else {
 renderHome();
 bindSearch(renderHome);
