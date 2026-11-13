@@ -487,7 +487,9 @@
   }
 
   function srcHint(host, text) {
+    /* host 自己就可能是 .dp-srcs（全网搜索页把播放器包在 .dp-srcs 外壳里） */
     var panel = host && host.querySelector ? host.querySelector('.dp-srcs') : null;
+    if (!panel && host && host.className && String(host.className).indexOf('dp-srcs') >= 0) panel = host;
     var h = panel ? panel.querySelector('.sec-sub') : null;
     if (h) h.textContent = text;
   }

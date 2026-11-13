@@ -536,11 +536,12 @@
   function bootHeader() {
     var P = PAGE;
     /* 首页 / 番剧 / 排行榜都搜番剧，电影页搜电影 */
-    var ph = P === 'movie' ? '搜索电影…' : '搜索番剧…';
-    /* 菜单 5 项（照 ani.gamer.com.tw 的 .mainmenu）：选中项只加 .is-on，
-       主色块由 CSS 画（白字压 #00B4D8 对比度不够，用深墨字）。 */
+    var ph = P === 'movie' ? '搜索电影…' : (P === 'search' ? '搜全网片名，回车' : '搜索番剧…');
+    /* 菜单 6 项（照 ani.gamer.com.tw 的 .mainmenu）：选中项只加 .is-on，
+       主色块由 CSS 画（白字压 #00B4D8 对比度不够，用深墨字）。
+       「全网搜索」= 站内目录 + 十家采集源，点进去是独立页面（/search）。 */
     var nav = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'], ['/movie', 'movie', '电影'],
-      ['/rank', 'rank', '排行榜'], ['/user', 'user', '我的']]
+      ['/rank', 'rank', '排行榜'], ['/search', 'search', '全网搜索'], ['/user', 'user', '我的']]
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
       }).join('');
@@ -579,6 +580,18 @@
     applyTheme(currentTheme());
     var thm = $('#thm');
     if (thm) thm.onclick = toggleTheme;
+    /* 顶栏搜索框回车 = 全网搜索：任何页面输入片名回车 → /search?q=…
+       （搜索页自己接管回车，原地刷新站内+全网结果，不再跳转） */
+    var qbox = $('#q');
+    if (qbox && P !== 'search') {
+      qbox.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Enter') return;
+        var v = String(qbox.value || '').trim();
+        if (!v) return;
+        ev.preventDefault();
+        location.href = '/search?q=' + encodeURIComponent(v);
+      });
+    }
     /* 吸顶筛选条（.filters-bar）的 top 取 --header-h：两层顶栏桌面约 100px，≤760 搜索框换行
        后更高，所以这里把实测高度写回变量；窗口尺寸变化（换行数变了）再量一次。 */
     syncHeaderH();
@@ -754,6 +767,9 @@
     } else if (PAGE === 'detail') {
       /* 整页详情：自己的路由（?id=），不复用列表态的任何 renderXxx，也不绑搜索 */
       renderDetail();
+    } else if (PAGE === 'search') {
+      /* 全网搜索页：站内过滤 + 盒子 /ext/search（46-search.js） */
+      renderSearch();
     } else {
       renderHome();
       bindSearch(renderHome);
