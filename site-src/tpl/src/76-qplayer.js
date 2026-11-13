@@ -92,15 +92,71 @@
         };
       });
     }
-    function mountVideo(url, startAt) {
+    /* ---- HLS（m3u8）----
+       外部采集源全是 m3u8；桌面 Chrome 的 <video> 不支持原生 HLS，必须挂 hls.js。
+       组件优先从盒子自托管取（境内稳定、同源无关跨域），公共 CDN 只作兜底。
+       加载失败（全部候选都挂）时把错误交给 ctx.onPlayErr，由调用方换下一条线路。 */
+    var HLS = null, HLS_PEND = null;
+    function hlsSrcs() {
+      var base = (typeof SRC_BASE === 'string' && SRC_BASE) ? SRC_BASE : 'https://120.48.56.189';
+      return [base + '/ext/hls.js',
+              'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js',
+              'https://unpkg.com/hls.js@1.5.17/dist/hls.min.js',
+              'https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.17/hls.min.js'];
+    }
+    function loadHls(cb) {
+      if (window.Hls) { cb(true); return; }
+      if (HLS_PEND) { HLS_PEND.push(cb); return; }
+      HLS_PEND = [cb];
+      var list = hlsSrcs(), i = 0;
+      function done(ok) {
+        var q = HLS_PEND || []; HLS_PEND = null;
+        for (var k = 0; k < q.length; k++) { try { q[k](ok); } catch (e) { } }
+      }
+      function next() {
+        if (i >= list.length) { done(false); return; }
+        var el = document.createElement('script');
+        var fin = false;
+        var t = setTimeout(function () { if (fin) return; fin = true; el.onload = el.onerror = null; if (el.parentNode) el.parentNode.removeChild(el); next(); }, 6000);
+        el.onload = function () {
+          if (fin) return; fin = true; clearTimeout(t);
+          if (window.Hls) { done(true); return; }
+          if (el.parentNode) el.parentNode.removeChild(el);
+          next();
+        };
+        el.onerror = function () {
+          if (fin) return; fin = true; clearTimeout(t);
+          if (el.parentNode) el.parentNode.removeChild(el);
+          next();
+        };
+        el.src = list[i++];
+        document.head.appendChild(el);
+      }
+      next();
+    }
+    function hlsFail(detail) {
+      if (!CUR) return;
+      if (CUR.ctx && typeof CUR.ctx.onPlayErr === 'function') { try { CUR.ctx.onPlayErr(detail || 'hls'); return; } catch (e) { } }
+      status(stHtml('error', { msg: '视频加载失败（网络或源已过期）' }));
+      wireStatus('error');
+    }
+    function killHls() {
+      if (HLS) { try { HLS.destroy(); } catch (e) { } HLS = null; }
+    }
+
+    function mountVideo(url, startAt, opt) {
       var s = slot();
       if (!s || !CUR) return;
       clear();
+      killHls();
+      CUR.hlsOk = false;
       var v = document.createElement('video');
       v.setAttribute('controls', '');
       v.setAttribute('autoplay', '');
       v.setAttribute('playsinline', '');
-      v.src = url;
+      var isHls = (opt && opt.hls) || /\.m3u8(\?|#|$)/i.test(String(url || ''));
+      var nativeHls = !!(v.canPlayType && v.canPlayType('application/vnd.apple.mpegurl'));
+      if (!isHls || nativeHls) v.src = url;
       if (startAt > 0) v.currentTime = startAt;   // loadedmetadata 前赋值也能生效
       v.style.width = '100%';
       v.style.aspectRatio = '16 / 9';
@@ -129,10 +185,40 @@
       });
       v.addEventListener('error', function () {
         if (!CUR) return;
+        /* 外部源有下一条线路可换：先把错误交出去（CUR.ctx.onPlayErr），
+           没有回调才落成静态错误行。 */
+        if (CUR.ctx && typeof CUR.ctx.onPlayErr === 'function') { hlsFail('video'); return; }
         status(stHtml('error', { msg: '视频加载失败（网络或源已过期）' }));
         wireStatus('error');
         if (CUR.ctx && typeof CUR.ctx.onRetry === 'function') { /* 重试按钮已给 */ }
       });
+
+      if (isHls && !nativeHls) {
+        var myGen = CUR.gen;
+        loadHls(function (ok) {
+          if (!CUR || CUR.gen !== myGen) return;
+          if (!ok || !window.Hls) { hlsFail('hls-load'); return; }
+          try {
+            HLS = new window.Hls({ maxBufferLength: 30, manifestLoadingTimeOut: 9000 });
+            HLS.loadSource(url);
+            HLS.attachMedia(v);
+            /* 9s 内没解析出清单就当这条线路坏了（采集站死链常见形态：连接成功但永不返回） */
+            var guard = setTimeout(function () {
+              if (CUR && CUR.gen === myGen && !(CUR.hlsOk)) { hlsFail('hls-timeout'); }
+            }, 12000);
+            HLS.on(window.Hls.Events.MANIFEST_PARSED, function () {
+              if (CUR) CUR.hlsOk = true;
+              clearTimeout(guard);
+              try { var pr = v.play(); if (pr && pr.catch) pr.catch(function () { }); } catch (e) { }
+            });
+            HLS.on(window.Hls.Events.ERROR, function (ev, data) {
+              if (!data || !data.fatal) return;
+              clearTimeout(guard);
+              hlsFail('hls:' + String(data.details || data.type || 'error'));
+            });
+          } catch (e) { hlsFail('hls-init'); }
+        });
+      }
     }
 
     return {
@@ -177,15 +263,16 @@
         if (v && !v.paused) { try { v.pause(); } catch (e) { } }
         if (CUR && CUR.last) report((slot() && slot().querySelector('video') || {}).currentTime || 0, (slot() && slot().querySelector('video') || {}).duration || 0, false);
       },
-      /* 起播：url = 直链（夸克 CDN / B 站 upos），startAt = 续播秒数 */
+      /* 起播：url = 直链（夸克 CDN / B 站 upos / 外部源 m3u8），startAt = 续播秒数 */
       play: function (url, label, opt) {
         if (!CUR || !url) return;
-        mountVideo(url, (opt && Number(opt.startAt)) || 0);
+        mountVideo(url, (opt && Number(opt.startAt)) || 0, opt);
       },
       isCurrent: function (tok) { return !!(tok && CUR && tok.gen === CUR.gen); },
       close: function () {
         if (CUR) { try { report(0, 0, false); } catch (e) { } }
         CUR = null;
+        killHls();
         clear();
       }
     };

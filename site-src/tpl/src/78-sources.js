@@ -21,8 +21,10 @@
   var SRC_BASE = 'https://120.48.56.189';
   var SRC_TTL = 60 * 1000;                       // 探测结果缓存时长
   var SRC_USER = '/user';                       // B 站绑定在个人主页
-  var SRC_KEYS = ['yt', 'bili', 'magnet'];
-  var SRC_NAME = { yt: 'YouTube 官方', bili: 'B 站', magnet: '网盘' };
+  /* 面板行顺序 = 推荐优先级：B 站 → 外部线路 → YouTube → 网盘。
+     `ext` 的行为在 79-extsrc.js（采集站聚合、HLS 播放、按线路自动降级）。 */
+  var SRC_KEYS = ['bili', 'ext', 'yt', 'magnet'];
+  var SRC_NAME = { bili: 'B 站', ext: '外部线路', yt: 'YouTube 官方', magnet: '网盘' };
   /* 绑定按钮各源文案不同：B 站绑的是「登录态（换清晰度）」，网盘绑的是夸克账号（换播放权）。 */
   var SRC_BIND = { bili: '登录高清', magnet: '绑定网盘' };
   var SRC_MEM = {};                              // "<id>:<ep>" -> {ts, data, pend}
@@ -250,6 +252,7 @@
     var epNo = Math.max(1, Math.floor(Number(ep) || 1));
     var slot = box.querySelector('#dpPlayer') || box;
     var tk = (typeof authToken === 'function') ? authToken() : '';
+    if (typeof window.__extAbort === 'function') window.__extAbort();   // 作废上一轮在途的外部源探测
 
     function toQuark(why) {
       srcHint(box, why + ' · 使用网盘源');
@@ -286,13 +289,25 @@
       }
       /* ② build 期索引里的 UGC bvid（同步、零等待） */
       if (srcEmbedBili(box, id)) return;
-      /* ③ 匿名实时搜 UGC（盒子用匿名 buvid3，不碰任何用户绑定） */
-      srcHint(box, '正在 B 站搜索「' + title + '」…');
-      biliFindBvid(title).then(function (bv) {
-        if (bv && srcEmbedBvid(box, bv)) return;
-        toYoutube('B 站未找到');
-      }, function () { toYoutube('B 站搜索失败'); });
+      /* ③ 外部采集源（免登录 1080p 直连）：**插在 B 站匿名搜之前**。
+         匿名搜没有片名校验，实测「金牌得主 第二季」被配成花滑 cos 视频；
+         采集源在盒子侧做过片名+季号严格匹配，命中率也更高。 */
+      extStep(function (why) {
+        /* ④ 匿名实时搜 UGC（盒子用匿名 buvid3，不碰任何用户绑定） */
+        srcHint(box, '正在 B 站搜索「' + title + '」…');
+        biliFindBvid(title).then(function (bv) {
+          if (bv && srcEmbedBvid(box, bv)) return;
+          toYoutube(why + ' · B 站未找到');
+        }, function () { toYoutube(why + ' · B 站搜索失败'); });
+      });
     });
+    }
+
+    /* 外部源这一站：找到就播（79 内部还会按线路再降级），找不到把原因交给下一站 */
+    function extStep(next) {
+      if (typeof extStart !== 'function') { next('无外部源'); return; }
+      srcHint(box, '正在匹配外部播放源…');
+      extStart(box, id, title, epNo, function (why) { next(why || '外部源未收录'); });
     }
 
     if (tk && typeof biliPlayEp === 'function') {
@@ -327,9 +342,17 @@
     rec.pend = Promise.all([
       Promise.resolve(ytEps ? { kind: 'has', eps: ytEps } : { kind: 'none' }),
       srcProbeBili(tk, title),
-      srcProbeMagnet(title, id, ep)
+      srcProbeMagnet(title, id, ep),
+      /* 外部源：失败也返回 {data:null}，由 79 的 extProbeText 判「检测失败」 */
+      (typeof extFind === 'function')
+        ? (function () {
+            var m = typeof extMeta === 'function' ? extMeta(id) : { year: 0, orig: '' };
+            return extFind(title, m.year, m.orig, !!force).then(function (d) { return { data: d }; },
+              function () { return { data: null }; });
+          })()
+        : Promise.resolve({ data: null })
     ]).then(function (arr) {
-      var data = { yt: arr[0], bili: arr[1], magnet: arr[2] };
+      var data = { yt: arr[0], bili: arr[1], magnet: arr[2], ext: arr[3] };
       if (SRC_MEM[key] === rec) { rec.data = data; rec.ts = Date.now(); }   // 代次没被重探顶掉才落缓存
       return data;
     });
@@ -438,6 +461,21 @@
        所以文案是「免登录可看」，右侧给「登录高清」——绑定是升级，不是门槛。 */
     else if (b.kind === 'unbound') srcSetRow(list, 'bili', 'B 站 · 免登录可看', { on: true, bind: true });
     else srcSetRow(list, 'bili', 'B 站 · 检测失败 · 点此重试', { bad: true, retry: true });
+
+    /* 外部线路：采集站聚合（79）。有本集资源才点亮，点了按盒子给的优先级自动播 + 失败自动换源。 */
+    var x = data && data.ext;
+    if (!data) srcSetRow(list, 'ext', '外部线路 · 检测中…');
+    else {
+      var xp = (typeof extProbeText === 'function') ? extProbeText(x && x.data, epNo)
+                                                    : { kind: 'error', why: '' };
+      if (xp.kind === 'has') {
+        srcSetRow(list, 'ext', '外部线路 · ' + xp.n + ' 个源可播（第 ' + epNo + ' 集）', { on: true });
+      } else if (xp.kind === 'error') {
+        srcSetRow(list, 'ext', '外部线路 · 检测失败 · 点此重试', { bad: true, retry: true });
+      } else {
+        srcSetRow(list, 'ext', '外部线路 · 本集无资源');
+      }
+    }
 
     /* 网盘行常显「绑定」：未登录→弹登录；已登录→带 token 打开夸克绑定页（网页+TV 两步）。
        之前夸克绑定入口只在「我的」页，用户反馈「根本没地方绑」。 */
@@ -709,6 +747,13 @@
     if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
     if (typeof window.__qpAbort === 'function') window.__qpAbort();
     if (typeof window.__biliAbort === 'function') window.__biliAbort();
+    if (typeof window.__extAbort === 'function') window.__extAbort();
+
+    if (key === 'ext') {                          // 外部线路：按盒子给的优先级自动播 + 线路内自动降级
+      if (typeof extStart !== 'function') return;
+      extStart(box, id, title, epNo, function (why) { srcHint(box, why || '外部源未收录'); });
+      return;
+    }
 
     if (key === 'yt') {
       var eps = srcYtEps(id);
