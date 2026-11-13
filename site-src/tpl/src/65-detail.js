@@ -483,6 +483,9 @@
       }
     }
 
+    /* 空闲时预加载 hls.js：点「开始观看」到出画面主要慢在这一步（组件 400KB） */
+    setTimeout(function () { if (typeof window.__hlsPreload === 'function') window.__hlsPreload(); }, 1200);
+
     /* 播放：与弹窗同一入口（75-quarkplay.js 的 openQuarkPlay(m, id, title)）。
        m 是挂载容器（76-qplayer.js 把 .trailer.qplayer append 到它上面）：整页详情传 16:9 的
        #dpPlayer 槽，播放器才落在框里；槽缺失（壳被换过）才回退到 #modal。

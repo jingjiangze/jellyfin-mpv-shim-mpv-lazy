@@ -221,6 +221,10 @@
       }
     }
 
+    /* 预加载 hls.js（详情页空闲时调一次）：桌面 Chrome 没有原生 HLS，
+       首次点播放要等约 400KB 组件下载，实测占「点击→出画面」的一半以上。 */
+    window.__hlsPreload = function () { loadHls(function () { }); };
+
     return {
       /* 打开播放器骨架：ctx = {m, id, title, ep, sources, startAt, onProgress, onPickEp, onNext, onEnded, onRetry, dm} */
       open: function (ctx) {
