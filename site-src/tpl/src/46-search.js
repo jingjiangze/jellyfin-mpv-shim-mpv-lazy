@@ -60,10 +60,14 @@
       +     '<div id="srchPlay"><div class="dp-player" id="dpPlayer"></div></div>'
       +   '</div>'
       +   '<div class="dp-srcs"><div class="qp-line-list" id="extList"></div></div>'
-      + '</section>';
+      + '</section>'
+      + '<section class="sect"><div class="sec-h"><h2>网盘资源</h2>'
+      +   '<span class="sec-sub" id="panSub">夸克网盘 · 全网分享</span></div>'
+      +   '<div class="qp-line-list" id="panList"></div></section>';
 
     var grid = $('#locGrid'), locSub = $('#locSub');
     var list = $('#extList'), extSub = $('#extSub');
+    var panList = $('#panList'), panSub = $('#panSub');
     var qEl = $('#q');
     var GROUPS = [], GEN = 0;
 
@@ -87,6 +91,24 @@
           : '没找到';
         list.innerHTML = GROUPS.length ? GROUPS.map(srchRow).join('')
           : '<p class="plot">外部源没有匹配的片名。换个说法（如只输入主标题）再试试。</p>';
+      });
+    }
+
+    /* 夸克网盘资源：与「全网源」并行查（盒子 10 分钟缓存），转存直接播 */
+    function runPan(v) {
+      if (!panList) return;
+      if (!v || String(v).replace(/s+/g, '').length < 2) { panList.innerHTML = ''; return; }
+      panSub.textContent = '正在搜索夸克分享…';
+      panList.innerHTML = '';
+      window.__panSearch(window.__panKw(v)).then(function (d) {
+        var items = (d && d.items) || [];
+        panSub.textContent = d && d.err ? ('搜索失败（' + d.err + '）') : (items.length + ' 条夸克分享');
+        panList.innerHTML = window.__panListHtml(items);
+        window.__panBind(panList, items, $('#srchPlayWrap') || $('#srchPlay'), 'search', v, function () {
+          var wrap = $('#srchPlayWrap');
+          if (wrap) wrap.hidden = false;
+          try { wrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { }
+        });
       });
     }
 
@@ -122,6 +144,7 @@
         try { history.replaceState(null, '', '/search' + (v ? '?q=' + encodeURIComponent(v) : '')); } catch (e) { }
         srchLocal(v, grid, locSub);
         runExt(v);
+        runPan(v);
       };
       qEl.oninput = function () {
         var v = String(qEl.value || '').trim();
@@ -132,5 +155,5 @@
 
     /* 首屏：URL 带 q 直接跑 */
     srchLocal(q0, grid, locSub);
-    if (q0) runExt(q0);
+    if (q0) { runExt(q0); runPan(q0); }
   }

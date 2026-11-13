@@ -377,6 +377,7 @@
       +     '</div>'
       /* 播放状态行（原来写在播放源面板的 sec-sub 里；面板已删，改挂这里） */
       +     '<p class="dp-stat" id="dpStat"></p>'
+      +     panSectionHtml()
       /* 预告（YouTube 官方源，ex[2] 有才出）：点按钮才注 iframe，页面加载不带第三方 JS */
       +     (ex[2]
             ? '<section class="sect" id="dp-trailer"><div class="sec-h"><h2>预告</h2></div>'
@@ -419,6 +420,8 @@
     m.setAttribute('data-bgm', String(id));
     document.body.removeAttribute('data-ext-detail');   // 回到番剧详情：磁力层恢复挂载
     document.title = title + ' · 番组计划';
+    /* 网盘资源区块：默认收起，点「查找」才发请求（服务器不预取） */
+    panMount(m, id, title);
 
     /* 简介：与弹窗同一套处理 —— 原文分段残留的空行在 pre-wrap 下会撑出大块空白 */
     var plot = m.querySelector('#plot');

@@ -3964,3 +3964,24 @@ html { scroll-behavior: smooth; }
 
 /* 播放状态行（详情页播放器下方；原来写在已删除的播放源面板里） */
 .dp-stat { margin: 6px 0 14px; min-height: 1.2em; font-size: var(--fs-sm); color: var(--dim); }
+
+/* ================================================================ 星期条展开/收起 + 网盘资源（2026-11-14）
+   星期条默认只显示当前选中的那天，点「展开全部 7 天」变回一行 7 天（B 站/A 站时间表的做法）。 */
+.wk-tabs.is-open { flex-wrap: wrap; }
+.wk-more {
+  height: var(--ctl-h); padding: 0 var(--s3); border: 1px dashed var(--line);
+  border-radius: var(--r-xs); background: transparent; color: var(--dim);
+  font-size: var(--fs-xs); cursor: pointer; white-space: nowrap;
+}
+.wk-more:hover { color: var(--accent); border-color: var(--accent-line); }
+
+/* 详情页「网盘资源」：默认收起（列表 hidden），点开才是列表 */
+.dp-pan .qp-line-list { display: flex; flex-direction: column; gap: 6px; }
+.dp-pan .qp-line-row { display: flex; align-items: center; gap: 8px; }
+.dp-pan .qp-line { flex: 1 1 auto; min-width: 0; height: 38px; text-align: left; }
+.dp-pan .qp-line-row .btn { flex: 0 0 auto; height: 38px; }
+.pan-acts { margin-top: var(--s2); }
+@media (max-width: 760px) {
+  .dp-pan .qp-line-row { flex-wrap: wrap; }
+  .dp-pan .qp-line { flex: 1 1 100%; }
+}

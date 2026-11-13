@@ -1,5 +1,6 @@
 /* ---------------- 首页（照 ani.gamer.com.tw：无筛选条，区块按当天/当季自动出） ---------------- */
-var HOME = { y: 0, q: 0, wd: 0 };   // wd: 0=跟随今天，1-7=用户手选星期
+var HOME = { y: 0, q: 0, wd: 0, wkOpen: 0 };   // wd: 0=跟随今天；wkOpen: 星期条是否展开
+try { HOME.wkOpen = localStorage.getItem('anime_wk_open') === '1' ? 1 : 0; } catch (e) { HOME.wkOpen = 0; }
 var QS = [1, 2, 3, 4];
 
 function seasonOf(m) { return m ? Math.ceil(m / 3) : 0; }
@@ -31,15 +32,23 @@ function todayRows() {
 
 /* 星期 tab（照 gamer 新番表的文本 tab，不是胶囊）：周一…周日 + 当天部数。
    首页原来只出「今天」那一列，周一到周五的番没有入口。 */
+/* 星期条（2026-11-14 改成可展开）：
+   收起 = 只显示当前选中的那天 + 「展开全部 7 天」；展开 = 原来的一行 7 天。
+   状态存 localStorage，换页回来保持。B 站/A 站的番剧时间表也是「先给一天、再展开」。 */
 function weekTabsHtml() {
   var wd = wdPick();
   var cnt = {};
   courRows().forEach(function (r) { if (r[6]) cnt[r[6]] = (cnt[r[6]] || 0) + 1; });
-  return '<div class="wk-tabs">' + WD.map(function (d, i) {
+  var open = !!HOME.wkOpen;
+  var out = WD.map(function (d, i) {
     var n = i + 1;
     return '<button class="wk-tab' + (wd === n ? ' on' : '') + '" type="button" data-wd="' + n + '">'
       + d + '<i>' + (cnt[n] || 0) + '</i></button>';
-  }).join('') + '</div>';
+  });
+  if (!open) out = [out[wd - 1] || out[0]];
+  return '<div class="wk-tabs' + (open ? ' is-open' : '') + '">' + out.join('')
+    + '<button class="wk-more" type="button" data-wk="toggle">'
+    + (open ? '收起 ▴' : '展开全部 7 天 ▾') + '</button></div>';
 }
 
 /* 本季新番：当前年 + 最新季度全部，按评分排 */
@@ -320,6 +329,14 @@ function renderHome() {
       renderHome();
     };
   });
+  /* 展开/收起整周（状态持久化；只重画首页，<100ms） */
+  main.querySelectorAll('[data-wk]').forEach(function (b) {
+    b.onclick = function () {
+      HOME.wkOpen = HOME.wkOpen ? 0 : 1;
+      try { localStorage.setItem('anime_wk_open', HOME.wkOpen ? '1' : '0'); } catch (e2) { }
+      renderHome();
+    };
+  });
 
   /* 卡片点击由文件底部的全局事件委托处理，这里不需要再绑定 */
 }
@@ -336,7 +353,8 @@ function homeDefaults() {
   /* 默认落在「最新季度」；没有月份信息的则不限季度 */
   var q = 0;
   inY.forEach(function (r) { var s = seasonOf(r[5]); if (s > q) q = s; });
-  HOME = { y: y, q: q };
+  /* 保留用户态：wkOpen（星期条展开）、wd（手选星期）不能被「初始化」冲掉 */
+  HOME = { y: y, q: q, wd: HOME.wd || 0, wkOpen: HOME.wkOpen || 0 };
 }
 
 /* 首页 / 排行榜共用的搜索绑定：输入即筛番剧，清空后回到调用方指定的页面。
