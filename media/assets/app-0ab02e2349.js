@@ -2947,7 +2947,9 @@ function panRow(it, i) {
 var meta = [it.source, (it.time || '').slice(0, 10)].filter(Boolean).join(' · ');
 return '<div class="qp-line-row pan-row" data-pan="' + i + '">'
 + '<button class="qp-line" type="button" data-act="open" title="在夸克打开">'
-+ esc(it.title || it.url) + (meta ? '（' + esc(meta) + '）' : '') + '</button>'
++ esc(it.title || it.url)
++ (it.pass ? '（提取码 ' + esc(it.pass) + '）' : '')
++ (meta ? '（' + esc(meta) + '）' : '') + '</button>'
 + '<button class="btn" type="button" data-act="copy">复制链接</button>'
 + '<button class="btn pri" type="button" data-act="save">转存并播放</button>'
 + '</div>';
@@ -2994,7 +2996,7 @@ document.body.appendChild(ta); ta.select(); document.execCommand('copy');
 document.body.removeChild(ta);
 } catch (e2) { }
 }
-function panSave(it, box, sid, title) {
+function panSave(it, box, sid, title, retried) {
 if (typeof authToken !== 'function' || !authToken()) {
 srcHint(box, '先登录，再在「我的」页绑定夸克网盘');
 if (typeof openAuthPanel === 'function') openAuthPanel('email');
@@ -3005,13 +3007,17 @@ panReq('/tvplay/share/add', 'POST', { url: panUrlOf(it), sid: String(sid || 'qua
 .then(function (r) {
 var j = (r && r.j) || {};
 if (r && r.status === 401) { srcHint(box, '登录状态失效，重新登录一次'); if (typeof openAuthPanel === 'function') openAuthPanel('email'); return; }
-if (j.state === 'need_rebind' || (r && r.status === 409)) { srcHint(box, '还没绑定夸克网盘 · 去「我的」页扫码'); return; }
+if (j.state === 'need_rebind' || (r && r.status === 409)) {
+srcHint(box, '还没绑定夸克网盘 · 扫码后自动继续转存');
+panAwaitBind(function () { panSave(it, box, sid, title, true); });
+return;
+}
 if (j.state === 'invalid_share') { srcHint(box, '这条分享已失效，换一条试试'); return; }
 if (!r || !r.ok || j.state !== 'queued' || !j.task_id) { srcHint(box, '转存失败：' + (j.state || (r && r.status) || 'error')); return; }
 panPoll(j.task_id, box, it, title, 0);
 }, function () { srcHint(box, '转存请求失败，稍后再试'); });
 }
-function panPoll(taskId, box, it, title, n) {
+function panPoll(taskId, box, it, title, n, retried) {
 if (n > 40) { srcHint(box, '转存超时（网盘可能还在下载），稍后到「我的」页看'); return; }
 var wait = n ? 3000 : 1200;
 setTimeout(function () {
@@ -3019,7 +3025,11 @@ panReq('/tvplay/share/task?id=' + encodeURIComponent(taskId), 'GET', null).then(
 var j = (r && r.j) || {};
 if (j.state === 'pending') { srcHint(box, '转存中… 第 ' + (n + 1) + ' 次查询'); panPoll(taskId, box, it, title, n + 1); return; }
 if (j.state === 'failed') { srcHint(box, '转存失败（分享可能已失效或网盘限流）'); return; }
-if (j.state === 'need_rebind') { srcHint(box, '夸克绑定失效 · 去「我的」页重新扫码'); return; }
+if (j.state === 'need_rebind') {
+srcHint(box, '夸克绑定失效 · 扫码后自动继续');
+panAwaitBind(function () { panPoll(taskId, box, it, title, n); });
+return;
+}
 if (j.state === 'no_space') { srcHint(box, '夸克网盘空间不足'); return; }
 if (j.state === 'invalid_share') { srcHint(box, '这条分享已失效'); return; }
 var files = (j.files || []).filter(function (f) { return f && f.fid; });
@@ -3053,6 +3063,21 @@ if (j.state === 'need_rebind') { QPlayer.state('rebind'); return; }
 if (j.state === 'unauthorized') { QPlayer.state('login'); return; }
 QPlayer.state('error', { msg: '播放地址获取失败' });
 }, function () { QPlayer.state('error', { msg: '播放地址获取失败' }); });
+}
+function panAwaitBind(cb) {
+if (typeof openQuarkBindPanel !== 'function') { return; }
+var done = false;
+function once(ev) {
+if (String(ev.origin).indexOf('120.48.56.189') < 0) return;
+var d = ev.data || {};
+if (!d || d.type !== 'quark-bound' || !d.ok) return;
+done = true;
+window.removeEventListener('message', once);
+setTimeout(cb, 800);
+}
+window.addEventListener('message', once);
+setTimeout(function () { if (!done) window.removeEventListener('message', once); }, 180000);
+openQuarkBindPanel();
 }
 function panReq(path, method, body) {
 var tk = (typeof authToken === 'function' && authToken()) || '';
