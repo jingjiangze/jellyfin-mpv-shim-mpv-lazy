@@ -42,6 +42,15 @@
     return o.pend;
   }
 
+  /* 分享链接带上提取码：PanSou 的 pwd 是单独字段，quark_share.parse_share_url 认 ?pwd= */
+  function panUrlOf(it) {
+    var u = String(it.url || '');
+    if (it.pass && !/[?&]pwd=/i.test(u)) {
+      u += (u.indexOf('?') >= 0 ? '&' : '?') + 'pwd=' + encodeURIComponent(it.pass);
+    }
+    return u;
+  }
+
   /* 单行：标题 + 来源/时间 + 复制 + 转存并播放 */
   function panRow(it, i) {
     var meta = [it.source, (it.time || '').slice(0, 10)].filter(Boolean).join(' · ');
@@ -71,11 +80,11 @@
       if (!it) return;
       var act = t.getAttribute('data-act');
       if (act === 'open') {
-        try { window.open(it.url, '_blank', 'noopener'); } catch (e) { location.href = it.url; }
+        try { window.open(panUrlOf(it), '_blank', 'noopener'); } catch (e) { location.href = panUrlOf(it); }
         return;
       }
       if (act === 'copy') {
-        panCopy(it.url + (it.pass ? (' 提取码 ' + it.pass) : ''));
+        panCopy(panUrlOf(it) + (it.pass ? (' 提取码 ' + it.pass) : ''));
         srcHint(box, '链接已复制');
         return;
       }
@@ -107,7 +116,7 @@
       return;
     }
     srcHint(box, '正在转存到你的夸克网盘…');
-    panReq('/tvplay/share/add', 'POST', { url: it.url, sid: String(sid || 'quark'), title: String(title || '') })
+    panReq('/tvplay/share/add', 'POST', { url: panUrlOf(it), sid: String(sid || 'quark'), title: String(title || '') })
       .then(function (r) {
         var j = (r && r.j) || {};
         if (r && r.status === 401) { srcHint(box, '登录状态失效，重新登录一次'); if (typeof openAuthPanel === 'function') openAuthPanel('email'); return; }
