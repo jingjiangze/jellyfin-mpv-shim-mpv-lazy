@@ -197,6 +197,13 @@
       extStart(box, id, title, epNo, function (why) { next(why || '外部源未收录'); });
     }
 
+    /* 规则源（HTML 在浏览器里解析）：采集站全挂时的补充线路 */
+    function toRule(next) {
+      if (typeof window.__rulePlay !== 'function') { next(''); return; }
+      srcHint(box, '正在尝试规则源…');
+      window.__rulePlay(box, id, title, epNo, function (w) { next(w || '规则源未命中'); });
+    }
+
     function anonChain() {
       srcHint(box, '正在匹配 B 站官方番剧…');
       srcPgc(title).then(function (p) {
@@ -207,12 +214,14 @@
         }
         if (srcEmbedBili(box, id)) return;
         toExt(function (why) {
+        toRule(function (why2) {
           srcHint(box, '正在 B 站搜索「' + title + '」…');
           biliFindBvid(title).then(function (bv) {
             if (bv && srcEmbedBvid(box, bv)) return;
             toYoutube(why + ' · B 站未找到');
           }, function () { toYoutube(why + ' · B 站搜索失败'); });
         });
+      });
       });
     }
 
@@ -264,6 +273,10 @@
     } else {
       rows.push(['ext:auto', '外部线路（还没探测，选它自动匹配）']);
     }
+    var rules = (typeof window.__ruleSources === 'function') ? window.__ruleSources() : [];
+    for (var r = 0; r < rules.length; r++) {
+      rows.push(['rule:' + rules[r].id, '规则源 · ' + rules[r].name]);
+    }
     return rows.map(function (r) {
       return '<button class="line-item" type="button" data-line="' + esc(r[0]) + '">' + esc(r[1]) + '</button>';
     }).join('');
@@ -313,6 +326,14 @@
     if (line === 'quark') {
       srcLineSet(box, '夸克网盘');
       if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+      return;
+    }
+    if (line.indexOf('rule:') === 0) {
+      if (typeof window.__rulePlay === 'function') {
+        window.__rulePlay(box, id, title, ep, null, line.slice(5));
+      } else {
+        srcHint(box, '规则源不可用');
+      }
       return;
     }
     if (line.indexOf('ext:') === 0) {
