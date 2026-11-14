@@ -444,6 +444,12 @@ main {
   margin-top: var(--s3);
 }
 
+/* 标题后的计数（B 站口径：贴着标题的小号数字，不占右侧「更多」的位置） */
+.sec-n {
+  margin-left: 8px; font-style: normal; font-weight: 400;
+  font-size: 13px; color: var(--dim2); vertical-align: 2px;
+}
+
 /* 标题右侧的计数 / 副标题 */
 .sec-h .sec-sub, .bhead span, .mhead span {
   font-size: 16px;

@@ -140,8 +140,9 @@ function topRows(n) {
    ranked=true 时卡片带名次件（热门排行用；其余区块用普通卡）。 */
 function block(title, list, moreHtml, gridClass, ranked) {
   if (!list || !list.length) return '';
-  return '<section class="block"><div class="sec-h"><h2>' + title + '</h2><span class="sec-sub">'
-    + list.length + ' 部 ' + (moreHtml || '') + '</span></div>'
+  return '<section class="block"><div class="sec-h"><h2>' + title
+    + '<em class="sec-n">' + list.length + '</em></h2><span class="sec-sub">'
+    + (moreHtml || '') + '</span></div>'
     + '<div class="grid' + (gridClass ? ' ' + gridClass : '') + '">'
     + list.map(function (r, i) {
       return animeCard(r, ranked ? { showYear: 0, rank: i + 1 } : { showYear: 0 });
