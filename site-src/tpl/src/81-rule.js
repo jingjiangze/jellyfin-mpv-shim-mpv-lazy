@@ -55,7 +55,8 @@
   }
 
   var RULE_DETAILISH = /(\/detail|\/voddetail|\/subject|\/anime\/|\/media|\/show\/|\/video\/)/i;
-  var RULE_PLAYISH = /(\/play\/|\/vodplay|\/bgmplay|\/watch|vodplay|\/v\/|\/index\.php\/vod\/play|\/episode)/i;
+  /* 播放链接：/play/ /vodplay /bgmplay /watch /p/<id>-<line>-<ep> 或任意 …-<line>-<ep>.html */
+  var RULE_PLAYISH = /(\/play\/|\/vodplay|\/bgmplay|\/watch|\/p\/\d+-\d+|\/index\.php\/vod\/play|\/episode|-\d+-\d+\.html)/i;
 
   /* 把 href 解析成绝对地址（同源才算，外链留给 iframe） */
   function ruleAbs(base, href) {
@@ -63,10 +64,38 @@
   }
 
   /* 搜索：返回 [{id, name, href}]；按片名归一化挑最像的一条 */
+  /* 关键词变体：全角括号/叹号这类字符常让站内搜索直接 0 结果 */
+  function ruleKwVariants(kw) {
+    var k = String(kw || '').trim();
+    var out = [k];
+    var k2 = k.replace(/[【】\[\]（）()《》「」『』!！?？:：·・,，。]/g, '').replace(/\s+/g, ' ').trim();
+    if (k2 && k2 !== k) out.push(k2);
+    return out;
+  }
+
   function ruleSearch(src, kw) {
-    var u = src.base + src.search.replace('{kw}', encodeURIComponent(String(kw || '').trim()));
+    var variants = ruleKwVariants(kw);
     return ruleCache(src.id + '|s|' + kw, function () {
-      return ruleGet(u).then(function (html) {
+      var i = 0;
+      function step() {
+        if (i >= variants.length) return Promise.resolve([]);
+        var v = variants[i++];
+        var u = src.base + src.search.replace('{kw}', encodeURIComponent(v));
+        return ruleGet(u).then(function (html) {
+          var got = ruleParseSearch(src, html, v);
+          /* 有结果就用；没有就换下一个关键词变体（最多 2 次） */
+          if (got.length || i >= variants.length) return got;
+          return step();
+        }, function () {
+          if (i >= variants.length) throw new Error('search failed');
+          return step();
+        });
+      }
+      return step();
+    });
+  }
+
+  function ruleParseSearch(src, html, kw) {
         var doc = ruleDoc(html), out = [], seen = {};
         if (!doc) return out;
         var as = doc.querySelectorAll('a[href]');
@@ -95,8 +124,6 @@
           out.push({ id: abs, name: name, href: abs });
         }
         return out;
-      });
-    });
   }
 
   /* 详情：返回 [{line, ep, href}]，取集数最多的那条线路 */
@@ -121,6 +148,13 @@
             line = nums[nums.length - 2];
           }
           if (!(ep > 0)) ep = 1;
+          /* 单段 id 的站点（如 DM84 的 /v/5963.html）：集号在链接文字里 */
+          if (nums.length < 2) {
+            var txt = String(as[i].textContent || '');
+            var em = /第\s*(\d{1,4})\s*[集话話回期]/.exec(txt);
+            if (!em) em = /^\s*(\d{1,4})\s*$/.exec(txt);
+            if (em && Number(em[1]) > 0) ep = Number(em[1]);
+          }
           if (!lines[line]) lines[line] = [];
           lines[line].push({ ep: ep, href: abs });
         }
@@ -216,5 +250,42 @@
     step();
   }
 
+  /* 验收用：只解析不播放，逐源返回「有没有匹配 / 有多少集 / 这一集的地址」 */
+  function ruleResolveAll(title, ep) {
+    var out = [], kw = panKw(title), epNo = Math.max(1, Number(ep) || 1);
+    return RULE_SRC.reduce(function (chain, src) {
+      return chain.then(function () {
+        return ruleSearch(src, kw).then(function (list) {
+          var pick = rulePick(list, title);
+          if (!pick) { out.push({ id: src.id, ok: false, why: 'no-match', cands: list.length }); return; }
+          return ruleEps(src, pick.href).then(function (eps) {
+            var hit = null;
+            for (var i = 0; i < eps.length; i++) if (eps[i].ep === epNo) { hit = eps[i]; break; }
+            out.push({ id: src.id, ok: !!hit, matched: pick.name, nEps: eps.length,
+                       epHref: hit ? hit.href : '', mode: src.mode });
+          });
+        }).catch(function (e) { out.push({ id: src.id, ok: false, why: String((e && e.message) || e) }); });
+      });
+    }, Promise.resolve()).then(function () { return out; });
+  }
+
+  /* 全网搜索页用：逐源搜关键词，返回每个源的前 3 条候选（不播放） */
+  function ruleSearchAll(kw, perSrc) {
+    var out = [], n = perSrc || 3;
+    return RULE_SRC.reduce(function (chain, src) {
+      return chain.then(function () {
+        return ruleSearch(src, kw).then(function (list) {
+          if (!list.length) return;
+          out.push({
+            id: src.id, name: src.name, mode: src.mode,
+            items: list.slice(0, n).map(function (x) { return { name: x.name, href: x.href }; })
+          });
+        }).catch(function () { });
+      });
+    }, Promise.resolve()).then(function () { return out; });
+  }
+
   window.__ruleSources = function () { return RULE_SRC.slice(); };
+  window.__ruleSearchAll = ruleSearchAll;
+  window.__ruleResolveAll = ruleResolveAll;
   window.__rulePlay = rulePlay;
