@@ -760,10 +760,10 @@ box.innerHTML = '<div class="mnote">' + esc(msg)
 pfBiliWire();
 }
 function pfBiliWire() {
-var q = pfNode('pfbind-qr');                    // 未绑定：主按钮走扫码
-if (q) q.onclick = function () { pfBiliQrStart(); };
+var q = pfNode('pfbind-qr');                    // 未绑定：主按钮 → 站内扫码弹窗（盒子页）
+if (q) q.onclick = function () { if (typeof openBiliBindPanel === 'function') openBiliBindPanel(); };
 var rq = pfNode('pfreque');                     // 已绑定：重新扫码覆盖
-if (rq) rq.onclick = function () { pfBiliQrStart(); };
+if (rq) rq.onclick = function () { if (typeof openBiliBindPanel === 'function') openBiliBindPanel(); };
 var so = pfNode('pfsess-open');                 // 兜底：展开/收起粘贴框
 if (so) so.onclick = function () { pfBiliTogglePaste(); };
 var b = pfNode('pfbind');
@@ -949,6 +949,7 @@ document.addEventListener('visibilitychange', function () {
 if (document.visibilityState === 'hidden') { pfBiliQrPause(); return; }
 if (!QR_TIMER && QR_KEY && QR_TRIES < BILI_QR_MAX && pfNode('pfqrimg')) pfBiliQrPoll();
 });
+window.__biliBound = function () { BILI_ST = null; loadPfBili(true); };
 function loadPfBili(force) {
 var box = pfNode('pfbili');
 if (!box) return;
@@ -3426,6 +3427,46 @@ if (!mine.length) { srcHint(box, '这条线路还没有匹配结果'); return; }
 srcLineSet(box, '外部 · ' + (mine[0].name || pid));
 if (typeof extPlayEp === 'function') extPlayEp(box, id, title, ep, mine);
 }
+}
+function openBiliBindPanel() {
+if (document.getElementById('bbmask')) return;
+if (typeof authToken === 'function' && !authToken()) {
+if (typeof openAuthPanel === 'function') openAuthPanel('email');
+return;
+}
+var tk = (typeof authToken === 'function' && authToken()) || '';
+var mask = document.createElement('div');
+mask.className = 'authmask qbmask';
+mask.id = 'bbmask';
+mask.innerHTML = '<div class="authcard qbcard" role="dialog" aria-modal="true">'
++ '<button class="authx" type="button" aria-label="关闭">×</button>'
++ '<h3 class="qbtitle">绑定 B 站账号</h3>'
++ '<p class="qbhint">用 B 站 App 扫码（也可以粘贴 SESSDATA）。绑定后本页播放走你的账号：1080p / 大会员集。</p>'
++ '<div class="qbframe"><iframe src="' + esc(SRC_BASE + '/bili/qrpage?t=' + encodeURIComponent(tk) + '&embed=1') + '"'
++ ' referrerpolicy="origin-when-cross-origin" allow="clipboard-write"></iframe></div>'
++ '</div>';
+document.body.appendChild(mask);
+function cleanup() {
+if (mask.parentNode) mask.parentNode.removeChild(mask);
+window.removeEventListener('message', onMsg);
+document.removeEventListener('keydown', onKey);
+}
+function onMsg(ev) {
+if (String(ev.origin).indexOf('120.48.56.189') < 0) return;
+var d = ev.data || {};
+if (d && d.type === 'bili-bound' && d.ok) {
+cleanup();
+if (typeof window.__biliBound === 'function') window.__biliBound(d.uname || '');
+srcHint(document, 'B 站已绑定' + (d.uname ? '：' + d.uname : ''));
+}
+}
+function onKey(ev) { if (ev.key === 'Escape') cleanup(); }
+mask.onclick = function (ev) {
+var t = ev.target;
+if (t === mask || (t && String(t.className || '').indexOf('authx') >= 0)) cleanup();
+};
+window.addEventListener('message', onMsg);
+document.addEventListener('keydown', onKey);
 }
 window.__srcStart = srcStart;
 window.__srcLineBarHtml = srcLineBarHtml;
