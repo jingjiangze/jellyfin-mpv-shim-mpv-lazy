@@ -3249,7 +3249,7 @@ extStart(box, id, title, epNo, function (why) { next(why || '外部源未收录'
 function toRule(next) {
 if (typeof window.__rulePlay !== 'function') { next(''); return; }
 srcHint(box, '正在尝试规则源…');
-window.__rulePlay(box, id, title, epNo, function (w) { next(w || '规则源未命中'); });
+window.__rulePlay(box, id, title, epNo, function (w) { next(w || '规则源未命中'); }, null, 3);
 }
 function anonChain() {
 srcHint(box, '正在匹配 B 站官方番剧…');
@@ -3311,7 +3311,8 @@ rows.push(['ext:auto', '外部线路（还没探测，选它自动匹配）']);
 }
 var rules = (typeof window.__ruleSources === 'function') ? window.__ruleSources() : [];
 for (var r = 0; r < rules.length; r++) {
-rows.push(['rule:' + rules[r].id, '规则源 · ' + rules[r].name]);
+rows.push(['rule:' + rules[r].id,
+'规则源 · ' + rules[r].name + (rules[r].mode === 'iframe' ? '（站外播放器）' : '')]);
 }
 return rows.map(function (r) {
 return '<button class="line-item" type="button" data-line="' + esc(r[0]) + '">' + esc(r[1]) + '</button>';
@@ -4188,18 +4189,31 @@ acts.appendChild(b);
 }
 window.__biliPlay = biliPlayEp;
 var RULE_TTL = 10 * 60 * 1000;
-var RULE_MEM = {};              // 缓存：搜索/详情
+var RULE_MEM = {};              // 缓存：搜索 / 详情
 var RULE_SRC = [
-{ id: 'mxdm', name: 'MXdm', base: 'https://www.dcc3.com' }
+{ id: 'mxdm',    name: 'MXdm',    base: 'https://www.dcc3.com',     search: '/search/?wd={kw}',                         mode: 'm3u8' },
+{ id: '7sefun',  name: '7sefun',  base: 'https://www.7sefun.top',   search: '/vodsearch/-------------.html?wd={kw}',    mode: 'iframe' },
+{ id: 'akianime',name: 'akianime',base: 'https://www.akianime.cc',  search: '/bgmsearch/-------------.html?wd={kw}',    mode: 'iframe' },
+{ id: 'baimao',  name: '白毛动漫', base: 'https://www.baimaodm.com', search: '/s_all?ex=1&kw={kw}',                      mode: 'iframe' },
+{ id: 'dm84',    name: 'DM84',    base: 'https://dmbus.cc',         search: '/s----------.html?wd={kw}',                mode: 'iframe' }
 ];
+var RULE_CHAIN_MAX = 3;          // 自动链最多试几个
 function ruleGet(url) {
-return srcGet('/ext/page?u=' + encodeURIComponent(url), '').then(function (r) {
-var j = (r && r.j) || {};
-if (!r || !r.ok || !j.ok || !j.text) {
-throw new Error((j && j.error) || ('HTTP ' + (r && r.status)));
+var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 25000);
+return fetch(SRC_BASE + '/ext/page?u=' + encodeURIComponent(url), {
+method: 'GET', cache: 'no-store', signal: ctl ? ctl.signal : undefined
+}).then(function (r) {
+clearTimeout(timer);
+return r.text().then(function (t) {
+var j = null;
+try { j = JSON.parse(t); } catch (e) { j = null; }
+if (!r.ok || !j || !j.ok || !j.text) {
+throw new Error((j && j.error) || ('HTTP ' + r.status));
 }
 return String(j.text);
 });
+}, function () { clearTimeout(timer); throw new Error('network'); });
 }
 function ruleDoc(html) {
 try { return new DOMParser().parseFromString(html, 'text/html'); } catch (e) { return null; }
@@ -4212,22 +4226,40 @@ RULE_MEM[key] = { ts: Date.now(), data: data };
 return data;
 });
 }
+var RULE_DETAILISH = /(\/detail|\/voddetail|\/subject|\/anime\/|\/media|\/show\/|\/video\/)/i;
+var RULE_PLAYISH = /(\/play\/|\/vodplay|\/bgmplay|\/watch|vodplay|\/v\/|\/index\.php\/vod\/play|\/episode)/i;
+function ruleAbs(base, href) {
+try { return new URL(href, base).href; } catch (e) { return ''; }
+}
 function ruleSearch(src, kw) {
-var u = src.base + '/search/?wd=' + encodeURIComponent(String(kw || '').replace(/\s+/g, ' ').trim());
+var u = src.base + src.search.replace('{kw}', encodeURIComponent(String(kw || '').trim()));
 return ruleCache(src.id + '|s|' + kw, function () {
 return ruleGet(u).then(function (html) {
 var doc = ruleDoc(html), out = [], seen = {};
 if (!doc) return out;
-var as = doc.querySelectorAll('a[href*="/detail/"]');
+var as = doc.querySelectorAll('a[href]');
 for (var i = 0; i < as.length; i++) {
 var href = as[i].getAttribute('href') || '';
-var m = /\/detail\/(\d+)\/?/.exec(href);
-if (!m) continue;
+var abs = ruleAbs(src.base, href);
+if (!abs) continue;
 var name = String(as[i].textContent || '').replace(/\s+/g, ' ').trim();
-if (!name || /查看详情/.test(name)) continue;
-if (seen[m[1]]) continue;
-seen[m[1]] = 1;
-out.push({ id: m[1], name: name, href: src.base + '/detail/' + m[1] + '/' });
+if (!name) name = String(as[i].getAttribute('title') || '').trim();
+if (!name) {
+var im = as[i].querySelector ? as[i].querySelector('img') : null;
+if (im) name = String(im.getAttribute('alt') || '').trim();
+}
+if (!name && as[i].closest) {
+var par = as[i].closest('li,div,article,section');
+if (par) name = String(par.textContent || '').replace(/s+/g, ' ').trim().slice(0, 60);
+}
+if (!name || name.length < 2) continue;
+if (/查看详情|全部|更多|上一页|下一页|登录|注册/.test(name)) continue;
+var looksDetail = RULE_DETAILISH.test(abs);
+var looksText = extNorm(name).indexOf(extNorm(extBase(kw))) >= 0;
+if (!looksDetail && !looksText) continue;
+if (seen[abs]) continue;
+seen[abs] = 1;
+out.push({ id: abs, name: name, href: abs });
 }
 return out;
 });
@@ -4238,14 +4270,21 @@ return ruleCache(src.id + '|d|' + detailHref, function () {
 return ruleGet(detailHref).then(function (html) {
 var doc = ruleDoc(html), lines = {}, best = null, bestN = -1;
 if (!doc) return [];
-var as = doc.querySelectorAll('a[href*="/play/"]');
+var as = doc.querySelectorAll('a[href]');
 for (var i = 0; i < as.length; i++) {
 var href = as[i].getAttribute('href') || '';
-var m = /\/play\/(\d+)-(\d+)-(\d+)\/?/.exec(href);
-if (!m) continue;
-var line = m[2], ep = Number(m[3]);
+if (!RULE_PLAYISH.test(href)) continue;
+var abs = ruleAbs(src.base, href);
+if (!abs) continue;
+var nums = (href.match(/(\d+)/g) || []);
+var ep = 0, line = '0';
+if (nums.length >= 2) {
+ep = Number(nums[nums.length - 1]);
+line = nums[nums.length - 2];
+}
+if (!(ep > 0)) ep = 1;
 if (!lines[line]) lines[line] = [];
-lines[line].push({ ep: ep, href: src.base + href.replace(/^https?:\/\/[^/]+/, '') });
+lines[line].push({ ep: ep, href: abs });
 }
 for (var k in lines) {
 if (lines[k].length > bestN) { bestN = lines[k].length; best = lines[k]; }
@@ -4259,8 +4298,9 @@ return best;
 function ruleM3u8(src, playHref) {
 return ruleCache(src.id + '|p|' + playHref, function () {
 return ruleGet(playHref).then(function (html) {
-var m = /(https?:\/\/[^"'\\\s]+?\.m3u8[^"'\\\s]*)/i.exec(html);
-if (m) return m[1].replace(/\\\//g, '/');
+var h = html.replace(/\\\//g, '/');
+var m = /(https?:\/\/[^"'\\\s<>]+?\.m3u8[^"'\\\s<>]*)/i.exec(h);
+if (m) return m[1];
 throw new Error('no m3u8');
 });
 });
@@ -4279,15 +4319,10 @@ if (score > bestScore) { bestScore = score; best = list[i]; }
 }
 return best;
 }
-function rulePlay(box, id, title, ep, onFail, only) {
-var src = null;
-for (var i = 0; i < RULE_SRC.length; i++) {
-if (!only || RULE_SRC[i].id === only) { src = RULE_SRC[i]; break; }
-}
-if (!src) { if (onFail) onFail('无规则源'); return; }
+function rulePlayOne(src, box, id, title, ep) {
 var epNo = Math.max(1, Math.floor(Number(ep) || 1));
 srcHint(box, '规则源 · ' + src.name + ' · 搜索中…');
-ruleSearch(src, panKw(title)).then(function (list) {
+return ruleSearch(src, panKw(title)).then(function (list) {
 var pick = rulePick(list, title);
 if (!pick) throw new Error('not found');
 srcHint(box, '规则源 · ' + src.name + ' · 读取分集…');
@@ -4296,19 +4331,43 @@ if (!eps.length) throw new Error('no eps');
 var hit = null;
 for (var i = 0; i < eps.length; i++) if (eps[i].ep === epNo) { hit = eps[i]; break; }
 if (!hit) hit = eps[0];
+if (src.mode === 'iframe') {
+srcAbortOthers();
+srcPlayerSlot(box).innerHTML = srcFrame(hit.href, 'autoplay; fullscreen; picture-in-picture');
+srcHint(box, '规则源 · ' + src.name + ' · 第 ' + hit.ep + ' 集（站外播放器）');
+srcLineSet(box, '规则源 · ' + src.name);
+return true;
+}
 srcHint(box, '规则源 · ' + src.name + ' · 第 ' + hit.ep + ' 集…');
-return ruleM3u8(src, hit.href);
-});
-}).then(function (m3u8) {
+return ruleM3u8(src, hit.href).then(function (m3u8) {
 if (!window.QPlayer) throw new Error('no player');
 QPlayer.open({ m: box, id: id, title: title, ep: epNo, sources: [] });
 QPlayer.play(m3u8, '规则源 · ' + src.name, { hls: true });
 srcHint(box, '规则源 · ' + src.name + ' · 第 ' + epNo + ' 集');
 srcLineSet(box, '规则源 · ' + src.name);
-}).catch(function (e) {
-if (onFail) onFail('规则源 ' + src.name + ' 不可用（' + (e && e.message || 'error') + '）');
-else srcHint(box, '规则源 ' + src.name + ' 不可用');
+return true;
 });
+});
+});
+}
+function rulePlay(box, id, title, ep, onFail, onlyId, maxN) {
+var list = RULE_SRC.filter(function (s) { return !onlyId || s.id === onlyId; });
+if (!list.length) { if (onFail) onFail('无规则源'); return; }
+var cap = onlyId ? 1 : (maxN || list.length);
+var i = 0, errs = [];
+function step() {
+if (i >= Math.min(cap, list.length)) {
+if (onFail) onFail('规则源都不可用' + (errs.length ? ('（' + errs[0] + '）') : ''));
+return;
+}
+var src = list[i++];
+rulePlayOne(src, box, id, title, ep).catch(function (e) {
+errs.push(src.name + ':' + ((e && e.message) || 'error'));
+if (onlyId) srcHint(box, '规则源 ' + src.name + ' 不可用（' + ((e && e.message) || 'error') + '）');
+step();
+});
+}
+step();
 }
 window.__ruleSources = function () { return RULE_SRC.slice(); };
 window.__rulePlay = rulePlay;
