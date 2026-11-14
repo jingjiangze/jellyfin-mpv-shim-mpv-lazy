@@ -332,9 +332,9 @@ function expandBlock(title, all, moreHtml, key, opt) {
 opt = opt || {};
 var cap = opt.cap || 60;
 var open = !!HOME.open[key];
-var list = open ? all.slice(0, cap) : all.slice(0, 7);
+var list = open ? all.slice(0, cap) : all.slice(0, 6);
 var html = block(title, list, moreHtml, opt.gridClass, opt.ranked);
-if (!html || all.length <= 7) return html;
+if (!html || all.length <= 6) return html;
 html = html.replace('<section class="block"', '<section class="block" data-blk="' + key + '"');
 var n = Math.min(all.length, cap);
 var note = (open && all.length > cap)
@@ -535,7 +535,7 @@ return '<article class="card cont" data-id="' + id + '"><div class="pw">'
 + '<div class="sub2">看到第 ' + it.ep + ' 集' + (left ? ' · 剩 ' + left + ' 分钟' : '') + '</div></article>';
 }
 function contBlock() {
-var list = contList(7);
+var list = contList(6);
 if (!list.length) return '';
 return '<section class="block"><div class="sec-h"><h2>继续观看</h2>'
 + '<span class="sec-sub">' + list.length + ' 部 '
@@ -1239,9 +1239,13 @@ if (!panList) return;
 if (!v || String(v).replace(/s+/g, '').length < 2) { panList.innerHTML = ''; return; }
 panSub.textContent = '正在搜索夸克分享…';
 panList.innerHTML = '';
-window.__panSearch(window.__panKw(v)).then(function (d) {
+window.__panSearch(window.__panKw(v), false, function () {
+panSub.textContent = '正在搜索夸克分享…首次约 10–25 秒';
+}).then(function (d) {
 var items = (d && d.items) || [];
-panSub.textContent = d && d.err ? ('搜索失败（' + d.err + '）') : (items.length + ' 条夸克分享');
+panSub.textContent = d && d.err
+? (d.err === 'timeout' ? '搜索超时 · 回车重试' : ('搜索失败（' + d.err + '）'))
+: (items.length + ' 条夸克分享');
 panList.innerHTML = window.__panListHtml(items);
 window.__panBind(panList, items, $('#srchPlayWrap') || $('#srchPlay'), 'search', v, function () {
 var wrap = $('#srchPlayWrap');
@@ -1886,6 +1890,7 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b
 +       '<div class="mbody dp-eps" data-p="detail"></div>'
 +     '</div>'
 +     '<p class="dp-stat" id="dpStat"></p>'
++     srcLineBarHtml()
 +     panSectionHtml()
 +     '<nav class="mtabs dp-nav">'
 +       '<a class="mtab on" href="#dp-plot">简介</a>'
@@ -1927,6 +1932,7 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b
 m.setAttribute('data-bgm', String(id));
 document.body.removeAttribute('data-ext-detail');   // 回到番剧详情：磁力层恢复挂载
 document.title = title + ' · 番组计划';
+srcLineBind(m, id, title, curEp);
 panMount(m, id, title);
 var plot = m.querySelector('#plot');
 if (plot) {
@@ -2944,7 +2950,7 @@ return String(title || '')
 .replace(/\s+/g, ' ')
 .trim();
 }
-function panSearch(kw, force) {
+function panSearch(kw, force, onWait) {
 kw = String(kw || '').trim();
 if (kw.length < 2) return Promise.resolve({ items: [], err: 'short' });
 var rec = PAN_MEM[kw];
@@ -2953,15 +2959,40 @@ return rec.pend || Promise.resolve(rec.data);
 }
 var o = { ts: Date.now(), data: null, pend: null };
 PAN_MEM[kw] = o;
-o.pend = srcGet('/pans/search?kw=' + encodeURIComponent(kw) + '&n=20', '').then(function (r) {
+o.pend = new Promise(function (resolve) {
+var done = false, deadline = Date.now() + 90000, timer = 0;
+function finish(data) {
+if (done) return;
+done = true;
+if (timer) { clearTimeout(timer); timer = 0; }
+if (PAN_MEM[kw] === o) { o.data = data; o.ts = Date.now(); }
+resolve(data);
+}
+function poll() {
+panReq('/pans/result?kw=' + encodeURIComponent(kw) + '&n=20&_=' + Date.now(), 'GET', null)
+.then(function (r) {
 var j = (r && r.j) || {};
-var data = { items: (r && r.ok && j.ok) ? (j.items || []) : [], err: (r && r.ok && j.ok) ? '' : ('HTTP ' + (r && r.status)) };
-if (PAN_MEM[kw] === o) { o.data = data; o.ts = Date.now(); }
-return data;
+if (j.pending) {
+if (Date.now() > deadline) { finish({ items: [], err: 'timeout' }); return; }
+if (typeof onWait === 'function') onWait();
+timer = setTimeout(poll, 1500);
+return;
+}
+if (!r || !r.ok || !j.ok) { finish({ items: [], err: (j && j.error) || ('HTTP ' + (r && r.status)) }); return; }
+finish({ items: j.items || [], err: '' });
 }, function () {
-var data = { items: [], err: 'network' };
-if (PAN_MEM[kw] === o) { o.data = data; o.ts = Date.now(); }
-return data;
+if (Date.now() > deadline) { finish({ items: [], err: 'network' }); return; }
+timer = setTimeout(poll, 2000);
+});
+}
+panReq('/pans/search?kw=' + encodeURIComponent(kw) + '&n=20&_=' + Date.now(), 'GET', null)
+.then(function (r) {
+var j = (r && r.j) || {};
+if (j.ok && !j.pending) { finish({ items: j.items || [], err: '' }); return; }
+if (!j.ok) { finish({ items: [], err: j.error || ('HTTP ' + (r && r.status)) }); return; }
+if (typeof onWait === 'function') onWait();
+poll();
+}, function () { finish({ items: [], err: 'network' }); });
 });
 return o.pend;
 }
@@ -3112,7 +3143,7 @@ function panReq(path, method, body) {
 var tk = (typeof authToken === 'function' && authToken()) || '';
 var headers = { 'content-type': 'application/json' };
 if (tk) headers.authorization = 'Bearer ' + tk;
-var opt = { method: method || 'GET', headers: headers };
+var opt = { method: method || 'GET', headers: headers, cache: 'no-store' };
 if (body && opt.method !== 'GET') opt.body = JSON.stringify(body);
 var ctl = typeof AbortController === 'function' ? new AbortController() : null;
 var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 30000);
@@ -3142,7 +3173,16 @@ var list = host.querySelector('#panList');
 var sub = host.querySelector('#panSub');
 if (!btn || !list) return;
 var box = host.querySelector('#modal') ? host.querySelector('#modal') : host;
-var played = false;
+try {
+if (window.IntersectionObserver) {
+var io = new IntersectionObserver(function (es) {
+for (var i = 0; i < es.length; i++) {
+if (es[i].isIntersecting) { io.disconnect(); panSearch(panKw(title)); return; }
+}
+}, { rootMargin: '240px' });
+io.observe(btn);
+}
+} catch (e) { }
 btn.onclick = function () {
 var kw = panKw(title);
 if (btn.getAttribute('data-open') === '1') {          // 再点收起
@@ -3153,12 +3193,16 @@ return;
 }
 btn.disabled = true;
 if (sub) sub.textContent = '正在搜索「' + kw + '」…';
-panSearch(kw).then(function (d) {
+panSearch(kw, false, function () {
+if (sub) sub.textContent = '正在搜索夸克分享…首次约 10–25 秒（后台任务）';
+}).then(function (d) {
 btn.disabled = false;
 btn.setAttribute('data-open', '1');
 btn.textContent = '收起网盘资源';
 list.hidden = false;
-if (sub) sub.textContent = d.err ? ('搜索失败（' + d.err + '）') : (d.items.length + ' 条夸克分享 · 来自全网');
+if (sub) sub.textContent = d.err
+? (d.err === 'timeout' ? '搜索超时 · 再点一次刷新' : ('搜索失败（' + d.err + '）'))
+: (d.items.length + ' 条夸克分享 · 来自全网');
 list.innerHTML = panListHtml(d.items);
 panBind(list, d.items, box, id, title);
 });
@@ -3226,6 +3270,7 @@ var slot = srcPlayerSlot(box);
 srcAbortOthers();
 slot.innerHTML = srcFrame('https://www.youtube-nocookie.com/embed/'
 + encodeURIComponent(key) + '?autoplay=1&rel=0&modestbranding=1');
+srcLineSet(box, 'YouTube');
 srcHint(box, cn === 1
 ? 'YouTube 官方频道 · 本集中国大陆可直连播放'
 : 'YouTube 官方频道 · 本集需港澳台/东南亚出口');
@@ -3237,6 +3282,7 @@ var slot = srcPlayerSlot(box);
 srcAbortOthers();
 slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?bvid='
 + encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1');
+srcLineSet(box, 'B 站');
 srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
 return true;
 }
@@ -3247,6 +3293,7 @@ srcAbortOthers();
 slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?episodeId='
 + encodeURIComponent(ep.id) + '&seasonId=' + encodeURIComponent(sid)
 + '&autoplay=1&high_quality=1&danmaku=1');
+srcLineSet(box, 'B 站官方番剧');
 srcHint(box, 'B 站官方番剧 · 第 ' + epNo + ' 集（免费集，免登录）');
 return true;
 }
@@ -3299,12 +3346,13 @@ function () { clearTimeout(timer); fin(false); });
 setTimeout(function () { YT_REACH = null; }, 10 * 60 * 1000);
 return YT_REACH;
 }
-function srcStart(box, id, title, ep) {
+function srcStart(box, id, title, ep, skipExt) {
 var epNo = Math.max(1, Math.floor(Number(ep) || 1));
 var tk = (typeof authToken === 'function') ? authToken() : '';
 if (typeof window.__extAbort === 'function') window.__extAbort();
 if (!box) return false;
 function toQuark(why) {
+srcLineSet(box, '夸克网盘');
 srcHint(box, why + ' · 使用网盘源');
 if (typeof openQuarkPlay === 'function') openQuarkPlay(srcPlayerSlot(box), id, title);
 if (!tk && typeof openAuthPanel === 'function') openAuthPanel('email');
@@ -3321,7 +3369,9 @@ toQuark(why + ' · YouTube 不可达');
 });
 }
 function toExt(next) {
+if (skipExt) { next('已选 B 站'); return; }
 if (typeof extStart !== 'function') { next('无外部源'); return; }
+srcLineSet(box, '外部 · 自动');
 srcHint(box, '正在匹配外部线路…');
 extStart(box, id, title, epNo, function (why) { next(why || '外部源未收录'); });
 }
@@ -3359,7 +3409,95 @@ return true;
 anonChain();
 return true;
 }
+function srcLineBarHtml() {
+return '<div class="line-bar">'
++ '<span class="line-now" id="lineNow">线路：自动</span>'
++ '<button class="line-btn" id="lineBtn" type="button">切换线路<i>\u25BE</i></button>'
++ '<div class="line-menu" id="lineMenu" hidden></div>'
++ '</div>';
+}
+function srcLineMenuHtml(id) {
+var rows = [
+['auto', '自动（B站 → 外部 → YouTube → 网盘）'],
+['bili', 'B 站优先'],
+['yt', 'YouTube 官方'],
+['quark', '夸克网盘']
+];
+var items = (typeof window.__extItems === 'function') ? window.__extItems(id) : [];
+if (items.length) {
+for (var i = 0; i < items.length; i++) {
+rows.push(['ext:' + items[i].p, '外部 · ' + items[i].name + ' · ' + items[i].n + ' 集']);
+}
+} else {
+rows.push(['ext:auto', '外部线路（还没探测，选它自动匹配）']);
+}
+return rows.map(function (r) {
+return '<button class="line-item" type="button" data-line="' + esc(r[0]) + '">' + esc(r[1]) + '</button>';
+}).join('');
+}
+function srcLineSet(host, text) {
+var el = host.querySelector('#lineNow');
+if (el) el.textContent = '线路：' + text;
+}
+function srcLineBind(host, id, title, ep) {
+var btn = host.querySelector('#lineBtn');
+var menu = host.querySelector('#lineMenu');
+if (!btn || !menu) return;
+var epNo = Math.max(1, Math.floor(Number(ep) || 1));
+function close() { menu.hidden = true; }
+btn.onclick = function (e) {
+e.stopPropagation();
+if (!menu.hidden) { close(); return; }
+menu.innerHTML = srcLineMenuHtml(id);
+menu.hidden = false;
+};
+menu.onclick = function (e) {
+var t = e.target;
+while (t && t !== menu && !(t.getAttribute && t.getAttribute('data-line'))) t = t.parentNode;
+if (!t || t === menu) return;
+var line = t.getAttribute('data-line');
+close();
+srcLinePick(host, id, title, epNo, line);
+};
+document.addEventListener('click', function (ev) {
+if (!menu.hidden && !host.contains(ev.target)) close();
+});
+}
+function srcLinePick(box, id, title, ep, line) {
+var slot = srcPlayerSlot(box);
+if (line === 'auto') { srcLineSet(box, '自动'); srcStart(box, id, title, ep, false); return; }
+if (line === 'bili') { srcLineSet(box, 'B 站优先'); srcStart(box, id, title, ep, true); return; }
+if (line === 'yt') {
+var eps = srcYtEps(id);
+if (!eps) { srcHint(box, '本季没有官方 YouTube 正片'); return; }
+var pick = eps[Math.max(0, Math.min(eps.length - 1, ep - 1))] || [];
+if (srcEmbedYT(box, pick[1], ep, pick[2])) srcLineSet(box, 'YouTube');
+return;
+}
+if (line === 'quark') {
+srcLineSet(box, '夸克网盘');
+if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+return;
+}
+if (line.indexOf('ext:') === 0) {
+var pid = line.slice(4);
+var items = (typeof window.__extItems === 'function') ? window.__extItems(id) : [];
+if (pid === 'auto' || !items.length) {
+srcLineSet(box, '外部 · 自动匹配');
+if (typeof extStart === 'function') {
+extStart(box, id, title, ep, function (why) { srcHint(box, why || '外部源未收录'); });
+}
+return;
+}
+var mine = items.filter(function (x) { return x.p === pid; });
+if (!mine.length) { srcHint(box, '这条线路还没有匹配结果'); return; }
+srcLineSet(box, '外部 · ' + (mine[0].name || pid));
+if (typeof extPlayEp === 'function') extPlayEp(box, id, title, ep, mine);
+}
+}
 window.__srcStart = srcStart;
+window.__srcLineBarHtml = srcLineBarHtml;
+window.__srcLineBind = srcLineBind;
 function openQuarkBindPanel() {
 if (document.getElementById('qbmask')) return;
 if (typeof authToken === 'function' && !authToken()) {
@@ -3403,6 +3541,7 @@ var EXT_GEN = 0;
 var EXT_PROV = null, EXT_PROV_P = null, EXT_PROV_TS = 0;
 var EXT_RAW = {};                             // "p|wd" -> {ts, list}
 var EXT_LAST_KEY = 'anime_ext_last_prov';
+var EXT_ITEMS = {};          // bgm id -> 最近一次匹配到的线路（手动切换菜单用）
 function extMeta(id) {
 var rows = (typeof ANI !== 'undefined' && ANI.rows) ? ANI.rows : [];
 for (var i = 0; i < rows.length; i++) {
@@ -3732,6 +3871,7 @@ srcHint(box, '正在匹配外部线路…');
 pending = extQuery(title, meta.year, meta.orig, function (it, all) {
 if (gen !== EXT_GEN) return;
 items = all;
+EXT_ITEMS[String(id)] = all;
 if (started) return;
 if (!grace) grace = setTimeout(function () { grace = 0; tryPlay(true); }, 900);
 if (it.pri === 0 || it.p === last) {
@@ -3741,6 +3881,7 @@ tryPlay(true);
 }).then(function (all) {
 if (gen !== EXT_GEN) return all;
 items = all; done = true;
+EXT_ITEMS[String(id)] = all;
 if (grace) { clearTimeout(grace); grace = 0; }
 if (!started && !tryPlay(true)) {
 if (typeof onFail === 'function') onFail(items.length ? '外部源本集无资源' : '外部源未收录');
@@ -3852,6 +3993,7 @@ return out;
 });
 }
 window.__extSearch = extSearchGroups;
+window.__extItems = function (id) { return EXT_ITEMS[String(id)] || []; };
 window.__extStart = extStart;
 window.__extAbort = function () { EXT_GEN += 1; };
 window.__extQuery = extQuery;
