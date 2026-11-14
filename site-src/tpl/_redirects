@@ -1,4 +1,6 @@
 /library /  301
+/movie /  301
+/movie.html /  301
 /library.html /  301
 /magnet.html /  301
 # 老深链 /anime/<bgm id>：**用 200 重写**（浏览器地址不变），id 由 detail 页从 pathname 解析。

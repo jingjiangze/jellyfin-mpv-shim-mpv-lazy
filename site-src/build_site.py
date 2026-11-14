@@ -675,7 +675,6 @@ PAGE = """<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=v
 PAGES = [
     ("index.html", "home", "番组计划 · 新番表", "搜索番剧…", 'class="is-on"', "", ""),
     ("anime.html", "anime", "番剧全收录 · 番组计划", "在 8,000+ 部里搜…", "", 'class="is-on"', ""),
-    ("movie.html", "movie", "电影 · 番组计划", "搜索电影…", "", "", 'class="is-on"'),
     ("rank.html", "rank", "排行榜 · 番组计划", "搜索番剧…", "", "", ""),
     ("user.html", "user", "我的主页 · 番组计划", "搜索番剧…", "", "", ""),
     # 全网搜索页（2026-11-14）：站内目录 + 十家采集源；入口 = 顶栏回车 + 菜单「全网搜索」

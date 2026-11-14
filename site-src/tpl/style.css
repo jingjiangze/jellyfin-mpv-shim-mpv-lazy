@@ -28,21 +28,22 @@
 :root {
   /* 2026-11 改版：色板换成 ani.gamer.com.tw 口径（--anime-background-base 灰底 + 白顶栏
      + 主色 #00B4D8 / --anime-primary-color）。变量名不变，只换取值；组件规则继续只吃 token。 */
-  --bg: #F6F6FA;
+  --bg: #F6F7F8;      /* B 站页面底 */
   --bg2: #FFFFFF;
   --card: #FFFFFF;
-  --card2: #F2F2F5;
-  --line: #D1D1D1;
-  --line-hi: #C4C4C8;
-  --fg: #2E2F31;
-  --fg2: #55575C;
+  --card2: #F1F2F3;
+  --line: #E3E5E7;
+  --line-hi: #D0D3D8;
+  --fg: #18191C;
+  --fg2: #4F5159;
   /* gamer 的 --dim / --dim2 是 rgba(46,47,49,.67)/.45)：这里取同视觉的不透明等价色，
      深色主题下换 #9E9EA6 / #7A7A82。 */
-  --dim: #6B6D72;
-  --dim2: #9A9CA1;
-  --accent: #00B4D8;
-  --accent-soft: rgba(0, 180, 216, .10);
-  --accent-line: rgba(0, 180, 216, .38);
+  --dim: #6D757A;
+  --dim2: #9499A0;
+  --accent: #FB7299;                        /* B 站粉 */
+  --accent-soft: rgba(251, 114, 153, .12);
+  --accent-line: rgba(251, 114, 153, .40);
+  --accent2: #00AEEC;                       /* B 站蓝：次要强调（播放/链接） */
   --danger: #d03050;
   --star: #FFB027;
   --overlay: rgba(0, 0, 0, .46);
@@ -67,8 +68,10 @@
   --s9: 56px;
 
   --r-sm: 6px;
-  --r: 8px;
-  --r-lg: 20px;
+  --r: 10px;
+  --r-lg: 14px;
+  --r-xs: 6px;
+  --r-pill: 999px;
 
   /* 两层顶栏（.sky 55 + .mainmenu 45）的兜底高度；脚本 syncHeaderH() 量完会写回实测值 */
   --header-h: 100px;
@@ -77,12 +80,12 @@
 
   /* 2026-11 结构与布局重构新增：控件尺寸 / 行高 / 字距 / 圆角阴影与动效档位。
      新规则一律引这里，不再写字号、阴影、动画时长的字面量。 */
-  --line-ctl:#8C9298; --accent-text:#00718A; --accent-ink:#14141A;
+  --line-ctl:#BFC3C8; --accent-text:#D34C70; --accent-ink:#ffffff;
   --fs-xl:20px;
   --lh-tight:1.25; --lh-snug:1.4; --lh-base:1.6; --lh-prose:1.8;
   --ls-tight:-.01em; --ls-caps:.08em;
   --s1-5:6px; --ctl-h:32px; --ctl-h-lg:36px; --tab-h:40px;
-  --r-xs:4px; --r-pill:999px; --r-ctl:var(--r-sm); --r-card:var(--r); --r-modal:var(--r-lg);
+  --r-xs:6px; --r-pill:999px; --r-ctl:var(--r-sm); --r-card:var(--r); --r-modal:var(--r-lg);
   --sh-1:0 2px 8px rgba(0,0,0,.06); --sh-2:0 8px 24px rgba(0,0,0,.10);
   --sh-3:0 24px 64px rgba(0,0,0,.28); --sh-focus:0 0 0 3px var(--accent-soft);
   --dur-1:150ms; --dur-2:200ms; --dur-3:300ms;
@@ -91,19 +94,23 @@
 
 /* 深色（手动切换：主题脚本往 <html> 写 data-theme="light" | "dark"） */
 [data-theme="dark"] {
-  --bg: #101013;
-  --bg2: #17171B;
-  --card: #1B1B21;
-  --card2: #232329;
-  --line: #33333B;
-  --line-hi: #45454F;
-  --fg: #EBEBF5;
-  --fg2: #C9C9D1;
-  --dim: #9E9EA6;
-  --dim2: #7A7A82;
-  --accent: #00B4D8;
-  --accent-soft: rgba(0, 180, 216, .18);
-  --accent-line: rgba(0, 180, 216, .45);
+  --bg: #0F1013;
+  --bg2: #16171B;
+  --card: #1B1C21;
+  --card2: #23242A;
+  --line: #2C2E35;
+  --line-hi: #3A3C44;
+  --fg: #E8E9EC;
+  --fg2: #B9BCC4;
+  --dim: #8E929B;
+  --dim2: #6D727C;
+  --accent: #FB7299;
+  --accent-soft: rgba(251, 114, 153, .18);
+  --accent-line: rgba(251, 114, 153, .48);
+  --accent2: #00AEEC;
+  --ark: #FF8A00;                 /* 方舟橙：只用于名次 / 评分等强调点 */
+  --ark-ink: #1c1c1e;
+  --r-xs: 6px; --r-sm: 8px; --r: 12px; --r-lg: 18px;
   --danger: #d03050;
   --star: #f5c451;
   --overlay: rgba(0, 0, 0, .62);
@@ -120,20 +127,24 @@
 
 /* 深色（未手动切换：跟随系统）——与上面同一组取值 */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-      --bg: #101013;
-    --bg2: #17171B;
-    --card: #1B1B21;
-    --card2: #232329;
-    --line: #33333B;
-    --line-hi: #45454F;
-    --fg: #EBEBF5;
-    --fg2: #C9C9D1;
-    --dim: #9E9EA6;
-    --dim2: #7A7A82;
-    --accent: #00B4D8;
-    --accent-soft: rgba(0, 180, 216, .18);
-    --accent-line: rgba(0, 180, 216, .45);
+  :root:not([data-theme]) {
+    --bg: #0F1013;
+    --bg2: #16171B;
+    --card: #1B1C21;
+    --card2: #23242A;
+    --line: #2C2E35;
+    --line-hi: #3A3C44;
+    --fg: #E8E9EC;
+    --fg2: #B9BCC4;
+    --dim: #8E929B;
+    --dim2: #6D727C;
+    --accent: #FB7299;
+    --accent-soft: rgba(251, 114, 153, .18);
+    --accent-line: rgba(251, 114, 153, .48);
+    --accent2: #00AEEC;
+    --ark: #FF8A00;
+    --ark-ink: #1c1c1e;
+    --r-xs: 6px; --r-sm: 8px; --r: 12px; --r-lg: 18px;
     --danger: #d03050;
     --star: #f5c451;
     --overlay: rgba(0, 0, 0, .62);
@@ -3499,8 +3510,8 @@ main {
    只做「语言注入」，不推翻 gamer 布局：锐利几何（小圆角/切角）、细滚动条、
    HUD 式强调色（--ark 橙）与角标。改令牌就整站生效，别散落写死色值。 */
 :root {
-  --ark: #ff8a00;            /* 明日方舟橙：强调 / 名次 / 悬停 */
-  --ark-ink: #1c1c1e;        /* 橙上的深墨字 */
+  --ark: #FF8A00;           /* 方舟橙：只用于名次 / 评分等强调点（主题合一的点缀） */
+  --ark-ink: #ffffff;
   --cut: 7px;                /* 角标切角尺寸 */
 }
 
@@ -3536,21 +3547,15 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
 .qp-eps::-webkit-scrollbar-thumb:hover, .qp-lines::-webkit-scrollbar-thumb:hover,
 .mupd::-webkit-scrollbar-thumb:hover { background: var(--ark); }
 
-/* ---- 锐利几何：卡片 / 按钮角标全面收小圆角 ---- */
-.card, .mcard { border-radius: 2px; }
+/* ---- 圆角：交给主题 token（浅色 10 / 暗色 12 / 方舟 2） ---- */
+.card, .mcard { border-radius: var(--r-card); }
 .btn, .morebtn, .qp-line, .chip, .mbadge, .tagpill, .f-label select, .filters select {
-  border-radius: 2px;
+  border-radius: var(--r-ctl);
 }
-.acts .btn:last-child:nth-child(odd) { border-radius: 2px; }
+.acts .btn:last-child:nth-child(odd) { border-radius: var(--r-ctl); }
 
-/* ---- HUD 角标：单侧切角（clip-path），方舟标志性的「缺一角」标签 ---- */
-.rate, .ep, .prg, .rnum {
-  border-radius: 0;
-  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
-}
-.ep {
-  clip-path: polygon(0 0, 100% 0, 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
-}
+/* ---- 角标：统一圆角胶囊 ---- */
+.rate, .ep, .prg, .rnum { border-radius: var(--r-pill); }
 
 /* ---- 区块标题：左侧橙色方块标记（gamer 的 2px 主色线保留） ---- */
 .sec-h h2::before, .bhead h2::before, .mhead h2::before {
@@ -3561,7 +3566,7 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
   margin-right: 12px;
   margin-bottom: 2px;
   background: var(--ark);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%);
+  border-radius: 3px;
 }
 
 /* ---- 名次徽章：前三名改方舟橙 + 深墨字 ---- */
@@ -3618,7 +3623,7 @@ html[data-theme="dark"]::-webkit-scrollbar-thumb {
 .qbcard { width: min(420px, 94vw); padding: var(--s4); }
 .qbtitle { margin: 0 0 6px; font-size: var(--fs-lg); }
 .qbhint { margin: 0 0 var(--s3); font-size: var(--fs-sm); color: var(--dim); line-height: 1.6; }
-.qbframe { border: 1px solid var(--line); border-radius: 2px; overflow: hidden; background: #fff; }
+.qbframe { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: #fff; }
 .qbframe iframe { display: block; width: 100%; height: 460px; border: 0; }
 @media (max-width: 760px) { .qbframe iframe { height: 420px; } }
 

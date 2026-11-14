@@ -172,7 +172,7 @@
     }
     var relHtml = rel.map(function (pair) { return mcard(pair[0], kind, pair[1]); }).join('');
 
-    m.innerHTML = '<nav class="dp-crumb"><a href="/movie">电影</a><span>/</span><b>'
+    m.innerHTML = '<nav class="dp-crumb"><b>影视</b><span>/</span><b>'
       + esc(title) + '</b></nav>'
       + '<section class="mhero">'
       +   '<div class="mposter">'

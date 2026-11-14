@@ -108,7 +108,6 @@
      无参调用会退回第一页（用户已经滚到第 5 屏时切换会被弹回顶部）。 */
   function repaint() {
     if (PAGE === 'anime') applyBrowse(true);
-    else if (PAGE === 'movie') refreshMovie(true);
     else if (PAGE === 'rank') renderRank();
     else if (PAGE === 'user') renderUser();
     /* 整页详情：换清晰度要重画详情（detail 走同一条 repaint，否则会落到 renderHome 把首页画进来） */
@@ -569,11 +568,11 @@
   function bootHeader() {
     var P = PAGE;
     /* 首页 / 番剧 / 排行榜都搜番剧，电影页搜电影 */
-    var ph = P === 'movie' ? '搜索电影…' : (P === 'search' ? '搜全网片名，回车' : '搜索番剧…');
+    var ph = P === 'search' ? '搜全网片名，回车' : '搜索番剧…';
     /* 菜单 6 项（照 ani.gamer.com.tw 的 .mainmenu）：选中项只加 .is-on，
        主色块由 CSS 画（白字压 #00B4D8 对比度不够，用深墨字）。
        「全网搜索」= 站内目录 + 十家采集源，点进去是独立页面（/search）。 */
-    var nav = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'], ['/movie', 'movie', '电影'],
+    var nav = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'],
       ['/rank', 'rank', '排行榜']]
       .map(function (x) {
         return '<a href="' + x[0] + '"' + (P === x[1] ? ' class="is-on"' : '') + '>' + x[2] + '</a>';
@@ -587,8 +586,7 @@
       tabbar.id = 'tabbar';
       document.body.appendChild(tabbar);
     }
-    var items = [['/', 'home', '首页'], ['/anime', 'anime', '番剧'],
-      ['/movie', 'movie', '电影']];
+    var items = [['/', 'home', '首页'], ['/anime', 'anime', '番剧']];
     /* 列数跟项数走，增删导航项不用再改 CSS */
     tabbar.style.setProperty('--tabn', String(items.length));
     tabbar.innerHTML = items
@@ -789,8 +787,6 @@
         DEEP_REDIRECT = true;
         location.replace('/detail?id=' + deep);
       }
-    } else if (PAGE === 'movie') {
-      initMovie();
     } else if (PAGE === 'rank') {
       renderRank();
       bindSearch(renderRank);
