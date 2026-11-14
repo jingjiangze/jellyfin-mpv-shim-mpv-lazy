@@ -1207,10 +1207,14 @@ main.innerHTML = '<section class="sect">'
 + '</section>'
 + '<section class="sect"><div class="sec-h"><h2>网盘资源</h2>'
 +   '<span class="sec-sub" id="panSub">夸克网盘 · 全网分享</span></div>'
-+   '<div class="qp-line-list" id="panList"></div></section>';
++   '<div class="qp-line-list" id="panList"></div></section>'
++ '<section class="sect"><div class="sec-h"><h2>规则源</h2>'
++   '<span class="sec-sub" id="ruleSub">HTML 解析 · 站外播放器</span></div>'
++   '<div class="qp-line-list" id="ruleList"></div></section>';
 var grid = $('#locGrid'), locSub = $('#locSub');
 var list = $('#extList'), extSub = $('#extSub');
 var panList = $('#panList'), panSub = $('#panSub');
+var ruleList = $('#ruleList'), ruleSub = $('#ruleSub');
 var qEl = $('#q');
 var GROUPS = [], GEN = 0;
 function runExt(v) {
@@ -1234,6 +1238,28 @@ extSub.textContent = GROUPS.length
 list.innerHTML = GROUPS.length ? GROUPS.map(srchRow).join('')
 : '<p class="plot">外部源没有匹配的片名。换个说法（如只输入主标题）再试试。</p>';
 });
+}
+function runRules(v) {
+if (!ruleList) return;
+if (!v || String(v).replace(/s+/g, '').length < 2) { ruleList.innerHTML = ''; return; }
+if (typeof window.__ruleSearchAll !== 'function') { ruleList.innerHTML = ''; return; }
+ruleSub.textContent = '逐源搜索…';
+ruleList.innerHTML = '';
+window.__ruleSearchAll(v, 3).then(function (groups) {
+var rows = [], total = 0;
+(groups || []).forEach(function (g) {
+g.items.forEach(function (it, i) {
+total++;
+rows.push('<div class="qp-line-row" data-rule-src="' + esc(g.id) + '" data-rule-name="'
++ esc(it.name) + '"><button class="qp-line" type="button" data-act="play">'
++ esc(g.name) + ' · ' + esc(it.name) + (g.mode === 'iframe' ? '（站外）' : '')
++ '</button><button class="btn" type="button" data-act="play">播放</button></div>');
+});
+});
+ruleSub.textContent = total ? (total + ' 条候选 · ' + (groups || []).length + ' 个源') : '规则源没有结果';
+ruleList.innerHTML = rows.length ? rows.join('')
+: '<p class="plot">规则源没搜到（换主标题或去掉季号再试）。</p>';
+}, function () { ruleSub.textContent = '规则源不可用'; });
 }
 function runPan(v) {
 if (!panList) return;
@@ -1266,6 +1292,20 @@ if (wrap) wrap.hidden = false;
 try { wrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { }
 extPlayEp(wrap || $('#srchPlay'), 'search:' + g.name, g.name, 1, items);
 }
+if (ruleList) ruleList.onclick = function (ev) {
+var el = ev.target;
+while (el && el !== ruleList && !(el.getAttribute && el.getAttribute('data-act'))) el = el.parentNode;
+if (!el || el === ruleList) return;
+var row = el.parentNode;
+var sid = row.getAttribute('data-rule-src');
+var nm = row.getAttribute('data-rule-name');
+var wrap = $('#srchPlayWrap');
+if (wrap) wrap.hidden = false;
+try { wrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { }
+if (typeof window.__rulePlay === 'function' && sid && nm) {
+window.__rulePlay($('#srchPlayWrap') || $('#srchPlay'), 'search:' + nm, nm, 1, null, sid);
+}
+};
 list.onclick = function (ev) {
 var t = ev.target;
 while (t && t !== list && !(t.getAttribute && t.getAttribute('data-act'))) t = t.parentNode;
@@ -1284,6 +1324,7 @@ try { history.replaceState(null, '', '/search' + (v ? '?q=' + encodeURIComponent
 srchLocal(v, grid, locSub);
 runExt(v);
 runPan(v);
+runRules(v);
 };
 qEl.oninput = function () {
 var v = String(qEl.value || '').trim();
@@ -1292,7 +1333,7 @@ qEl.__t = setTimeout(function () { srchLocal(v, grid, locSub); }, 220);
 };
 }
 srchLocal(q0, grid, locSub);
-if (q0) { runExt(q0); runPan(q0); }
+if (q0) { runExt(q0); runPan(q0); runRules(q0); }
 }
 var BROWSE = { view: [], shown: 0, page: 120, busy: false };
 function renderBrowse(mode) {
@@ -4227,14 +4268,38 @@ return data;
 });
 }
 var RULE_DETAILISH = /(\/detail|\/voddetail|\/subject|\/anime\/|\/media|\/show\/|\/video\/)/i;
-var RULE_PLAYISH = /(\/play\/|\/vodplay|\/bgmplay|\/watch|vodplay|\/v\/|\/index\.php\/vod\/play|\/episode)/i;
+var RULE_PLAYISH = /(\/play\/|\/vodplay|\/bgmplay|\/watch|\/p\/\d+-\d+|\/index\.php\/vod\/play|\/episode|-\d+-\d+\.html)/i;
 function ruleAbs(base, href) {
 try { return new URL(href, base).href; } catch (e) { return ''; }
 }
+function ruleKwVariants(kw) {
+var k = String(kw || '').trim();
+var out = [k];
+var k2 = k.replace(/[【】\[\]（）()《》「」『』!！?？:：·・,，。]/g, '').replace(/\s+/g, ' ').trim();
+if (k2 && k2 !== k) out.push(k2);
+return out;
+}
 function ruleSearch(src, kw) {
-var u = src.base + src.search.replace('{kw}', encodeURIComponent(String(kw || '').trim()));
+var variants = ruleKwVariants(kw);
 return ruleCache(src.id + '|s|' + kw, function () {
+var i = 0;
+function step() {
+if (i >= variants.length) return Promise.resolve([]);
+var v = variants[i++];
+var u = src.base + src.search.replace('{kw}', encodeURIComponent(v));
 return ruleGet(u).then(function (html) {
+var got = ruleParseSearch(src, html, v);
+if (got.length || i >= variants.length) return got;
+return step();
+}, function () {
+if (i >= variants.length) throw new Error('search failed');
+return step();
+});
+}
+return step();
+});
+}
+function ruleParseSearch(src, html, kw) {
 var doc = ruleDoc(html), out = [], seen = {};
 if (!doc) return out;
 var as = doc.querySelectorAll('a[href]');
@@ -4262,8 +4327,6 @@ seen[abs] = 1;
 out.push({ id: abs, name: name, href: abs });
 }
 return out;
-});
-});
 }
 function ruleEps(src, detailHref) {
 return ruleCache(src.id + '|d|' + detailHref, function () {
@@ -4283,6 +4346,12 @@ ep = Number(nums[nums.length - 1]);
 line = nums[nums.length - 2];
 }
 if (!(ep > 0)) ep = 1;
+if (nums.length < 2) {
+var txt = String(as[i].textContent || '');
+var em = /第\s*(\d{1,4})\s*[集话話回期]/.exec(txt);
+if (!em) em = /^\s*(\d{1,4})\s*$/.exec(txt);
+if (em && Number(em[1]) > 0) ep = Number(em[1]);
+}
 if (!lines[line]) lines[line] = [];
 lines[line].push({ ep: ep, href: abs });
 }
@@ -4369,7 +4438,40 @@ step();
 }
 step();
 }
+function ruleResolveAll(title, ep) {
+var out = [], kw = panKw(title), epNo = Math.max(1, Number(ep) || 1);
+return RULE_SRC.reduce(function (chain, src) {
+return chain.then(function () {
+return ruleSearch(src, kw).then(function (list) {
+var pick = rulePick(list, title);
+if (!pick) { out.push({ id: src.id, ok: false, why: 'no-match', cands: list.length }); return; }
+return ruleEps(src, pick.href).then(function (eps) {
+var hit = null;
+for (var i = 0; i < eps.length; i++) if (eps[i].ep === epNo) { hit = eps[i]; break; }
+out.push({ id: src.id, ok: !!hit, matched: pick.name, nEps: eps.length,
+epHref: hit ? hit.href : '', mode: src.mode });
+});
+}).catch(function (e) { out.push({ id: src.id, ok: false, why: String((e && e.message) || e) }); });
+});
+}, Promise.resolve()).then(function () { return out; });
+}
+function ruleSearchAll(kw, perSrc) {
+var out = [], n = perSrc || 3;
+return RULE_SRC.reduce(function (chain, src) {
+return chain.then(function () {
+return ruleSearch(src, kw).then(function (list) {
+if (!list.length) return;
+out.push({
+id: src.id, name: src.name, mode: src.mode,
+items: list.slice(0, n).map(function (x) { return { name: x.name, href: x.href }; })
+});
+}).catch(function () { });
+});
+}, Promise.resolve()).then(function () { return out; });
+}
 window.__ruleSources = function () { return RULE_SRC.slice(); };
+window.__ruleSearchAll = ruleSearchAll;
+window.__ruleResolveAll = ruleResolveAll;
 window.__rulePlay = rulePlay;
 var THEME_KEY = 'theme';
 function currentTheme() {
