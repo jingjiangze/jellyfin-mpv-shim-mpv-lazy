@@ -3645,11 +3645,21 @@ return items;
 });
 });
 }
-function extLastProv() {
-try { return localStorage.getItem(EXT_LAST_KEY) || ''; } catch (e) { return ''; }
+function extLastProv(id) {
+try {
+if (id != null) {
+var k = EXT_LAST_KEY + ':' + String(id);
+var v = localStorage.getItem(k);
+if (v) return v;
 }
-function extSetLastProv(p) {
-try { localStorage.setItem(EXT_LAST_KEY, String(p || '')); } catch (e) { }
+return localStorage.getItem(EXT_LAST_KEY) || '';
+} catch (e) { return ''; }
+}
+function extSetLastProv(p, id) {
+try {
+localStorage.setItem(EXT_LAST_KEY, String(p || ''));
+if (id != null) localStorage.setItem(EXT_LAST_KEY + ':' + String(id), String(p || ''));
+} catch (e) { }
 }
 function extEpOf(item, ep) {
 var eps = (item && item.eps) || [];
@@ -3681,7 +3691,7 @@ var epNo = Math.max(1, Math.floor(Number(ep) || 1));
 var gen = ++EXT_GEN;
 var meta = extMeta(id);
 var items = [], done = false, started = false, grace = 0, pending = null;
-var last = extLastProv();
+var last = extLastProv(id);
 function ranked() {
 var list = items.slice();
 list.sort(function (a, b) {
@@ -3735,7 +3745,7 @@ if (!tok) return false;
 QPlayer.setEpisodes(extEpList(items), epNo, '');
 srcHint(box, '外部线路 · ' + cur.name + ' · 第 ' + epNo + ' 集' + (i ? '（自动换源 ' + (i + 1) + '/' + c.length + '）' : ''));
 QPlayer.play(cur.url, cur.name, { hls: true });
-extSetLastProv(cur.p);
+extSetLastProv(cur.p, id);
 return true;
 }
 srcHint(box, '正在匹配外部线路…');
@@ -3799,7 +3809,7 @@ QPlayer.play(cur.url, cur.name, { hls: true });
 QPlayer.setEpisodes(extEpList(items || []), ep, '');
 srcHint(box, '外部线路 · ' + cand[0].name + ' · 第 ' + ep + ' 集');
 QPlayer.play(cand[0].url, cand[0].name, { hls: true });
-extSetLastProv(cand[0].p);
+extSetLastProv(cand[0].p, id);
 }
 function extSearchGroups(q, limit) {
 var nq = extNorm(q);
@@ -4594,20 +4604,31 @@ el.className = 'cnt is-user';
 bindUserMenu(el);
 function bindUserMenu(box) {
 var menu = box.querySelector('#umenu');
-function show(on) { if (menu) menu.hidden = !on; }
+var closeTimer = 0;
+function show(on) {
+if (!menu) return;
+clearTimeout(closeTimer);
+closeTimer = 0;
+menu.hidden = !on;
+}
+function closeSoon() {
+clearTimeout(closeTimer);
+closeTimer = setTimeout(function () { if (menu) menu.hidden = true; }, 220);
+}
+function hoverOn() { clearTimeout(closeTimer); closeTimer = 0; if (menu) menu.hidden = false; }
+box.addEventListener('mouseenter', hoverOn);
+box.addEventListener('mouseleave', closeSoon);
+if (menu) {
+menu.addEventListener('mouseenter', hoverOn);
+menu.addEventListener('mouseleave', closeSoon);
+}
 box.onclick = function (e) {
 var t = e.target;
 if (t && t.id === 'umlogout') { logoutAccount(); return; }
 if (t && t.tagName === 'A') return;          // 链接走默认跳转
 e.stopPropagation();
-show(menu ? menu.hidden : false);
+if (menu) { if (menu.hidden) hoverOn(); else show(false); }
 };
-var hover = false;
-try { hover = window.matchMedia && window.matchMedia('(hover: hover)').matches; } catch (e) { }
-if (hover) {
-box.addEventListener('mouseenter', function () { show(true); });
-box.addEventListener('mouseleave', function () { show(false); });
-}
 if (!window.__umenuOutside) {
 window.__umenuOutside = 1;
 document.addEventListener('click', function (ev) {
