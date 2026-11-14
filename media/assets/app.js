@@ -302,7 +302,7 @@ return '<section class="msect"><div class="mhead"><h2>' + title + '</h2><span>'
 + list.length + ' 部</span></div><div class="grid mgrid">'
 + list.map(function (x, i) { return mcard(x, kind, i); }).join('') + '</div></section>';
 }
-var HOME = { y: 0, q: 0, wd: 0, todayOpen: 0 };   // wd: 0=跟随今天；todayOpen=「今天更新」是否展开全部
+var HOME = { y: 0, q: 0, wd: 0, open: {} };   // wd: 0=跟随今天；open = {today|season|top|hot: 1} 展开状态
 var QS = [1, 2, 3, 4];
 function seasonOf(m) { return m ? Math.ceil(m / 3) : 0; }
 function yearRows(y) { return ANI.rows.filter(function (r) { return r[4] === y; }); }
@@ -328,10 +328,22 @@ return '<button class="wk-tab' + (wd === n ? ' on' : '') + '" type="button" data
 + d + '<i>' + (cnt[n] || 0) + '</i></button>';
 }).join('') + '</div>';
 }
-function expandRowHtml(n, open) {
-return '<div class="expand-row"><button class="expand-btn" type="button" data-today="toggle">'
-+ (open ? '收起' : '展开全部 ' + n + ' 部') + '<i>' + (open ? '\u25B4' : '\u25BE') + '</i>'
-+ '</button></div>';
+function expandBlock(title, all, moreHtml, key, opt) {
+opt = opt || {};
+var cap = opt.cap || 60;
+var open = !!HOME.open[key];
+var list = open ? all.slice(0, cap) : all.slice(0, 7);
+var html = block(title, list, moreHtml, opt.gridClass, opt.ranked);
+if (!html || all.length <= 7) return html;
+html = html.replace('<section class="block"', '<section class="block" data-blk="' + key + '"');
+var n = Math.min(all.length, cap);
+var note = (open && all.length > cap)
+? '<span class="expand-note">已显示前 ' + cap + ' 部，共 ' + all.length + ' 部</span>' : '';
+return html.replace('</section>',
+'<div class="expand-row">' + note
++ '<button class="expand-btn" type="button" data-open-block="' + key + '">'
++ (open ? '收起' : ('展开全部 ' + n + ' 部'))
++ '<i>' + (open ? '▴' : '▾') + '</i></button></div></section>');
 }
 function seasonRows() {
 return yearRows(HOME.y).filter(function (r) {
@@ -538,21 +550,18 @@ var seasonPool = seasonRows();
 var cont = contBlock();
 var todayTitle = HOME.wd ? (WD[wd - 1] + ' 更新') : ('今天更新 · ' + (WD[wd - 1] || ''));
 var allToday = todayRows();
-var shownToday = HOME.todayOpen ? allToday : allToday.slice(0, 7);
-var today = block(todayTitle, shownToday,
-'<a class="morelink" href="/anime">全部番剧 ›</a>');
+var today = expandBlock(todayTitle, allToday,
+'<a class="morelink" href="/anime">全部番剧 ›</a>', 'today');
 if (today) {
 var tpos = today.indexOf('<div class="grid');
 if (tpos > 0) today = today.slice(0, tpos) + weekTabsHtml() + today.slice(tpos);
-if (allToday.length > 7) {
-today = today.replace('</section>', expandRowHtml(allToday.length, !!HOME.todayOpen) + '</section>');
 }
-}
-var season = block('本季新番 · ' + (HOME.q ? '第' + HOME.q + '季度' : HOME.y), seasonPool.slice(0, 7),
-'<a class="morelink" href="/anime">更多 ›</a>');
-var top = block('本季高分', topRows(7), '<a class="morelink" href="/rank">排行榜 ›</a>');
-var hot = block('热门排行', rankPool('rank-all').slice(0, 7),
-'<a class="morelink" href="/rank">全部排行 ›</a>', '', true);
+var season = expandBlock('本季新番 · ' + (HOME.q ? '第' + HOME.q + '季度' : HOME.y), seasonPool,
+'<a class="morelink" href="/anime">更多 ›</a>', 'season');
+var top = expandBlock('本季高分', topRows(60),
+'<a class="morelink" href="/rank">排行榜 ›</a>', 'top');
+var hot = expandBlock('热门排行', rankPool('rank-all'),
+'<a class="morelink" href="/rank">全部排行 ›</a>', 'hot', { ranked: true });
 var picks = bannerPick(seasonPool.length ? seasonPool : ANI.rows, BB_N);
 var gen = ++BANNER_GEN;
 if (BB_TIMER) { clearInterval(BB_TIMER); BB_TIMER = 0; }   // 上一代的自动轮播先停
@@ -566,10 +575,20 @@ HOME.wd = n;
 renderHome();
 };
 });
-main.querySelectorAll('[data-today]').forEach(function (b) {
+main.querySelectorAll('[data-open-block]').forEach(function (b) {
 b.onclick = function () {
-HOME.todayOpen = HOME.todayOpen ? 0 : 1;
+var k = b.getAttribute('data-open-block');
+var sec = b.closest ? b.closest('.block') : null;
+var top = sec ? (sec.getBoundingClientRect().top + (window.pageYOffset || 0)) : 0;
+HOME.open[k] = HOME.open[k] ? 0 : 1;
 renderHome();
+var nb = main.querySelector('[data-blk="' + k + '"]');
+if (!nb) return;
+var head = document.querySelector('header.site-head');
+var off = head && head.getBoundingClientRect ? (head.getBoundingClientRect().height || 0) : 0;
+var y = top - off - 10;
+if (y < 0) y = 0;
+try { window.scrollTo(0, y); } catch (e2) { }
 };
 });
 }
@@ -584,7 +603,7 @@ inY = yearRows(y);
 }
 var q = 0;
 inY.forEach(function (r) { var s = seasonOf(r[5]); if (s > q) q = s; });
-HOME = { y: y, q: q, wd: HOME.wd || 0, todayOpen: HOME.todayOpen || 0 };
+HOME = { y: y, q: q, wd: HOME.wd || 0, open: HOME.open || {} };
 }
 function bindSearch(empty) {
 $('#q').addEventListener('input', (function () {
