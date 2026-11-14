@@ -535,21 +535,35 @@
       bindUserMenu(el);
       function bindUserMenu(box) {
         var menu = box.querySelector('#umenu');
-        function show(on) { if (menu) menu.hidden = !on; }
+        var closeTimer = 0;
+        function show(on) {
+          if (!menu) return;
+          clearTimeout(closeTimer);
+          closeTimer = 0;
+          menu.hidden = !on;
+        }
+        /* 关键：菜单挂在 .cnt 盒子**外面**（下方 8px 处），鼠标从头像移到菜单会先触发
+           mouseleave。这里用「220ms 延时关闭 + 菜单自身 mouseenter 取消」兜住，
+           再配 CSS 的悬停桥（.umenu::before 覆盖缝隙），鼠标一路扫过去不会闪断。 */
+        function closeSoon() {
+          clearTimeout(closeTimer);
+          closeTimer = setTimeout(function () { if (menu) menu.hidden = true; }, 220);
+        }
+        function hoverOn() { clearTimeout(closeTimer); closeTimer = 0; if (menu) menu.hidden = false; }
+        box.addEventListener('mouseenter', hoverOn);
+        box.addEventListener('mouseleave', closeSoon);
+        if (menu) {
+          menu.addEventListener('mouseenter', hoverOn);
+          menu.addEventListener('mouseleave', closeSoon);
+        }
         box.onclick = function (e) {
           var t = e.target;
           if (t && t.id === 'umlogout') { logoutAccount(); return; }
           if (t && t.tagName === 'A') return;          // 链接走默认跳转
           e.stopPropagation();
-          show(menu ? menu.hidden : false);
+          /* 点击 = 固定打开/关闭（触屏没有 hover，只能靠这个） */
+          if (menu) { if (menu.hidden) hoverOn(); else show(false); }
         };
-        /* 桌面 hover 展开（B 站/A 站的习惯），触屏设备只认点击 */
-        var hover = false;
-        try { hover = window.matchMedia && window.matchMedia('(hover: hover)').matches; } catch (e) { }
-        if (hover) {
-          box.addEventListener('mouseenter', function () { show(true); });
-          box.addEventListener('mouseleave', function () { show(false); });
-        }
         if (!window.__umenuOutside) {
           window.__umenuOutside = 1;
           document.addEventListener('click', function (ev) {

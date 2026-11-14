@@ -263,11 +263,23 @@
     });
   }
 
-  function extLastProv() {
-    try { return localStorage.getItem(EXT_LAST_KEY) || ''; } catch (e) { return ''; }
+  /* 按番记线路（Kazumi 的做法）：同一部片下次优先用上次成功的源；
+     全局那份只作兜底（新片没有任何记录时用最近一次成功过的源）。 */
+  function extLastProv(id) {
+    try {
+      if (id != null) {
+        var k = EXT_LAST_KEY + ':' + String(id);
+        var v = localStorage.getItem(k);
+        if (v) return v;
+      }
+      return localStorage.getItem(EXT_LAST_KEY) || '';
+    } catch (e) { return ''; }
   }
-  function extSetLastProv(p) {
-    try { localStorage.setItem(EXT_LAST_KEY, String(p || '')); } catch (e) { }
+  function extSetLastProv(p, id) {
+    try {
+      localStorage.setItem(EXT_LAST_KEY, String(p || ''));
+      if (id != null) localStorage.setItem(EXT_LAST_KEY + ':' + String(id), String(p || ''));
+    } catch (e) { }
   }
 
   function extEpOf(item, ep) {
@@ -302,7 +314,7 @@
     var gen = ++EXT_GEN;
     var meta = extMeta(id);
     var items = [], done = false, started = false, grace = 0, pending = null;
-    var last = extLastProv();
+    var last = extLastProv(id);
 
     function ranked() {
       var list = items.slice();
@@ -358,7 +370,7 @@
       QPlayer.setEpisodes(extEpList(items), epNo, '');
       srcHint(box, '外部线路 · ' + cur.name + ' · 第 ' + epNo + ' 集' + (i ? '（自动换源 ' + (i + 1) + '/' + c.length + '）' : ''));
       QPlayer.play(cur.url, cur.name, { hls: true });
-      extSetLastProv(cur.p);
+      extSetLastProv(cur.p, id);
       return true;
     }
 
@@ -425,7 +437,7 @@
     QPlayer.setEpisodes(extEpList(items || []), ep, '');
     srcHint(box, '外部线路 · ' + cand[0].name + ' · 第 ' + ep + ' 集');
     QPlayer.play(cand[0].url, cand[0].name, { hls: true });
-    extSetLastProv(cand[0].p);
+    extSetLastProv(cand[0].p, id);
   }
 
   /* ---------- 全网搜索（浏览器侧合组；服务器只转发原始 JSON） ---------- */

@@ -3964,6 +3964,8 @@ html { scroll-behavior: smooth; }
   background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
   box-shadow: 0 12px 32px rgba(0,0,0,.28); z-index: 80; }
 .umenu[hidden] { display: none; }
+/* 悬停桥：盖住头像与菜单之间那 8px 缝，鼠标移过去不会触发 mouseleave */
+.umenu::before { content: ''; position: absolute; left: 0; right: 0; top: -12px; height: 12px; }
 .umenu .um-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 4px;
   border-bottom: 1px solid var(--line); color: var(--fg); font-size: var(--fs-sm); font-weight: 600; }
 .umenu .um-head .av, .umenu .um-head .avt { width: 28px; height: 28px; margin: 0; }
