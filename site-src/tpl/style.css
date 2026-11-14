@@ -3986,11 +3986,15 @@ html { scroll-behavior: smooth; }
   .dp-pan .qp-line { flex: 1 1 100%; }
 }
 
-/* 区块底部「展开全部 N 部 / 收起」——照 B 站：一行卡片下面一枚圆角文字按钮 */
-.expand-row { display: flex; justify-content: center; margin: var(--s3) 0 0; }
+/* 区块底部「展开全部 N 部 / 收起」——照 B 站模块：一条细上边线，按钮贴右下 */
+.expand-row {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--line);
+}
+.expand-note { margin-right: auto; font-size: var(--fs-xs); color: var(--dim2); }
 .expand-btn {
-  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 20px;
-  border: 1px solid var(--line); border-radius: 999px; background: var(--card);
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: var(--r-xs); background: var(--card);
   color: var(--fg2); font-size: var(--fs-sm); cursor: pointer;
 }
 .expand-btn:hover { border-color: var(--accent-line); color: var(--accent); }
