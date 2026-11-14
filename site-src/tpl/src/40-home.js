@@ -51,9 +51,9 @@ function expandBlock(title, all, moreHtml, key, opt) {
   opt = opt || {};
   var cap = opt.cap || 60;
   var open = !!HOME.open[key];
-  var list = open ? all.slice(0, cap) : all.slice(0, 7);
+  var list = open ? all.slice(0, cap) : all.slice(0, 6);
   var html = block(title, list, moreHtml, opt.gridClass, opt.ranked);
-  if (!html || all.length <= 7) return html;
+  if (!html || all.length <= 6) return html;
   /* 打上块标记：展开/收起后按它把滚动位置还原（否则整页重画会跳回块首） */
   html = html.replace('<section class="block"', '<section class="block" data-blk="' + key + '"');
   var n = Math.min(all.length, cap);
@@ -295,7 +295,7 @@ function contCard(it) {
 }
 
 function contBlock() {
-  var list = contList(7);
+  var list = contList(6);
   if (!list.length) return '';
   return '<section class="block"><div class="sec-h"><h2>继续观看</h2>'
     + '<span class="sec-sub">' + list.length + ' 部 '

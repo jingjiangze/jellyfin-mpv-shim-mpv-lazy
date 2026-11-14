@@ -100,9 +100,13 @@
       if (!v || String(v).replace(/s+/g, '').length < 2) { panList.innerHTML = ''; return; }
       panSub.textContent = '正在搜索夸克分享…';
       panList.innerHTML = '';
-      window.__panSearch(window.__panKw(v)).then(function (d) {
+      window.__panSearch(window.__panKw(v), false, function () {
+        panSub.textContent = '正在搜索夸克分享…首次约 10–25 秒';
+      }).then(function (d) {
         var items = (d && d.items) || [];
-        panSub.textContent = d && d.err ? ('搜索失败（' + d.err + '）') : (items.length + ' 条夸克分享');
+        panSub.textContent = d && d.err
+          ? (d.err === 'timeout' ? '搜索超时 · 回车重试' : ('搜索失败（' + d.err + '）'))
+          : (items.length + ' 条夸克分享');
         panList.innerHTML = window.__panListHtml(items);
         window.__panBind(panList, items, $('#srchPlayWrap') || $('#srchPlay'), 'search', v, function () {
           var wrap = $('#srchPlayWrap');

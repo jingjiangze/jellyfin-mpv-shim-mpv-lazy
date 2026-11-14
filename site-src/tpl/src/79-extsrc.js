@@ -15,6 +15,7 @@
   var EXT_PROV = null, EXT_PROV_P = null, EXT_PROV_TS = 0;
   var EXT_RAW = {};                             // "p|wd" -> {ts, list}
   var EXT_LAST_KEY = 'anime_ext_last_prov';
+  var EXT_ITEMS = {};          // bgm id -> 最近一次匹配到的线路（手动切换菜单用）
 
   function extMeta(id) {
     var rows = (typeof ANI !== 'undefined' && ANI.rows) ? ANI.rows : [];
@@ -365,6 +366,7 @@
     pending = extQuery(title, meta.year, meta.orig, function (it, all) {
       if (gen !== EXT_GEN) return;
       items = all;
+      EXT_ITEMS[String(id)] = all;
       if (started) return;
       if (!grace) grace = setTimeout(function () { grace = 0; tryPlay(true); }, 900);
       if (it.pri === 0 || it.p === last) {
@@ -374,6 +376,7 @@
     }).then(function (all) {
       if (gen !== EXT_GEN) return all;
       items = all; done = true;
+      EXT_ITEMS[String(id)] = all;
       if (grace) { clearTimeout(grace); grace = 0; }
       if (!started && !tryPlay(true)) {
         if (typeof onFail === 'function') onFail(items.length ? '外部源本集无资源' : '外部源未收录');
@@ -491,6 +494,7 @@
   }
 
   window.__extSearch = extSearchGroups;
+  window.__extItems = function (id) { return EXT_ITEMS[String(id)] || []; };
   window.__extStart = extStart;
   window.__extAbort = function () { EXT_GEN += 1; };
   window.__extQuery = extQuery;

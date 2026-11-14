@@ -381,6 +381,7 @@
       +     '</div>'
       /* 播放状态行（原来写在播放源面板的 sec-sub 里；面板已删，改挂这里） */
       +     '<p class="dp-stat" id="dpStat"></p>'
+      +     srcLineBarHtml()
       +     panSectionHtml()
       +     '<nav class="mtabs dp-nav">'
       +       '<a class="mtab on" href="#dp-plot">简介</a>'
@@ -422,6 +423,8 @@
     m.setAttribute('data-bgm', String(id));
     document.body.removeAttribute('data-ext-detail');   // 回到番剧详情：磁力层恢复挂载
     document.title = title + ' · 番组计划';
+    /* 线路手动切换（自动链之上的一层覆盖） */
+    srcLineBind(m, id, title, curEp);
     /* 网盘资源区块：默认收起，点「查找」才发请求（服务器不预取） */
     panMount(m, id, title);
 

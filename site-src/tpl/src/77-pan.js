@@ -20,7 +20,9 @@
       .trim();
   }
 
-  function panSearch(kw, force) {
+  /* 搜索：盒子是「后台任务 + 轮询」模型（上游单次要 20–25 秒），
+     所以这里先打 /pans/search，pending 就每 1.5s 轮询 /pans/result，最多等 60s。 */
+  function panSearch(kw, force, onWait) {
     kw = String(kw || '').trim();
     if (kw.length < 2) return Promise.resolve({ items: [], err: 'short' });
     var rec = PAN_MEM[kw];
@@ -29,15 +31,40 @@
     }
     var o = { ts: Date.now(), data: null, pend: null };
     PAN_MEM[kw] = o;
-    o.pend = srcGet('/pans/search?kw=' + encodeURIComponent(kw) + '&n=20', '').then(function (r) {
-      var j = (r && r.j) || {};
-      var data = { items: (r && r.ok && j.ok) ? (j.items || []) : [], err: (r && r.ok && j.ok) ? '' : ('HTTP ' + (r && r.status)) };
-      if (PAN_MEM[kw] === o) { o.data = data; o.ts = Date.now(); }
-      return data;
-    }, function () {
-      var data = { items: [], err: 'network' };
-      if (PAN_MEM[kw] === o) { o.data = data; o.ts = Date.now(); }
-      return data;
+    o.pend = new Promise(function (resolve) {
+      var done = false, deadline = Date.now() + 90000, timer = 0;
+      function finish(data) {
+        if (done) return;
+        done = true;
+        if (timer) { clearTimeout(timer); timer = 0; }
+        if (PAN_MEM[kw] === o) { o.data = data; o.ts = Date.now(); }
+        resolve(data);
+      }
+      function poll() {
+        panReq('/pans/result?kw=' + encodeURIComponent(kw) + '&n=20&_=' + Date.now(), 'GET', null)
+          .then(function (r) {
+            var j = (r && r.j) || {};
+            if (j.pending) {
+              if (Date.now() > deadline) { finish({ items: [], err: 'timeout' }); return; }
+              if (typeof onWait === 'function') onWait();
+              timer = setTimeout(poll, 1500);
+              return;
+            }
+            if (!r || !r.ok || !j.ok) { finish({ items: [], err: (j && j.error) || ('HTTP ' + (r && r.status)) }); return; }
+            finish({ items: j.items || [], err: '' });
+          }, function () {
+            if (Date.now() > deadline) { finish({ items: [], err: 'network' }); return; }
+            timer = setTimeout(poll, 2000);
+          });
+      }
+      panReq('/pans/search?kw=' + encodeURIComponent(kw) + '&n=20&_=' + Date.now(), 'GET', null)
+        .then(function (r) {
+          var j = (r && r.j) || {};
+          if (j.ok && !j.pending) { finish({ items: j.items || [], err: '' }); return; }
+          if (!j.ok) { finish({ items: [], err: j.error || ('HTTP ' + (r && r.status)) }); return; }
+          if (typeof onWait === 'function') onWait();
+          poll();
+        }, function () { finish({ items: [], err: 'network' }); });
     });
     return o.pend;
   }
@@ -205,7 +232,7 @@
     var tk = (typeof authToken === 'function' && authToken()) || '';
     var headers = { 'content-type': 'application/json' };
     if (tk) headers.authorization = 'Bearer ' + tk;
-    var opt = { method: method || 'GET', headers: headers };
+    var opt = { method: method || 'GET', headers: headers, cache: 'no-store' };
     if (body && opt.method !== 'GET') opt.body = JSON.stringify(body);
     var ctl = typeof AbortController === 'function' ? new AbortController() : null;
     var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 30000);
@@ -238,7 +265,18 @@
     var sub = host.querySelector('#panSub');
     if (!btn || !list) return;
     var box = host.querySelector('#modal') ? host.querySelector('#modal') : host;
-    var played = false;
+    /* 预取：区块滚进视野就先在后台起任务（上游 10–25 秒），点「查找」时通常已经好了。
+       仍是「不动手不查页面」——只在快滚到这块时才启，且结果 10 分钟复用。 */
+    try {
+      if (window.IntersectionObserver) {
+        var io = new IntersectionObserver(function (es) {
+          for (var i = 0; i < es.length; i++) {
+            if (es[i].isIntersecting) { io.disconnect(); panSearch(panKw(title)); return; }
+          }
+        }, { rootMargin: '240px' });
+        io.observe(btn);
+      }
+    } catch (e) { }
     btn.onclick = function () {
       var kw = panKw(title);
       if (btn.getAttribute('data-open') === '1') {          // 再点收起
@@ -249,12 +287,16 @@
       }
       btn.disabled = true;
       if (sub) sub.textContent = '正在搜索「' + kw + '」…';
-      panSearch(kw).then(function (d) {
+      panSearch(kw, false, function () {
+        if (sub) sub.textContent = '正在搜索夸克分享…首次约 10–25 秒（后台任务）';
+      }).then(function (d) {
         btn.disabled = false;
         btn.setAttribute('data-open', '1');
         btn.textContent = '收起网盘资源';
         list.hidden = false;
-        if (sub) sub.textContent = d.err ? ('搜索失败（' + d.err + '）') : (d.items.length + ' 条夸克分享 · 来自全网');
+        if (sub) sub.textContent = d.err
+          ? (d.err === 'timeout' ? '搜索超时 · 再点一次刷新' : ('搜索失败（' + d.err + '）'))
+          : (d.items.length + ' 条夸克分享 · 来自全网');
         list.innerHTML = panListHtml(d.items);
         panBind(list, d.items, box, id, title);
       });

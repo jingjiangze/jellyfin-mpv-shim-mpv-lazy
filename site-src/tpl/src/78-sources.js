@@ -72,6 +72,7 @@
     srcAbortOthers();
     slot.innerHTML = srcFrame('https://www.youtube-nocookie.com/embed/'
       + encodeURIComponent(key) + '?autoplay=1&rel=0&modestbranding=1');
+    srcLineSet(box, 'YouTube');
     srcHint(box, cn === 1
       ? 'YouTube 官方频道 · 本集中国大陆可直连播放'
       : 'YouTube 官方频道 · 本集需港澳台/东南亚出口');
@@ -84,6 +85,7 @@
     srcAbortOthers();
     slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?bvid='
       + encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1');
+    srcLineSet(box, 'B 站');
     srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
     return true;
   }
@@ -96,6 +98,7 @@
     slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?episodeId='
       + encodeURIComponent(ep.id) + '&seasonId=' + encodeURIComponent(sid)
       + '&autoplay=1&high_quality=1&danmaku=1');
+    srcLineSet(box, 'B 站官方番剧');
     srcHint(box, 'B 站官方番剧 · 第 ' + epNo + ' 集（免费集，免登录）');
     return true;
   }
@@ -160,13 +163,14 @@
   }
 
   /* ---------------- 自动播放链 ---------------- */
-  function srcStart(box, id, title, ep) {
+  function srcStart(box, id, title, ep, skipExt) {
     var epNo = Math.max(1, Math.floor(Number(ep) || 1));
     var tk = (typeof authToken === 'function') ? authToken() : '';
     if (typeof window.__extAbort === 'function') window.__extAbort();
     if (!box) return false;
 
     function toQuark(why) {
+      srcLineSet(box, '夸克网盘');
       srcHint(box, why + ' · 使用网盘源');
       if (typeof openQuarkPlay === 'function') openQuarkPlay(srcPlayerSlot(box), id, title);
       if (!tk && typeof openAuthPanel === 'function') openAuthPanel('email');
@@ -186,7 +190,9 @@
 
     /* 外部采集源：浏览器并发探测，先回先播（79-extsrc） */
     function toExt(next) {
+      if (skipExt) { next('已选 B 站'); return; }
       if (typeof extStart !== 'function') { next('无外部源'); return; }
+      srcLineSet(box, '外部 · 自动');
       srcHint(box, '正在匹配外部线路…');
       extStart(box, id, title, epNo, function (why) { next(why || '外部源未收录'); });
     }
@@ -228,7 +234,107 @@
     return true;
   }
 
+  /* ---------------- 手动切换线路（播放器下方）----------------
+     自动链还是默认；这里给不想等/想指定的人一个入口：
+       · 自动（B站 → 外部 → YouTube → 网盘）
+       · B 站优先（跳过外部源，直接走官方/匿名搜索）
+       · 外部 · <源名>（列出最近一次匹配到的线路，按源指定）
+       · YouTube 官方 / 夸克网盘
+     外部线路清单来自 79 的 window.__extItems(id)（自动链跑过一次就有一份）。 */
+  function srcLineBarHtml() {
+    return '<div class="line-bar">'
+      + '<span class="line-now" id="lineNow">线路：自动</span>'
+      + '<button class="line-btn" id="lineBtn" type="button">切换线路<i>\u25BE</i></button>'
+      + '<div class="line-menu" id="lineMenu" hidden></div>'
+      + '</div>';
+  }
+
+  function srcLineMenuHtml(id) {
+    var rows = [
+      ['auto', '自动（B站 → 外部 → YouTube → 网盘）'],
+      ['bili', 'B 站优先'],
+      ['yt', 'YouTube 官方'],
+      ['quark', '夸克网盘']
+    ];
+    var items = (typeof window.__extItems === 'function') ? window.__extItems(id) : [];
+    if (items.length) {
+      for (var i = 0; i < items.length; i++) {
+        rows.push(['ext:' + items[i].p, '外部 · ' + items[i].name + ' · ' + items[i].n + ' 集']);
+      }
+    } else {
+      rows.push(['ext:auto', '外部线路（还没探测，选它自动匹配）']);
+    }
+    return rows.map(function (r) {
+      return '<button class="line-item" type="button" data-line="' + esc(r[0]) + '">' + esc(r[1]) + '</button>';
+    }).join('');
+  }
+
+  function srcLineSet(host, text) {
+    var el = host.querySelector('#lineNow');
+    if (el) el.textContent = '线路：' + text;
+  }
+
+  function srcLineBind(host, id, title, ep) {
+    var btn = host.querySelector('#lineBtn');
+    var menu = host.querySelector('#lineMenu');
+    if (!btn || !menu) return;
+    var epNo = Math.max(1, Math.floor(Number(ep) || 1));
+    function close() { menu.hidden = true; }
+    btn.onclick = function (e) {
+      e.stopPropagation();
+      if (!menu.hidden) { close(); return; }
+      menu.innerHTML = srcLineMenuHtml(id);
+      menu.hidden = false;
+    };
+    menu.onclick = function (e) {
+      var t = e.target;
+      while (t && t !== menu && !(t.getAttribute && t.getAttribute('data-line'))) t = t.parentNode;
+      if (!t || t === menu) return;
+      var line = t.getAttribute('data-line');
+      close();
+      srcLinePick(host, id, title, epNo, line);
+    };
+    document.addEventListener('click', function (ev) {
+      if (!menu.hidden && !host.contains(ev.target)) close();
+    });
+  }
+
+  function srcLinePick(box, id, title, ep, line) {
+    var slot = srcPlayerSlot(box);
+    if (line === 'auto') { srcLineSet(box, '自动'); srcStart(box, id, title, ep, false); return; }
+    if (line === 'bili') { srcLineSet(box, 'B 站优先'); srcStart(box, id, title, ep, true); return; }
+    if (line === 'yt') {
+      var eps = srcYtEps(id);
+      if (!eps) { srcHint(box, '本季没有官方 YouTube 正片'); return; }
+      var pick = eps[Math.max(0, Math.min(eps.length - 1, ep - 1))] || [];
+      if (srcEmbedYT(box, pick[1], ep, pick[2])) srcLineSet(box, 'YouTube');
+      return;
+    }
+    if (line === 'quark') {
+      srcLineSet(box, '夸克网盘');
+      if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
+      return;
+    }
+    if (line.indexOf('ext:') === 0) {
+      var pid = line.slice(4);
+      var items = (typeof window.__extItems === 'function') ? window.__extItems(id) : [];
+      if (pid === 'auto' || !items.length) {
+        srcLineSet(box, '外部 · 自动匹配');
+        if (typeof extStart === 'function') {
+          extStart(box, id, title, ep, function (why) { srcHint(box, why || '外部源未收录'); });
+        }
+        return;
+      }
+      var mine = items.filter(function (x) { return x.p === pid; });
+      if (!mine.length) { srcHint(box, '这条线路还没有匹配结果'); return; }
+      srcLineSet(box, '外部 · ' + (mine[0].name || pid));
+      if (typeof extPlayEp === 'function') extPlayEp(box, id, title, ep, mine);
+    }
+  }
+
   window.__srcStart = srcStart;
+  window.__srcLineBarHtml = srcLineBarHtml;
+  window.__srcLineBind = srcLineBind;
 
   /* ---------------- 夸克绑定入口（「我的」页用；详情页面板已删除） ---------------- */
   function openQuarkBindPanel() {

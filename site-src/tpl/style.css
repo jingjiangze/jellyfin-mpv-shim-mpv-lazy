@@ -760,7 +760,8 @@ main {
  * 实测这套取值在 1360 / 1200 / 1000 / 768 自然落到 6 / 5 / 4 / 3 列，只有末两档写死兜底（见 19 节）。 */
 .grid, .mgrid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  /* 桌面 6 列（B 站口径）：一行 6 张，区块默认也只放 6 张 */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--s4) var(--s4);
 }
 
@@ -4016,3 +4017,26 @@ html { scroll-behavior: smooth; }
   position: absolute; left: 10px; bottom: 8px; padding: 2px 8px; border-radius: 999px;
   background: rgba(0,0,0,.55); color: #fff; font-size: var(--fs-xs);
 }
+
+/* 详情页「线路」手动切换（2026-11-14）：自动链之上的一层覆盖 */
+.line-bar { position: relative; display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+.line-now { font-size: var(--fs-sm); color: var(--dim); }
+.line-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: var(--r-xs); background: var(--card);
+  color: var(--fg2); font-size: var(--fs-xs); cursor: pointer;
+}
+.line-btn:hover { border-color: var(--accent-line); color: var(--accent); }
+.line-btn i { font-style: normal; font-size: 9px; line-height: 1; }
+.line-menu {
+  position: absolute; left: 0; top: calc(100% + 6px); z-index: 40; min-width: 250px;
+  max-height: 320px; overflow: auto; padding: 6px; background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 12px 32px rgba(0,0,0,.28);
+}
+.line-menu[hidden] { display: none; }
+.line-item {
+  display: block; width: 100%; text-align: left; padding: 8px 10px; border: 0;
+  border-radius: var(--r-xs); background: none; color: var(--fg2);
+  font-size: var(--fs-sm); cursor: pointer;
+}
+.line-item:hover { background: var(--card2); color: var(--accent); }
