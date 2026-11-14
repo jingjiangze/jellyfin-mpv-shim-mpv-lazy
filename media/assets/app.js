@@ -302,8 +302,7 @@ return '<section class="msect"><div class="mhead"><h2>' + title + '</h2><span>'
 + list.length + ' 部</span></div><div class="grid mgrid">'
 + list.map(function (x, i) { return mcard(x, kind, i); }).join('') + '</div></section>';
 }
-var HOME = { y: 0, q: 0, wd: 0, wkOpen: 0 };   // wd: 0=跟随今天；wkOpen: 星期条是否展开
-try { HOME.wkOpen = localStorage.getItem('anime_wk_open') === '1' ? 1 : 0; } catch (e) { HOME.wkOpen = 0; }
+var HOME = { y: 0, q: 0, wd: 0, todayOpen: 0 };   // wd: 0=跟随今天；todayOpen=「今天更新」是否展开全部
 var QS = [1, 2, 3, 4];
 function seasonOf(m) { return m ? Math.ceil(m / 3) : 0; }
 function yearRows(y) { return ANI.rows.filter(function (r) { return r[4] === y; }); }
@@ -323,16 +322,16 @@ function weekTabsHtml() {
 var wd = wdPick();
 var cnt = {};
 courRows().forEach(function (r) { if (r[6]) cnt[r[6]] = (cnt[r[6]] || 0) + 1; });
-var open = !!HOME.wkOpen;
-var out = WD.map(function (d, i) {
+return '<div class="wk-tabs">' + WD.map(function (d, i) {
 var n = i + 1;
 return '<button class="wk-tab' + (wd === n ? ' on' : '') + '" type="button" data-wd="' + n + '">'
 + d + '<i>' + (cnt[n] || 0) + '</i></button>';
-});
-if (!open) out = [out[wd - 1] || out[0]];
-return '<div class="wk-tabs' + (open ? ' is-open' : '') + '">' + out.join('')
-+ '<button class="wk-more" type="button" data-wk="toggle">'
-+ (open ? '收起 ▴' : '展开全部 7 天 ▾') + '</button></div>';
+}).join('') + '</div>';
+}
+function expandRowHtml(n, open) {
+return '<div class="expand-row"><button class="expand-btn" type="button" data-today="toggle">'
++ (open ? '收起' : '展开全部 ' + n + ' 部') + '<i>' + (open ? '\u25B4' : '\u25BE') + '</i>'
++ '</button></div>';
 }
 function seasonRows() {
 return yearRows(HOME.y).filter(function (r) {
@@ -538,11 +537,16 @@ var wd = wdPick();
 var seasonPool = seasonRows();
 var cont = contBlock();
 var todayTitle = HOME.wd ? (WD[wd - 1] + ' 更新') : ('今天更新 · ' + (WD[wd - 1] || ''));
-var today = block(todayTitle, todayRows().slice(0, 7),
+var allToday = todayRows();
+var shownToday = HOME.todayOpen ? allToday : allToday.slice(0, 7);
+var today = block(todayTitle, shownToday,
 '<a class="morelink" href="/anime">全部番剧 ›</a>');
 if (today) {
 var tpos = today.indexOf('<div class="grid');
 if (tpos > 0) today = today.slice(0, tpos) + weekTabsHtml() + today.slice(tpos);
+if (allToday.length > 7) {
+today = today.replace('</section>', expandRowHtml(allToday.length, !!HOME.todayOpen) + '</section>');
+}
 }
 var season = block('本季新番 · ' + (HOME.q ? '第' + HOME.q + '季度' : HOME.y), seasonPool.slice(0, 7),
 '<a class="morelink" href="/anime">更多 ›</a>');
@@ -562,10 +566,9 @@ HOME.wd = n;
 renderHome();
 };
 });
-main.querySelectorAll('[data-wk]').forEach(function (b) {
+main.querySelectorAll('[data-today]').forEach(function (b) {
 b.onclick = function () {
-HOME.wkOpen = HOME.wkOpen ? 0 : 1;
-try { localStorage.setItem('anime_wk_open', HOME.wkOpen ? '1' : '0'); } catch (e2) { }
+HOME.todayOpen = HOME.todayOpen ? 0 : 1;
 renderHome();
 };
 });
@@ -581,7 +584,7 @@ inY = yearRows(y);
 }
 var q = 0;
 inY.forEach(function (r) { var s = seasonOf(r[5]); if (s > q) q = s; });
-HOME = { y: y, q: q, wd: HOME.wd || 0, wkOpen: HOME.wkOpen || 0 };
+HOME = { y: y, q: q, wd: HOME.wd || 0, todayOpen: HOME.todayOpen || 0 };
 }
 function bindSearch(empty) {
 $('#q').addEventListener('input', (function () {
@@ -1709,11 +1712,6 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/movie">电影</a><span>/</span><b
 + '</section>'
 + '<div class="dp-grid">'
 +   '<div class="dp-main">'
-+     (x.tr
-? '<section class="sect" id="dp-trailer"><div class="sec-h"><h2>预告</h2></div>'
-+ '<div class="trailer-slot" id="dpTrailerSlot">'
-+ '<button class="btn pri" id="dpTrailer" type="button">▶ 播放预告（YouTube）</button></div></section>'
-: '')
 +     (wpHtml
 ? '<section class="sect" id="dp-watch"><div class="sec-h"><h2>哪里能看</h2>'
 + '<span class="sec-sub">// 合法渠道</span></div>' + wpHtml + '</section>'
@@ -1730,7 +1728,12 @@ return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
 +     '</div>'
 +   '</div>'
 +   '<aside class="dp-side">'
-+     '<section class="sect"><div class="sec-h"><h2>相关推荐</h2></div>'
++     '<section class="sect"><div class="sec-h"><h2>相关推荐</h2>'
++       '<span class="sec-sub">预告 · 同类影片</span></div>'
++       (x.tr ? '<div class="dp-tr" id="dpTrailerSlot">'
++         '<button class="dp-tr-btn" id="dpTrailer" type="button">'
++         '<img src="https://i.ytimg.com/vi/' + esc(x.tr) + '/hqdefault.jpg" alt="" loading="lazy">'
++         '<span class="dp-tr-play">\u25B6</span><span class="dp-tr-cap">预告片</span></button></div>' : '')
 +       (relHtml ? '<div class="grid mgrid dp-rel">' + relHtml + '</div>'
 : '<p class="plot">暂无相关推荐</p>')
 +     '</section>'
@@ -1740,7 +1743,11 @@ return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
 + '</div>';
 document.title = title + ' · 番组计划';
 var tslotExt = m.querySelector('#dpTrailerSlot');
-if (tslotExt && x.tr) mountTrailer(tslotExt, x.tr);
+if (tslotExt && x.tr) {
+var tbtnExt = tslotExt.querySelector('#dpTrailer');
+if (tbtnExt) tbtnExt.onclick = function () { mountTrailer(tslotExt, x.tr); };
+else mountTrailer(tslotExt, x.tr);
+}
 }
 function renderDetail() {
 var m = $('#modal');
@@ -1861,11 +1868,6 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b
 +     '</div>'
 +     '<p class="dp-stat" id="dpStat"></p>'
 +     panSectionHtml()
-+     (ex[2]
-? '<section class="sect" id="dp-trailer"><div class="sec-h"><h2>预告</h2></div>'
-+ '<div class="trailer-slot" id="dpTrailerSlot">'
-+ '<button class="btn pri" id="dpTrailer" type="button">▶ 播放预告（YouTube）</button></div></section>'
-: '')
 +     '<nav class="mtabs dp-nav">'
 +       '<a class="mtab on" href="#dp-plot">简介</a>'
 +       '<a class="mtab" href="#dp-chars">角色</a>'
@@ -1893,7 +1895,11 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b
 +     '<section class="sect"><div class="sec-h"><h2>信息</h2></div>'
 +       '<dl class="infobox">' + infoRows + '</dl>' + rcHtml + '</section>'
 +     '<section class="sect"><div class="sec-h"><h2>相关推荐</h2>'
-+       '<span class="sec-sub">同年份 · 同类型</span></div>'
++       '<span class="sec-sub">预告 · 同年份 · 同类型</span></div>'
++       (ex[2] ? '<div class="dp-tr" id="dpTrailerSlot">'
++         '<button class="dp-tr-btn" id="dpTrailer" type="button">'
++         '<img src="https://i.ytimg.com/vi/' + esc(ytKey(ex[2])) + '/hqdefault.jpg" alt="" loading="lazy">'
++         '<span class="dp-tr-play">\u25B6</span><span class="dp-tr-cap">预告片</span></button></div>' : '')
 +       '<div class="grid dp-rel">' + relHtml + '</div></section>'
 +     '<section class="sect"><div class="sec-h"><h2>数据来源</h2></div>'
 +       '<p class="dp-src">Bangumi · AniList · B 站</p></section>'
@@ -1982,7 +1988,11 @@ openQuarkPlay(dpslot, id, title);
 };
 }
 var tslot = m.querySelector('#dpTrailerSlot');
-if (tslot && ex[2]) mountTrailer(tslot, ex[2]);
+if (tslot && ex[2]) {
+var tbtn = tslot.querySelector('#dpTrailer');
+if (tbtn) tbtn.onclick = function () { mountTrailer(tslot, ex[2]); };
+else mountTrailer(tslot, ex[2]);
+}
 var nav = m.querySelector('.dp-nav');
 if (nav) {
 nav.onclick = function (ev) {
