@@ -171,10 +171,10 @@
   }
 
   function pfBiliWire() {
-    var q = pfNode('pfbind-qr');                    // 未绑定：主按钮走扫码
-    if (q) q.onclick = function () { pfBiliQrStart(); };
+    var q = pfNode('pfbind-qr');                    // 未绑定：主按钮 → 站内扫码弹窗（盒子页）
+    if (q) q.onclick = function () { if (typeof openBiliBindPanel === 'function') openBiliBindPanel(); };
     var rq = pfNode('pfreque');                     // 已绑定：重新扫码覆盖
-    if (rq) rq.onclick = function () { pfBiliQrStart(); };
+    if (rq) rq.onclick = function () { if (typeof openBiliBindPanel === 'function') openBiliBindPanel(); };
     var so = pfNode('pfsess-open');                 // 兜底：展开/收起粘贴框
     if (so) so.onclick = function () { pfBiliTogglePaste(); };
     var b = pfNode('pfbind');
@@ -389,6 +389,8 @@
     if (document.visibilityState === 'hidden') { pfBiliQrPause(); return; }
     if (!QR_TIMER && QR_KEY && QR_TRIES < BILI_QR_MAX && pfNode('pfqrimg')) pfBiliQrPoll();
   });
+
+  window.__biliBound = function () { BILI_ST = null; loadPfBili(true); };
 
   function loadPfBili(force) {
     var box = pfNode('pfbili');

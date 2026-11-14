@@ -355,6 +355,51 @@
     }
   }
 
+  /* B 站绑定：与夸克同一套「盒子内嵌扫码页 + postMessage」。
+     盒子 /bili/qrpage?t=<站点 token> 自己生成二维码、轮询、落库；
+     绑完 postMessage {type:'bili-bound'} → 这里关窗并通知刷新（「我的」页卡片 / 播放源）。 */
+  function openBiliBindPanel() {
+    if (document.getElementById('bbmask')) return;
+    if (typeof authToken === 'function' && !authToken()) {
+      if (typeof openAuthPanel === 'function') openAuthPanel('email');
+      return;
+    }
+    var tk = (typeof authToken === 'function' && authToken()) || '';
+    var mask = document.createElement('div');
+    mask.className = 'authmask qbmask';
+    mask.id = 'bbmask';
+    mask.innerHTML = '<div class="authcard qbcard" role="dialog" aria-modal="true">'
+      + '<button class="authx" type="button" aria-label="关闭">×</button>'
+      + '<h3 class="qbtitle">绑定 B 站账号</h3>'
+      + '<p class="qbhint">用 B 站 App 扫码（也可以粘贴 SESSDATA）。绑定后本页播放走你的账号：1080p / 大会员集。</p>'
+      + '<div class="qbframe"><iframe src="' + esc(SRC_BASE + '/bili/qrpage?t=' + encodeURIComponent(tk) + '&embed=1') + '"'
+      + ' referrerpolicy="origin-when-cross-origin" allow="clipboard-write"></iframe></div>'
+      + '</div>';
+    document.body.appendChild(mask);
+
+    function cleanup() {
+      if (mask.parentNode) mask.parentNode.removeChild(mask);
+      window.removeEventListener('message', onMsg);
+      document.removeEventListener('keydown', onKey);
+    }
+    function onMsg(ev) {
+      if (String(ev.origin).indexOf('120.48.56.189') < 0) return;
+      var d = ev.data || {};
+      if (d && d.type === 'bili-bound' && d.ok) {
+        cleanup();
+        if (typeof window.__biliBound === 'function') window.__biliBound(d.uname || '');
+        srcHint(document, 'B 站已绑定' + (d.uname ? '：' + d.uname : ''));
+      }
+    }
+    function onKey(ev) { if (ev.key === 'Escape') cleanup(); }
+    mask.onclick = function (ev) {
+      var t = ev.target;
+      if (t === mask || (t && String(t.className || '').indexOf('authx') >= 0)) cleanup();
+    };
+    window.addEventListener('message', onMsg);
+    document.addEventListener('keydown', onKey);
+  }
+
   window.__srcStart = srcStart;
   window.__srcLineBarHtml = srcLineBarHtml;
   window.__srcLineBind = srcLineBind;
