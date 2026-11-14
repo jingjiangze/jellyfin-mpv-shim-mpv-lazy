@@ -203,11 +203,6 @@
       + '</section>'
       + '<div class="dp-grid">'
       +   '<div class="dp-main">'
-      +     (x.tr
-            ? '<section class="sect" id="dp-trailer"><div class="sec-h"><h2>预告</h2></div>'
-              + '<div class="trailer-slot" id="dpTrailerSlot">'
-              + '<button class="btn pri" id="dpTrailer" type="button">▶ 播放预告（YouTube）</button></div></section>'
-            : '')
       +     (wpHtml
             ? '<section class="sect" id="dp-watch"><div class="sec-h"><h2>哪里能看</h2>'
               + '<span class="sec-sub">// 合法渠道</span></div>' + wpHtml + '</section>'
@@ -224,7 +219,12 @@
       +     '</div>'
       +   '</div>'
       +   '<aside class="dp-side">'
-      +     '<section class="sect"><div class="sec-h"><h2>相关推荐</h2></div>'
+      +     '<section class="sect"><div class="sec-h"><h2>相关推荐</h2>'
+      +       '<span class="sec-sub">预告 · 同类影片</span></div>'
+      +       (x.tr ? '<div class="dp-tr" id="dpTrailerSlot">'
+      +         '<button class="dp-tr-btn" id="dpTrailer" type="button">'
+      +         '<img src="https://i.ytimg.com/vi/' + esc(x.tr) + '/hqdefault.jpg" alt="" loading="lazy">'
+      +         '<span class="dp-tr-play">\u25B6</span><span class="dp-tr-cap">预告片</span></button></div>' : '')
       +       (relHtml ? '<div class="grid mgrid dp-rel">' + relHtml + '</div>'
                      : '<p class="plot">暂无相关推荐</p>')
       +     '</section>'
@@ -233,9 +233,13 @@
       +   '</aside>'
       + '</div>';
     document.title = title + ' · 番组计划';
-    /* 预告：直接嵌 YouTube 官方播放器（原来是自己画的黑框 + 点一下才注 iframe） */
+    /* 预告卡片：点封面才注入 iframe */
     var tslotExt = m.querySelector('#dpTrailerSlot');
-    if (tslotExt && x.tr) mountTrailer(tslotExt, x.tr);
+    if (tslotExt && x.tr) {
+      var tbtnExt = tslotExt.querySelector('#dpTrailer');
+      if (tbtnExt) tbtnExt.onclick = function () { mountTrailer(tslotExt, x.tr); };
+      else mountTrailer(tslotExt, x.tr);
+    }
   }
 
   /* 90-boot.js 在 detail 分支调这个。分片只有 200–500ms，但慢网下不能白屏，
@@ -378,12 +382,6 @@
       /* 播放状态行（原来写在播放源面板的 sec-sub 里；面板已删，改挂这里） */
       +     '<p class="dp-stat" id="dpStat"></p>'
       +     panSectionHtml()
-      /* 预告（YouTube 官方源，ex[2] 有才出）：点按钮才注 iframe，页面加载不带第三方 JS */
-      +     (ex[2]
-            ? '<section class="sect" id="dp-trailer"><div class="sec-h"><h2>预告</h2></div>'
-              + '<div class="trailer-slot" id="dpTrailerSlot">'
-              + '<button class="btn pri" id="dpTrailer" type="button">▶ 播放预告（YouTube）</button></div></section>'
-            : '')
       +     '<nav class="mtabs dp-nav">'
       +       '<a class="mtab on" href="#dp-plot">简介</a>'
       +       '<a class="mtab" href="#dp-chars">角色</a>'
@@ -411,7 +409,11 @@
       +     '<section class="sect"><div class="sec-h"><h2>信息</h2></div>'
       +       '<dl class="infobox">' + infoRows + '</dl>' + rcHtml + '</section>'
       +     '<section class="sect"><div class="sec-h"><h2>相关推荐</h2>'
-      +       '<span class="sec-sub">同年份 · 同类型</span></div>'
+      +       '<span class="sec-sub">预告 · 同年份 · 同类型</span></div>'
+      +       (ex[2] ? '<div class="dp-tr" id="dpTrailerSlot">'
+      +         '<button class="dp-tr-btn" id="dpTrailer" type="button">'
+      +         '<img src="https://i.ytimg.com/vi/' + esc(ytKey(ex[2])) + '/hqdefault.jpg" alt="" loading="lazy">'
+      +         '<span class="dp-tr-play">\u25B6</span><span class="dp-tr-cap">预告片</span></button></div>' : '')
       +       '<div class="grid dp-rel">' + relHtml + '</div></section>'
       +     '<section class="sect"><div class="sec-h"><h2>数据来源</h2></div>'
       +       '<p class="dp-src">Bangumi · AniList · B 站</p></section>'
@@ -526,9 +528,13 @@
       };
     }
 
-    /* 预告：直接嵌 YouTube 官方播放器（原来自绘黑框 + 按钮） */
+    /* 预告（在右侧「相关推荐」首位）：点封面才注 YouTube iframe，加载页面不带第三方 JS */
     var tslot = m.querySelector('#dpTrailerSlot');
-    if (tslot && ex[2]) mountTrailer(tslot, ex[2]);
+    if (tslot && ex[2]) {
+      var tbtn = tslot.querySelector('#dpTrailer');
+      if (tbtn) tbtn.onclick = function () { mountTrailer(tslot, ex[2]); };
+      else mountTrailer(tslot, ex[2]);
+    }
 
     /* 区块导航：整页滚动到锚点并切 .on。桌面 .dp-nav 吸顶在顶栏下面，会让开两段高度，
        否则目标标题正好被盖住；≤760 .dp-nav 是 static，只让开顶栏。 */

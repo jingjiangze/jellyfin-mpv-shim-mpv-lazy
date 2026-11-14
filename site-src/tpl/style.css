@@ -3985,3 +3985,30 @@ html { scroll-behavior: smooth; }
   .dp-pan .qp-line-row { flex-wrap: wrap; }
   .dp-pan .qp-line { flex: 1 1 100%; }
 }
+
+/* 区块底部「展开全部 N 部 / 收起」——照 B 站：一行卡片下面一枚圆角文字按钮 */
+.expand-row { display: flex; justify-content: center; margin: var(--s3) 0 0; }
+.expand-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 20px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--card);
+  color: var(--fg2); font-size: var(--fs-sm); cursor: pointer;
+}
+.expand-btn:hover { border-color: var(--accent-line); color: var(--accent); }
+.expand-btn i { font-style: normal; font-size: 10px; line-height: 1; }
+
+/* 详情页右侧「相关推荐」里的预告卡片：点封面才注入 YouTube iframe */
+.dp-tr { margin: 0 0 var(--s3); }
+.dp-tr-btn {
+  position: relative; display: block; width: 100%; padding: 0; border: 1px solid var(--line);
+  border-radius: var(--r); overflow: hidden; background: #000; cursor: pointer;
+}
+.dp-tr-btn img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; opacity: .85; }
+.dp-tr-btn:hover img { opacity: 1; }
+.dp-tr-play {
+  position: absolute; inset: 0; display: grid; place-items: center; color: #fff;
+  font-size: 30px; text-shadow: 0 2px 12px rgba(0,0,0,.65);
+}
+.dp-tr-cap {
+  position: absolute; left: 10px; bottom: 8px; padding: 2px 8px; border-radius: 999px;
+  background: rgba(0,0,0,.55); color: #fff; font-size: var(--fs-xs);
+}

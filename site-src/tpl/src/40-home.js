@@ -1,6 +1,5 @@
 /* ---------------- 首页（照 ani.gamer.com.tw：无筛选条，区块按当天/当季自动出） ---------------- */
-var HOME = { y: 0, q: 0, wd: 0, wkOpen: 0 };   // wd: 0=跟随今天；wkOpen: 星期条是否展开
-try { HOME.wkOpen = localStorage.getItem('anime_wk_open') === '1' ? 1 : 0; } catch (e) { HOME.wkOpen = 0; }
+var HOME = { y: 0, q: 0, wd: 0, todayOpen: 0 };   // wd: 0=跟随今天；todayOpen=「今天更新」是否展开全部
 var QS = [1, 2, 3, 4];
 
 function seasonOf(m) { return m ? Math.ceil(m / 3) : 0; }
@@ -32,23 +31,24 @@ function todayRows() {
 
 /* 星期 tab（照 gamer 新番表的文本 tab，不是胶囊）：周一…周日 + 当天部数。
    首页原来只出「今天」那一列，周一到周五的番没有入口。 */
-/* 星期条（2026-11-14 改成可展开）：
-   收起 = 只显示当前选中的那天 + 「展开全部 7 天」；展开 = 原来的一行 7 天。
-   状态存 localStorage，换页回来保持。B 站/A 站的番剧时间表也是「先给一天、再展开」。 */
+/* 星期条（照 gamer 新番表的文本 tab）：周一…周日 + 当天部数，永远一行 7 个。
+   「展开」留给下面的番剧网格（B 站的做法：先给一行，再展开其余）。 */
 function weekTabsHtml() {
   var wd = wdPick();
   var cnt = {};
   courRows().forEach(function (r) { if (r[6]) cnt[r[6]] = (cnt[r[6]] || 0) + 1; });
-  var open = !!HOME.wkOpen;
-  var out = WD.map(function (d, i) {
+  return '<div class="wk-tabs">' + WD.map(function (d, i) {
     var n = i + 1;
     return '<button class="wk-tab' + (wd === n ? ' on' : '') + '" type="button" data-wd="' + n + '">'
       + d + '<i>' + (cnt[n] || 0) + '</i></button>';
-  });
-  if (!open) out = [out[wd - 1] || out[0]];
-  return '<div class="wk-tabs' + (open ? ' is-open' : '') + '">' + out.join('')
-    + '<button class="wk-more" type="button" data-wk="toggle">'
-    + (open ? '收起 ▴' : '展开全部 7 天 ▾') + '</button></div>';
+  }).join('') + '</div>';
+}
+
+/* 「展开全部 N 部」/「收起」—— 照 B 站区块底部那枚圆角文字按钮 */
+function expandRowHtml(n, open) {
+  return '<div class="expand-row"><button class="expand-btn" type="button" data-today="toggle">'
+    + (open ? '收起' : '展开全部 ' + n + ' 部') + '<i>' + (open ? '\u25B4' : '\u25BE') + '</i>'
+    + '</button></div>';
 }
 
 /* 本季新番：当前年 + 最新季度全部，按评分排 */
@@ -299,12 +299,17 @@ function renderHome() {
   var cont = contBlock();
   /* 每块只放一行 7 张（gamer 的首页区块就是这个节奏），整季/整年去番剧页看 */
   var todayTitle = HOME.wd ? (WD[wd - 1] + ' 更新') : ('今天更新 · ' + (WD[wd - 1] || ''));
-  var today = block(todayTitle, todayRows().slice(0, 7),
+  var allToday = todayRows();
+  var shownToday = HOME.todayOpen ? allToday : allToday.slice(0, 7);
+  var today = block(todayTitle, shownToday,
     '<a class="morelink" href="/anime">全部番剧 ›</a>');
-  /* tab 行插在标题条与卡片网格之间（有今天更新块才插） */
+  /* tab 行插在标题条与卡片网格之间；展开按钮插在网格之后（B 站同款：先一行，展开看全部） */
   if (today) {
     var tpos = today.indexOf('<div class="grid');
     if (tpos > 0) today = today.slice(0, tpos) + weekTabsHtml() + today.slice(tpos);
+    if (allToday.length > 7) {
+      today = today.replace('</section>', expandRowHtml(allToday.length, !!HOME.todayOpen) + '</section>');
+    }
   }
   var season = block('本季新番 · ' + (HOME.q ? '第' + HOME.q + '季度' : HOME.y), seasonPool.slice(0, 7),
     '<a class="morelink" href="/anime">更多 ›</a>');
@@ -329,11 +334,10 @@ function renderHome() {
       renderHome();
     };
   });
-  /* 展开/收起整周（状态持久化；只重画首页，<100ms） */
-  main.querySelectorAll('[data-wk]').forEach(function (b) {
+  /* 展开/收起「今天更新」的其余番剧（只重画首页，数据都在内存） */
+  main.querySelectorAll('[data-today]').forEach(function (b) {
     b.onclick = function () {
-      HOME.wkOpen = HOME.wkOpen ? 0 : 1;
-      try { localStorage.setItem('anime_wk_open', HOME.wkOpen ? '1' : '0'); } catch (e2) { }
+      HOME.todayOpen = HOME.todayOpen ? 0 : 1;
       renderHome();
     };
   });
@@ -353,8 +357,8 @@ function homeDefaults() {
   /* 默认落在「最新季度」；没有月份信息的则不限季度 */
   var q = 0;
   inY.forEach(function (r) { var s = seasonOf(r[5]); if (s > q) q = s; });
-  /* 保留用户态：wkOpen（星期条展开）、wd（手选星期）不能被「初始化」冲掉 */
-  HOME = { y: y, q: q, wd: HOME.wd || 0, wkOpen: HOME.wkOpen || 0 };
+  /* 保留用户态：todayOpen（今天更新展开）、wd（手选星期）不能被「初始化」冲掉 */
+  HOME = { y: y, q: q, wd: HOME.wd || 0, todayOpen: HOME.todayOpen || 0 };
 }
 
 /* 首页 / 排行榜共用的搜索绑定：输入即筛番剧，清空后回到调用方指定的页面。
