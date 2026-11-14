@@ -1,28 +1,44 @@
-  /* ---------------- 规则源（HTML 抓取在浏览器里做）----------------
-     2026-11-14：参考 Kazumi 的 XPath 源，但**不用 headless 浏览器**——
-     盒子只把原始 HTML 转给前端（/ext/page?u=，白名单），解析在用户浏览器里。
+  /* ---------------- 规则源（HTML 抓取 + 浏览器解析）----------------
+     2026-11-14：参考 Kazumi 的 XPath 源，但**不用 headless 浏览器**。
+     盒子只转发原始 HTML（/ext/page?u=，域名白名单 + 5 分钟缓存 + 并发闸），
+     解析全在用户浏览器里：搜索 → 详情 → 分集 → 播放。
 
-     当前接入：MXdm（www.dcc3.com）
-       搜索 /search/?wd=<kw> → /detail/<id>/
-       详情 /detail/<id>/    → /play/<id>-<line>-<ep>/
-       播放 /play/…          → HTML 里直接有 m3u8 地址
+     两种模式（体检结论：17 个源里只有 MXdm 的播放页直接给 m3u8）：
+       · mode:'m3u8'   —— 播放页 HTML 里抽 m3u8，原生 <video> + hls.js
+       · mode:'iframe' —— 播放页没有裸 m3u8（hex 编码 / Doki token / 自有播放器），
+                          且**没有 X-Frame-Options** ⇒ 直接 iframe 嵌它的播放页，
+                          让对方的播放器在用户浏览器里自己跑（Kazumi 用 webview 的等价做法）
 
-     这类源作为「外部线路」的补充：采集站（m3u8 JSON API）全挂时才用，
-     也可以在线路菜单里手动选。解析失败一律 onFail，不猜。 */
+     优先级 = 数组顺序：直连 m3u8 的排前面，iframe 的按「体检可播 + 站点稳定」排。
+     自动链只在采集站全挂后才按顺序试**前 3 个**，避免一集打十几个站。 */
   var RULE_TTL = 10 * 60 * 1000;
-  var RULE_MEM = {};              // 缓存：搜索/详情
+  var RULE_MEM = {};              // 缓存：搜索 / 详情
   var RULE_SRC = [
-    { id: 'mxdm', name: 'MXdm', base: 'https://www.dcc3.com' }
+    { id: 'mxdm',    name: 'MXdm',    base: 'https://www.dcc3.com',     search: '/search/?wd={kw}',                         mode: 'm3u8' },
+    { id: '7sefun',  name: '7sefun',  base: 'https://www.7sefun.top',   search: '/vodsearch/-------------.html?wd={kw}',    mode: 'iframe' },
+    { id: 'akianime',name: 'akianime',base: 'https://www.akianime.cc',  search: '/bgmsearch/-------------.html?wd={kw}',    mode: 'iframe' },
+    { id: 'baimao',  name: '白毛动漫', base: 'https://www.baimaodm.com', search: '/s_all?ex=1&kw={kw}',                      mode: 'iframe' },
+    { id: 'dm84',    name: 'DM84',    base: 'https://dmbus.cc',         search: '/s----------.html?wd={kw}',                mode: 'iframe' }
   ];
+  var RULE_CHAIN_MAX = 3;          // 自动链最多试几个
 
+  /* 规则页抓取：单独放宽到 25s（站点首包常 8–15s，srcGet 的 15s 会先掐断） */
   function ruleGet(url) {
-    return srcGet('/ext/page?u=' + encodeURIComponent(url), '').then(function (r) {
-      var j = (r && r.j) || {};
-      if (!r || !r.ok || !j.ok || !j.text) {
-        throw new Error((j && j.error) || ('HTTP ' + (r && r.status)));
-      }
-      return String(j.text);
-    });
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 25000);
+    return fetch(SRC_BASE + '/ext/page?u=' + encodeURIComponent(url), {
+      method: 'GET', cache: 'no-store', signal: ctl ? ctl.signal : undefined
+    }).then(function (r) {
+      clearTimeout(timer);
+      return r.text().then(function (t) {
+        var j = null;
+        try { j = JSON.parse(t); } catch (e) { j = null; }
+        if (!r.ok || !j || !j.ok || !j.text) {
+          throw new Error((j && j.error) || ('HTTP ' + r.status));
+        }
+        return String(j.text);
+      });
+    }, function () { clearTimeout(timer); throw new Error('network'); });
   }
 
   function ruleDoc(html) {
@@ -38,43 +54,75 @@
     });
   }
 
-  /* 搜索：返回 [{id, name, href}]（同一 id 只留第一条标题） */
+  var RULE_DETAILISH = /(\/detail|\/voddetail|\/subject|\/anime\/|\/media|\/show\/|\/video\/)/i;
+  var RULE_PLAYISH = /(\/play\/|\/vodplay|\/bgmplay|\/watch|vodplay|\/v\/|\/index\.php\/vod\/play|\/episode)/i;
+
+  /* 把 href 解析成绝对地址（同源才算，外链留给 iframe） */
+  function ruleAbs(base, href) {
+    try { return new URL(href, base).href; } catch (e) { return ''; }
+  }
+
+  /* 搜索：返回 [{id, name, href}]；按片名归一化挑最像的一条 */
   function ruleSearch(src, kw) {
-    var u = src.base + '/search/?wd=' + encodeURIComponent(String(kw || '').replace(/\s+/g, ' ').trim());
+    var u = src.base + src.search.replace('{kw}', encodeURIComponent(String(kw || '').trim()));
     return ruleCache(src.id + '|s|' + kw, function () {
       return ruleGet(u).then(function (html) {
         var doc = ruleDoc(html), out = [], seen = {};
         if (!doc) return out;
-        var as = doc.querySelectorAll('a[href*="/detail/"]');
+        var as = doc.querySelectorAll('a[href]');
         for (var i = 0; i < as.length; i++) {
           var href = as[i].getAttribute('href') || '';
-          var m = /\/detail\/(\d+)\/?/.exec(href);
-          if (!m) continue;
+          var abs = ruleAbs(src.base, href);
+          if (!abs) continue;
           var name = String(as[i].textContent || '').replace(/\s+/g, ' ').trim();
-          if (!name || /查看详情/.test(name)) continue;
-          if (seen[m[1]]) continue;
-          seen[m[1]] = 1;
-          out.push({ id: m[1], name: name, href: src.base + '/detail/' + m[1] + '/' });
+          /* 很多站是「封面图 + 标题」的链接，a 里没有文字：退到 title / img.alt / 容器文本 */
+          if (!name) name = String(as[i].getAttribute('title') || '').trim();
+          if (!name) {
+            var im = as[i].querySelector ? as[i].querySelector('img') : null;
+            if (im) name = String(im.getAttribute('alt') || '').trim();
+          }
+          if (!name && as[i].closest) {
+            var par = as[i].closest('li,div,article,section');
+            if (par) name = String(par.textContent || '').replace(/s+/g, ' ').trim().slice(0, 60);
+          }
+          if (!name || name.length < 2) continue;
+          if (/查看详情|全部|更多|上一页|下一页|登录|注册/.test(name)) continue;
+          var looksDetail = RULE_DETAILISH.test(abs);
+          var looksText = extNorm(name).indexOf(extNorm(extBase(kw))) >= 0;
+          if (!looksDetail && !looksText) continue;
+          if (seen[abs]) continue;
+          seen[abs] = 1;
+          out.push({ id: abs, name: name, href: abs });
         }
         return out;
       });
     });
   }
 
-  /* 详情：返回 [{line, ep, href}]（同名多线路时保留集数最多的一条线路） */
+  /* 详情：返回 [{line, ep, href}]，取集数最多的那条线路 */
   function ruleEps(src, detailHref) {
     return ruleCache(src.id + '|d|' + detailHref, function () {
       return ruleGet(detailHref).then(function (html) {
         var doc = ruleDoc(html), lines = {}, best = null, bestN = -1;
         if (!doc) return [];
-        var as = doc.querySelectorAll('a[href*="/play/"]');
+        var as = doc.querySelectorAll('a[href]');
         for (var i = 0; i < as.length; i++) {
           var href = as[i].getAttribute('href') || '';
-          var m = /\/play\/(\d+)-(\d+)-(\d+)\/?/.exec(href);
-          if (!m) continue;
-          var line = m[2], ep = Number(m[3]);
+          if (!RULE_PLAYISH.test(href)) continue;
+          var abs = ruleAbs(src.base, href);
+          if (!abs) continue;
+          /* 线路/集号：取 href 里最后两个数字段（"…/32644-1-3.html" → 1 / 3） */
+          var nums = (href.match(/(\d+)/g) || []);
+          var ep = 0, line = '0';
+          /* 只有 …-<线路>-<集号>.html 这种两段数字才当集号；
+             单段（/v/1621.html 这类整片一页）一律当第 1 集，避免编出「第 1621 集」 */
+          if (nums.length >= 2) {
+            ep = Number(nums[nums.length - 1]);
+            line = nums[nums.length - 2];
+          }
+          if (!(ep > 0)) ep = 1;
           if (!lines[line]) lines[line] = [];
-          lines[line].push({ ep: ep, href: src.base + href.replace(/^https?:\/\/[^/]+/, '') });
+          lines[line].push({ ep: ep, href: abs });
         }
         for (var k in lines) {
           if (lines[k].length > bestN) { bestN = lines[k].length; best = lines[k]; }
@@ -86,18 +134,18 @@
     });
   }
 
-  /* 播放页：HTML 里直接抽 m3u8（先找 `xxx.m3u8` 字面量，再找 url: '...'） */
+  /* 播放页：抽 m3u8（裸地址 / 转义地址 / JSON 里的 url 字段） */
   function ruleM3u8(src, playHref) {
     return ruleCache(src.id + '|p|' + playHref, function () {
       return ruleGet(playHref).then(function (html) {
-        var m = /(https?:\/\/[^"'\\\s]+?\.m3u8[^"'\\\s]*)/i.exec(html);
-        if (m) return m[1].replace(/\\\//g, '/');
+        var h = html.replace(/\\\//g, '/');
+        var m = /(https?:\/\/[^"'\\\s<>]+?\.m3u8[^"'\\\s<>]*)/i.exec(h);
+        if (m) return m[1];
         throw new Error('no m3u8');
       });
     });
   }
 
-  /* 匹配：用 79 的归一化口径（片名基底 + 季号），复用 extNorm/extBase/extSeason */
   function rulePick(list, title) {
     var ns = extNorm(extBase(title)), ss = extSeason(title) || 0, best = null, bestScore = -1;
     for (var i = 0; i < list.length; i++) {
@@ -113,16 +161,11 @@
     return best;
   }
 
-  /* 播放：搜索 → 详情 → 选集 → 抽 m3u8 → 起播（全在浏览器里解析） */
-  function rulePlay(box, id, title, ep, onFail, only) {
-    var src = null;
-    for (var i = 0; i < RULE_SRC.length; i++) {
-      if (!only || RULE_SRC[i].id === only) { src = RULE_SRC[i]; break; }
-    }
-    if (!src) { if (onFail) onFail('无规则源'); return; }
+  /* 单源播一集：m3u8 直连 / iframe 兜底 */
+  function rulePlayOne(src, box, id, title, ep) {
     var epNo = Math.max(1, Math.floor(Number(ep) || 1));
     srcHint(box, '规则源 · ' + src.name + ' · 搜索中…');
-    ruleSearch(src, panKw(title)).then(function (list) {
+    return ruleSearch(src, panKw(title)).then(function (list) {
       var pick = rulePick(list, title);
       if (!pick) throw new Error('not found');
       srcHint(box, '规则源 · ' + src.name + ' · 读取分集…');
@@ -131,19 +174,46 @@
         var hit = null;
         for (var i = 0; i < eps.length; i++) if (eps[i].ep === epNo) { hit = eps[i]; break; }
         if (!hit) hit = eps[0];
+        if (src.mode === 'iframe') {
+          /* 对方播放器自带广告/选集；这里只负责嵌进来 */
+          srcAbortOthers();
+          srcPlayerSlot(box).innerHTML = srcFrame(hit.href, 'autoplay; fullscreen; picture-in-picture');
+          srcHint(box, '规则源 · ' + src.name + ' · 第 ' + hit.ep + ' 集（站外播放器）');
+          srcLineSet(box, '规则源 · ' + src.name);
+          return true;
+        }
         srcHint(box, '规则源 · ' + src.name + ' · 第 ' + hit.ep + ' 集…');
-        return ruleM3u8(src, hit.href);
+        return ruleM3u8(src, hit.href).then(function (m3u8) {
+          if (!window.QPlayer) throw new Error('no player');
+          QPlayer.open({ m: box, id: id, title: title, ep: epNo, sources: [] });
+          QPlayer.play(m3u8, '规则源 · ' + src.name, { hls: true });
+          srcHint(box, '规则源 · ' + src.name + ' · 第 ' + epNo + ' 集');
+          srcLineSet(box, '规则源 · ' + src.name);
+          return true;
+        });
       });
-    }).then(function (m3u8) {
-      if (!window.QPlayer) throw new Error('no player');
-      QPlayer.open({ m: box, id: id, title: title, ep: epNo, sources: [] });
-      QPlayer.play(m3u8, '规则源 · ' + src.name, { hls: true });
-      srcHint(box, '规则源 · ' + src.name + ' · 第 ' + epNo + ' 集');
-      srcLineSet(box, '规则源 · ' + src.name);
-    }).catch(function (e) {
-      if (onFail) onFail('规则源 ' + src.name + ' 不可用（' + (e && e.message || 'error') + '）');
-      else srcHint(box, '规则源 ' + src.name + ' 不可用');
     });
+  }
+
+  /* 按优先级顺序试：手动选某个源时 onlyId 精确匹配 */
+  function rulePlay(box, id, title, ep, onFail, onlyId, maxN) {
+    var list = RULE_SRC.filter(function (s) { return !onlyId || s.id === onlyId; });
+    if (!list.length) { if (onFail) onFail('无规则源'); return; }
+    var cap = onlyId ? 1 : (maxN || list.length);
+    var i = 0, errs = [];
+    function step() {
+      if (i >= Math.min(cap, list.length)) {
+        if (onFail) onFail('规则源都不可用' + (errs.length ? ('（' + errs[0] + '）') : ''));
+        return;
+      }
+      var src = list[i++];
+      rulePlayOne(src, box, id, title, ep).catch(function (e) {
+        errs.push(src.name + ':' + ((e && e.message) || 'error'));
+        if (onlyId) srcHint(box, '规则源 ' + src.name + ' 不可用（' + ((e && e.message) || 'error') + '）');
+        step();
+      });
+    }
+    step();
   }
 
   window.__ruleSources = function () { return RULE_SRC.slice(); };

@@ -201,7 +201,8 @@
     function toRule(next) {
       if (typeof window.__rulePlay !== 'function') { next(''); return; }
       srcHint(box, '正在尝试规则源…');
-      window.__rulePlay(box, id, title, epNo, function (w) { next(w || '规则源未命中'); });
+      /* 按优先级最多试 3 个：一集打十几个站既慢又容易被风控 */
+      window.__rulePlay(box, id, title, epNo, function (w) { next(w || '规则源未命中'); }, null, 3);
     }
 
     function anonChain() {
@@ -275,7 +276,8 @@
     }
     var rules = (typeof window.__ruleSources === 'function') ? window.__ruleSources() : [];
     for (var r = 0; r < rules.length; r++) {
-      rows.push(['rule:' + rules[r].id, '规则源 · ' + rules[r].name]);
+      rows.push(['rule:' + rules[r].id,
+        '规则源 · ' + rules[r].name + (rules[r].mode === 'iframe' ? '（站外播放器）' : '')]);
     }
     return rows.map(function (r) {
       return '<button class="line-item" type="button" data-line="' + esc(r[0]) + '">' + esc(r[1]) + '</button>';
