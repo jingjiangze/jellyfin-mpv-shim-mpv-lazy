@@ -1,8 +1,8 @@
   /* ---------------- 播放链（详情页只有「开始观看」，不再有播放源面板）----------------
      2026-11-14 改版（用户口径）：
-       · 详情页不再显示「B 站 / 外部线路 / YouTube / 网盘」四行，绑定入口挪到「我的」页；
-       · 线路选择全自动：B 站登录态 → B 站官方番剧(免费集) → 索引 bvid → 外部采集源
-         （浏览器并发探测，先回先播）→ B 站匿名搜 → YouTube 官方 → 网盘转存；
+       · 详情页不再显示「B 站 / 外部线路 / YouTube / 网盘」四行；
+       · 线路全自动：外部采集源 → 规则源 → YouTube 官方 → 夸克网盘；
+       · B 站只作出处（不再内嵌播放、不再要求绑定），详情页给「去 B 站观看」外链；
        · 状态文案写在播放器下面的 #dpStat（没有面板了，srcHint 落这里）。
      外部采集源的检测/匹配在 79-extsrc.js，本文件只负责编排。 */
   var SRC_BASE = 'https://120.48.56.189';
@@ -60,7 +60,6 @@
   }
   function srcAbortOthers() {
     if (window.__qpAbort === 'function') window.__qpAbort();
-    if (window.__biliAbort === 'function') window.__biliAbort();
     if (typeof window.__extAbort === 'function') window.__extAbort();
     if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
   }
@@ -77,63 +76,6 @@
       ? 'YouTube 官方频道 · 本集中国大陆可直连播放'
       : 'YouTube 官方频道 · 本集需港澳台/东南亚出口');
     return true;
-  }
-
-  function srcEmbedBvid(box, bvid) {
-    if (!bvid) return false;
-    var slot = srcPlayerSlot(box);
-    srcAbortOthers();
-    slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?bvid='
-      + encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1');
-    srcLineSet(box, 'B 站');
-    srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
-    return true;
-  }
-
-  /* 番剧官方源（PGC）：参数是 episodeId + seasonId；会员集只给试看，不嵌 */
-  function srcEmbedPgc(box, sid, ep, epNo) {
-    if (!box || !sid || !ep || !ep.id) return false;
-    var slot = srcPlayerSlot(box);
-    srcAbortOthers();
-    slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?episodeId='
-      + encodeURIComponent(ep.id) + '&seasonId=' + encodeURIComponent(sid)
-      + '&autoplay=1&high_quality=1&danmaku=1');
-    srcLineSet(box, 'B 站官方番剧');
-    srcHint(box, 'B 站官方番剧 · 第 ' + epNo + ' 集（免费集，免登录）');
-    return true;
-  }
-
-  function srcPgc(title) {
-    if (typeof biliGet !== 'function') return Promise.resolve(null);
-    return biliGet('pgc', { t: title }).then(function (d) {
-      return (d && d.ok && d.found && d.sid && (d.eps || []).length) ? d : null;
-    }, function () { return null; });
-  }
-
-  function srcEmbedBili(box, id) {
-    var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
-    return srcEmbedBvid(box, exb && exb[5]);
-  }
-
-  /* 匿名实时搜 B 站：**必须校验片名**——匿名搜索没有片名校验，
-     实测「金牌得主 第二季」被配成花滑 cos 视频（BV1U7dYBLEZP）。 */
-  function biliFindBvid(title) {
-    if (typeof biliGet !== 'function') return Promise.reject(new Error('no biliGet'));
-    return biliGet('find', { t: title }).then(function (f) {
-      if (!f || !f.found || !f.bvid) return '';
-      var t = String(f.title || '');
-      if (typeof BILI_NOISE === 'object' && BILI_NOISE.test && BILI_NOISE.test(t)) return '';
-      if (!srcTitleOk(t, title)) return '';
-      return String(f.bvid);
-    }, function () { return ''; });
-  }
-
-  /* 片名粗校验：归一化后互含（≥2 字）才算同一部 */
-  function srcTitleOk(cand, title) {
-    var a = nrm(String(cand || '')), b = nrm(String(title || ''));
-    if (!a || !b) return false;
-    if (b.length < 2) return a.indexOf(b) >= 0;
-    return a.indexOf(b) >= 0 || b.indexOf(a) >= 0;
   }
 
   function srcYtEps(id) {
@@ -163,7 +105,10 @@
   }
 
   /* ---------------- 自动播放链 ---------------- */
-  function srcStart(box, id, title, ep, skipExt) {
+  /* 2026-11-15：站点不再内嵌 B 站、也不做 B 站账号绑定。
+     B 站只作「出处」：详情页给「去 B 站观看」外链（bvid 由 CI 索引维护）。
+     自动链：外部采集源 → 规则源 → YouTube 官方 → 夸克网盘。 */
+  function srcStart(box, id, title, ep) {
     var epNo = Math.max(1, Math.floor(Number(ep) || 1));
     var tk = (typeof authToken === 'function') ? authToken() : '';
     if (typeof window.__extAbort === 'function') window.__extAbort();
@@ -189,60 +134,49 @@
     }
 
     /* 外部采集源：浏览器并发探测，先回先播（79-extsrc） */
+    /* 外部采集源（m3u8 API，浏览器并发探测，先回先播） */
     function toExt(next) {
-      if (skipExt) { next('已选 B 站'); return; }
       if (typeof extStart !== 'function') { next('无外部源'); return; }
       srcLineSet(box, '外部 · 自动');
       srcHint(box, '正在匹配外部线路…');
       extStart(box, id, title, epNo, function (why) { next(why || '外部源未收录'); });
     }
 
-    /* 规则源（HTML 在浏览器里解析）：采集站全挂时的补充线路 */
+    /* 规则源（HTML 由盒子转发、浏览器解析） */
     function toRule(next) {
       if (typeof window.__rulePlay !== 'function') { next(''); return; }
       srcHint(box, '正在尝试规则源…');
-      /* 按优先级最多试 3 个：一集打十几个站既慢又容易被风控 */
       window.__rulePlay(box, id, title, epNo, function (w) { next(w || '规则源未命中'); }, null, 3);
     }
 
-    function anonChain() {
-      srcHint(box, '正在匹配 B 站官方番剧…');
-      srcPgc(title).then(function (p) {
-        if (p) {
-          var row = p.eps[Math.max(0, epNo - 1)] || p.eps[0];
-          if (row && !row.vip && srcEmbedPgc(box, p.sid, row, epNo)) return;
-          if (row && row.vip) srcHint(box, '第 ' + epNo + ' 集是 B 站大会员集（仅试看）· 已换下一个源');
-        }
-        if (srcEmbedBili(box, id)) return;
-        toExt(function (why) {
-        toRule(function (why2) {
-          srcHint(box, '正在 B 站搜索「' + title + '」…');
-          biliFindBvid(title).then(function (bv) {
-            if (bv && srcEmbedBvid(box, bv)) return;
-            toYoutube(why + ' · B 站未找到');
-          }, function () { toYoutube(why + ' · B 站搜索失败'); });
-        });
-      });
+    function toYoutube(why) {
+      var eps = srcYtEps(id);
+      if (!eps) { toQuark(why + ' · 无官方正片'); return; }
+      var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
+      srcHint(box, why + ' · 检测 YouTube 可达性…');
+      ytReach().then(function (ok) {
+        var pick = eps[idx] || [];
+        if (ok && srcEmbedYT(box, pick[1], epNo, pick[2])) return;
+        toQuark(why + ' · YouTube 不可达');
       });
     }
 
-    /* 已绑定 B 站：先用登录态播（清晰度/大会员集） */
-    if (tk && typeof biliPlayEp === 'function') {
-      srcHint(box, '正在检查 B 站登录态…');
-      srcGet('/bili/bind', tk).then(function (r) {
-        var j = (r && r.j) || {};
-        if (r && r.ok && j.ok && j.bound) {
-          srcHint(box, 'B 站已绑定 · 用登录态播放');
-          biliPlayEp(box, id, title, epNo);
-          return;
-        }
-        anonChain();
-      }, anonChain);
-      return true;
+    function toQuark(why) {
+      srcLineSet(box, '夸克网盘');
+      srcHint(box, why + ' · 使用网盘源');
+      if (typeof openQuarkPlay === 'function') openQuarkPlay(srcPlayerSlot(box), id, title);
+      if (typeof authToken === 'function' && !authToken() && typeof openAuthPanel === 'function') openAuthPanel('email');
     }
-    anonChain();
+
+    srcHint(box, '正在匹配播放源…');
+    toExt(function (why1) {
+      toRule(function (why2) {
+        toYoutube([why1, why2].filter(Boolean).join(' · '));
+      });
+    });
     return true;
   }
+
 
   /* ---------------- 手动切换线路（播放器下方）----------------
      自动链还是默认；这里给不想等/想指定的人一个入口：
@@ -261,8 +195,7 @@
 
   function srcLineMenuHtml(id) {
     var rows = [
-      ['auto', '自动（B站 → 外部 → YouTube → 网盘）'],
-      ['bili', 'B 站优先'],
+      ['auto', '自动（外部 → 规则源 → YouTube → 网盘）'],
       ['yt', 'YouTube 官方'],
       ['quark', '夸克网盘']
     ];
@@ -317,7 +250,6 @@
   function srcLinePick(box, id, title, ep, line) {
     var slot = srcPlayerSlot(box);
     if (line === 'auto') { srcLineSet(box, '自动'); srcStart(box, id, title, ep, false); return; }
-    if (line === 'bili') { srcLineSet(box, 'B 站优先'); srcStart(box, id, title, ep, true); return; }
     if (line === 'yt') {
       var eps = srcYtEps(id);
       if (!eps) { srcHint(box, '本季没有官方 YouTube 正片'); return; }
@@ -353,51 +285,6 @@
       srcLineSet(box, '外部 · ' + (mine[0].name || pid));
       if (typeof extPlayEp === 'function') extPlayEp(box, id, title, ep, mine);
     }
-  }
-
-  /* B 站绑定：与夸克同一套「盒子内嵌扫码页 + postMessage」。
-     盒子 /bili/qrpage?t=<站点 token> 自己生成二维码、轮询、落库；
-     绑完 postMessage {type:'bili-bound'} → 这里关窗并通知刷新（「我的」页卡片 / 播放源）。 */
-  function openBiliBindPanel() {
-    if (document.getElementById('bbmask')) return;
-    if (typeof authToken === 'function' && !authToken()) {
-      if (typeof openAuthPanel === 'function') openAuthPanel('email');
-      return;
-    }
-    var tk = (typeof authToken === 'function' && authToken()) || '';
-    var mask = document.createElement('div');
-    mask.className = 'authmask qbmask';
-    mask.id = 'bbmask';
-    mask.innerHTML = '<div class="authcard qbcard" role="dialog" aria-modal="true">'
-      + '<button class="authx" type="button" aria-label="关闭">×</button>'
-      + '<h3 class="qbtitle">绑定 B 站账号</h3>'
-      + '<p class="qbhint">用 B 站 App 扫码（也可以粘贴 SESSDATA）。绑定后本页播放走你的账号：1080p / 大会员集。</p>'
-      + '<div class="qbframe"><iframe src="' + esc(SRC_BASE + '/bili/qrpage?t=' + encodeURIComponent(tk) + '&embed=1') + '"'
-      + ' referrerpolicy="origin-when-cross-origin" allow="clipboard-write"></iframe></div>'
-      + '</div>';
-    document.body.appendChild(mask);
-
-    function cleanup() {
-      if (mask.parentNode) mask.parentNode.removeChild(mask);
-      window.removeEventListener('message', onMsg);
-      document.removeEventListener('keydown', onKey);
-    }
-    function onMsg(ev) {
-      if (String(ev.origin).indexOf('120.48.56.189') < 0) return;
-      var d = ev.data || {};
-      if (d && d.type === 'bili-bound' && d.ok) {
-        cleanup();
-        if (typeof window.__biliBound === 'function') window.__biliBound(d.uname || '');
-        srcHint(document, 'B 站已绑定' + (d.uname ? '：' + d.uname : ''));
-      }
-    }
-    function onKey(ev) { if (ev.key === 'Escape') cleanup(); }
-    mask.onclick = function (ev) {
-      var t = ev.target;
-      if (t === mask || (t && String(t.className || '').indexOf('authx') >= 0)) cleanup();
-    };
-    window.addEventListener('message', onMsg);
-    document.addEventListener('keydown', onKey);
   }
 
   window.__srcStart = srcStart;

@@ -364,8 +364,11 @@
       +     '</div>'
       +     '<div class="mcollect">' + collect + '</div>'
       +     '<div class="acts">'
-      /* gamer 作品页只留一个主按钮「開始觀看」+ 收藏；Bangumi 外链已按要求去掉 */
+      /* 主按钮「开始观看」+（有 bvid 时）「去 B 站观看」外链 + 追番；
+         B 站只作出处：站点不再内嵌播放、也不做账号绑定（2026-11-15） */
       +       '<button class="btn pri" id="watch" type="button">▶ 开始观看</button>'
+      +       (ex[5] ? '<a class="btn" href="https://www.bilibili.com/video/' + esc(ex[5])
+            + '" target="_blank" rel="noopener">去 B 站观看 ›</a>' : '')
       +       '<button class="btn" id="favbtn" type="button">☆ 追番</button>'
       +     '</div>'
       +   '</div>'

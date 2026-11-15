@@ -12,7 +12,21 @@ import time
 import urllib.parse
 import urllib.request
 
+# 2026-11-15：B 站搜索改走盒子的匿名查询接口 /bili/search（CN 出口 + 服务端缓存）。
+# CI runner 直连 api.bilibili.com 经常 412/空结果，盒子这条链已经验证可用。
+BILI_API = os.environ.get("BILI_API", "https://120.48.56.189").rstrip("/")
 OP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+try:
+    import ssl as _ssl
+    _CTX = _ssl.create_default_context()
+    _CTX.check_hostname = False
+    _CTX.verify_mode = _ssl.CERT_NONE      # 盒子是 IP 证书；这里只取公开数据，不做校验
+    # OpenerDirector.open() 没有 context 参数，必须把 HTTPSHandler 建在 opener 上
+    OP_API = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                                         urllib.request.HTTPSHandler(context=_CTX))
+except Exception:
+    _CTX = None
+    OP_API = OP
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 OUT = pathlib.Path(__file__).with_name("site") / "bili.json"
@@ -32,25 +46,19 @@ def get_buvid():
     return "buvid3=A1B2C3D4-1234-5678-9012-345678901234infoc"
 
 
-def search(kw, cookie, retries=3):
-    url = ("https://api.bilibili.com/x/web-interface/search/type?"
-           + urllib.parse.urlencode({"search_type": "video", "keyword": kw, "page": 1}))
+def search(kw, cookie="", retries=3):
+    """经盒子查 B 站搜索结果（原始条目：bvid/title/play/duration/pubdate）。"""
+    url = BILI_API + "/bili/search?" + urllib.parse.urlencode({"kw": kw})
     for i in range(retries):
         try:
-            req = urllib.request.Request(url, headers={
-                "User-Agent": UA,
-                "Referer": "https://search.bilibili.com/",
-                "Cookie": cookie,
-            })
-            with OP.open(req, timeout=20) as x:
+            req = urllib.request.Request(url, headers={"User-Agent": UA})
+            with OP_API.open(req, timeout=30) as x:
                 d = json.loads(x.read().decode("utf-8", "replace"))
-            if d.get("code") != 0:
-                time.sleep(1.5 * (i + 1))
-                continue
-            rs = (d.get("data") or {}).get("result") or []
-            return rs
+            if d.get("ok"):
+                return d.get("items") or []
         except Exception:
-            time.sleep(1.5 * (i + 1))
+            pass
+        time.sleep(1.5 * (i + 1))
     return []
 
 
@@ -103,8 +111,7 @@ def main():
     payload = json.loads(src.read_text(encoding="utf-8"))
     data = [r for r in (payload.get("rows") or [])
             if (len(r) > 3 and r[3] in ("movie", "tv")) or (len(r) > 4 and (r[4] or 0) >= payload.get("year", 0))]
-    cookie = get_buvid()
-    print("buvid:", cookie[:30])
+    cookie = ""                     # 走盒子接口，不需要 buvid
     cache = {}
     if OUT.exists():
         try:
