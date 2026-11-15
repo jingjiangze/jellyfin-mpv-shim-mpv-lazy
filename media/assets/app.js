@@ -698,341 +698,6 @@ return '<div class="sec-h"><h2>我的</h2><span class="sec-sub">未登录</span>
 + '</div>'
 + '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录 / 注册</button></div>';
 }
-var BILI_BIND_PATH = '/bili/bind';
-var BILI_QR_START = '/bili/qr/start';
-var BILI_QR_POLL = '/bili/qr/poll';
-var BILI_QR_MS = 2000;       // 轮询间隔
-var BILI_QR_MAX = 90;        // 90 × 2s = 180s，与后端二维码有效期对齐
-var BILI_ST = null;          // 上次读到的绑定状态：null=没问过；{bound:true,uname,vip_type} / {bound:false}
-var QR_TIMER = 0;            // 扫码轮询定时器（模块级：切后台/卡片被替换都要清掉）
-var QR_KEY = '';             // 当前二维码 key_id；空 = 没有在跑的扫码流程
-var QR_TRIES = 0;            // 已发出的轮询次数
-var QR_GEN = 0;              // 流程代号：重新生成/停止后，旧回调不再落地
-var QR_BUSY = false;         // 上一轮请求还没回来时跳过这一拍，避免请求堆叠
-var QR_PASTE_OPEN = false;   // 兜底粘贴框是否展开（重画卡片后保持）
-function pfNode(id) { return document.getElementById(id); }
-function pfBiliCard(st) {
-var head = '<div class="mnote" id="pfbili-msg" role="status" aria-live="polite"></div>';
-if (st && st.bound) {
-return head
-+ '<p class="authhint">B 站：<b>' + esc(st.uname || '未知昵称') + '</b>'
-+ '（会员 VIP' + (Number(st.vip_type) || 0) + '）</p>'
-+ '<div class="pf-actions">'
-+ '<button class="btn" id="pfreque" type="button">重新扫码</button>'
-+ '<button class="btn" id="pfunbind" type="button">解绑</button>'
-+ '</div>'
-+ '<div id="pfbili-qr"></div>';
-}
-return head
-+ '<div id="pfbili-qr"></div>'
-+ '<div class="pf-actions">'
-+ '<button class="btn pri" id="pfbind-qr" type="button">扫码绑定 B 站账号</button>'
-+ '</div>'
-+ '<div id="pfbili-paste"' + (QR_PASTE_OPEN ? '' : ' style="display:none"') + '>'
-+ '<label class="authfield"><span>B 站 SESSDATA</span>'
-+ '<input type="password" id="pfsess" placeholder="粘贴 SESSDATA" autocomplete="off" spellcheck="false"></label>'
-+ '<div class="pf-actions"><button class="btn pri" id="pfbind" type="button">绑定</button></div>'
-+ '<p class="authhint">只用于读取你账号的播放地址与弹幕；只收 SESSDATA，不收 bili_jct。'
-+ 'SESSDATA 等于你 B 站账号的登录凭证，绑定后如不放心可随时解绑。</p>'
-+ '</div>'
-+ '<p class="authhint">扫码在 B 站官方完成，站点不接触你的密码；绑定后随时可解绑。'
-+ '<button class="mnote-btn" id="pfsess-open" type="button">'
-+ (QR_PASTE_OPEN ? '收起粘贴框' : '改用粘贴 SESSDATA') + '</button></p>';
-}
-function pfBiliPaint(st, msg) {
-var box = pfNode('pfbili');
-if (!box) return;
-pfBiliQrStop();
-if (st && st.bound) QR_PASTE_OPEN = false;   // 绑上以后收起兜底框，下次解绑仍以扫码为主
-box.innerHTML = pfBiliCard(st);
-pfBiliWire();
-if (msg) pfBiliMsg(msg);
-}
-function pfBiliMsg(msg) {
-var el = pfNode('pfbili-msg');
-if (el) el.textContent = msg || '';     // textContent：后端文案不解析成 HTML
-}
-function pfBiliFail(msg) {
-var box = pfNode('pfbili');
-if (!box) return;
-box.innerHTML = '<div class="mnote">' + esc(msg)
-+ ' <button class="mnote-btn" id="pfbili-re" type="button">重试</button></div>';
-pfBiliWire();
-}
-function pfBiliWire() {
-var q = pfNode('pfbind-qr');                    // 未绑定：主按钮 → 站内扫码弹窗（盒子页）
-if (q) q.onclick = function () { if (typeof openBiliBindPanel === 'function') openBiliBindPanel(); };
-var rq = pfNode('pfreque');                     // 已绑定：重新扫码覆盖
-if (rq) rq.onclick = function () { if (typeof openBiliBindPanel === 'function') openBiliBindPanel(); };
-var so = pfNode('pfsess-open');                 // 兜底：展开/收起粘贴框
-if (so) so.onclick = function () { pfBiliTogglePaste(); };
-var b = pfNode('pfbind');
-if (b) b.onclick = function () { pfBiliDoBind(b); };
-var u = pfNode('pfunbind');
-if (u) u.onclick = function () { pfBiliDoUnbind(u); };
-var r = pfNode('pfbili-re');
-if (r) r.onclick = function () { loadPfBili(true); };
-var sv = pfNode('pfqrsave');
-if (sv) sv.onclick = function () { pfBiliQrSave(); };
-}
-function pfBiliQrStop() {
-QR_GEN += 1;
-if (QR_TIMER) { clearInterval(QR_TIMER); QR_TIMER = 0; }
-QR_KEY = '';
-QR_TRIES = 0;
-QR_BUSY = false;
-}
-function pfBiliQrPause() {
-if (QR_TIMER) { clearInterval(QR_TIMER); QR_TIMER = 0; }
-QR_BUSY = false;
-}
-function pfBiliQrText(msg) {
-var el = pfNode('pfbili-qrmsg');
-if (el) el.textContent = msg || '';       // textContent：状态文案不当 HTML 解析
-}
-function pfBiliQrRetryBtn() {
-var box = pfNode('pfbili-qractions');
-if (!box) return;
-box.innerHTML = '<button class="mnote-btn" id="pfqr-re" type="button">重新生成二维码</button>';
-var b = pfNode('pfqr-re');
-if (b) b.onclick = function () { pfBiliQrStart(); };
-}
-function pfBiliQrNote(msg, retry) {
-var box = pfNode('pfbili-qr');
-pfBiliQrStop();
-if (!box) return;
-box.innerHTML = '<p class="authhint">' + esc(msg) + '</p>'
-+ (retry ? '<div class="pf-actions"><button class="mnote-btn" id="pfqr-re" type="button">重新生成</button></div>' : '');
-var b = pfNode('pfqr-re');
-if (b) b.onclick = function () { pfBiliQrStart(); };
-}
-function pfBiliQrExpired() {
-var box = pfNode('pfbili-qr');
-pfBiliQrStop();
-if (!box) return;
-box.innerHTML = '<div class="pf-actions">'
-+ '<button class="mnote-btn" id="pfqr-re" type="button">二维码已过期，点这里重新生成</button></div>';
-var b = pfNode('pfqr-re');
-if (b) b.onclick = function () { pfBiliQrStart(); };
-}
-function pfBiliQrShow(png) {
-var box = pfNode('pfbili-qr');
-if (!box) return;
-var src = String(png || '');
-if (!/^data:image\/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=\s]+$/i.test(src)) {
-pfBiliQrNote('二维码数据格式不对，可改用粘贴 SESSDATA', true);
-return;
-}
-box.innerHTML = '<img class="pf-qr" id="pfqrimg" alt="B站登录二维码" src="' + esc(src) + '"'
-+ ' style="width:180px;height:180px;display:block;margin:0 auto 8px;border-radius:8px;background:#fff">'
-+ '<p class="authhint" id="pfbili-qrmsg" role="status" aria-live="polite"></p>'
-+ '<div id="pfbili-qractions">'
-+ '<button class="mnote-btn" id="pfqrsave" type="button">保存二维码</button>'
-+ '</div>';
-pfBiliWire();
-pfBiliQrText('用 B 站 App 扫码 · 180 秒内有效');
-}
-function pfBiliQrSave() {
-var img = pfNode('pfqrimg');
-if (!img) return;
-var src = String(img.getAttribute('src') || '');
-var m = /^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/=\s]+)$/i.exec(src);
-if (!m) { pfBiliQrNote('二维码不是图片数据，无法保存', true); return; }
-try {
-var bin = atob(m[2].replace(/\s+/g, ''));
-var buf = new Uint8Array(bin.length);
-for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-var type = m[1].toLowerCase() === 'png' ? 'image/png' : 'image/jpeg';
-var url = URL.createObjectURL(new Blob([buf], { type: type }));
-var a = document.createElement('a');
-a.href = url;
-a.download = 'bilibili-login-qr.' + (type === 'image/png' ? 'png' : 'jpg');
-a.rel = 'noopener';
-document.body.appendChild(a);
-a.click();
-document.body.removeChild(a);
-setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 20000);
-pfBiliQrNote('已发起保存；手机端没反应就长按二维码图片另存', false);
-} catch (e) {
-pfBiliQrNote('保存失败（' + (e && e.message ? e.message : '浏览器不支持') + '），可长按二维码另存', true);
-}
-}
-function pfBiliQrPoll() {
-if (QR_TIMER) { clearInterval(QR_TIMER); QR_TIMER = 0; }
-var gen = QR_GEN;
-var timer = setInterval(function () {
-if (gen !== QR_GEN) { clearInterval(timer); return; }   // 已重新生成/停止
-if (!pfNode('pfbili') || !pfNode('pfqrimg')) { pfBiliQrStop(); return; }  // 卡片被换页摘掉
-if (QR_BUSY) return;                                     // 上一拍还没回来，跳过
-if (!QR_KEY) { pfBiliQrStop(); return; }
-if (QR_TRIES >= BILI_QR_MAX) { pfBiliQrExpired(); return; }
-var tk = authToken();
-if (!tk) { pfBiliQrStop(); pfBiliFail('登录已失效，请重新登录后再试'); return; }
-QR_TRIES += 1;
-QR_BUSY = true;
-authFetch(BILI_QR_POLL + '?key=' + encodeURIComponent(QR_KEY), null, 12000,
-{ authorization: 'Bearer ' + tk }, { method: 'GET' })
-.then(function (r) {
-QR_BUSY = false;
-if (gen !== QR_GEN) return;
-var j = r.j || {};
-if (r.status === 401) { pfBiliQrStop(); pfBiliFail('登录已失效，请重新登录后再试'); return; }
-if (r.status === 404 || r.status === 410 || j.error === 'expired') { pfBiliQrExpired(); return; }
-if (!r.ok || !j.ok || !j.state) return;               // 其它失败：下一拍再试
-pfBiliQrState(j.state, j);
-}, function () {
-QR_BUSY = false;                                      // 网络抖动：不终止
-});
-}, BILI_QR_MS);
-QR_TIMER = timer;
-}
-function pfBiliQrState(state, j) {
-if (state === 'ok') {
-pfBiliQrStop();
-BILI_ST = { bound: true, uname: j.uname, vip_type: j.vip_type };
-pfBiliPaint(BILI_ST, '扫码绑定成功');       // 重画即清掉二维码 DOM
-return;
-}
-if (state === 'scanned') { pfBiliQrText('已扫码，请在手机上确认'); return; }
-if (state === 'expired') { pfBiliQrExpired(); return; }
-if (state === 'error') {
-pfBiliQrStop();
-pfBiliQrText('扫码状态异常，可重新生成二维码');
-pfBiliQrRetryBtn();
-return;
-}
-pfBiliQrText('等待扫码…');                    // waiting（及未知态）
-}
-function pfBiliQrStart() {
-var tk = authToken();
-if (!tk) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
-pfBiliQrStop();                                // 重开时先停旧流程（gen++）
-var gen = QR_GEN;
-var box = pfNode('pfbili-qr');
-if (box) box.innerHTML = '<p class="authhint">二维码生成中…</p>';
-pfBiliMsg('');
-var done = setBusy(pfNode('pfbind-qr'), '生成中…');
-authFetch(BILI_QR_START, {}, 15000, { authorization: 'Bearer ' + tk }, { method: 'POST' })
-.then(function (r) {
-done();
-if (gen !== QR_GEN) return;                // 期间又点了生成/离开页面
-var j = r.j || {};
-if (r.status === 401) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
-if (r.status === 429) { pfBiliQrNote('操作太频繁，等一分钟再试', true); return; }
-if (r.status === 503) { pfBiliQrNote('服务端缺少二维码组件，可改用粘贴 SESSDATA', true); return; }
-if (!r.ok || !j.ok || !j.key_id || !j.png) {
-pfBiliQrNote('二维码生成失败（HTTP ' + r.status + '），可改用粘贴 SESSDATA', true);
-return;
-}
-QR_KEY = String(j.key_id);
-QR_TRIES = 0;
-pfBiliQrShow(j.png);
-pfBiliQrPoll();
-}, function (e) {
-done();
-if (gen !== QR_GEN) return;
-pfBiliQrNote((e && e.message) || '二维码生成失败，请重试', true);
-});
-}
-function pfBiliTogglePaste() {
-QR_PASTE_OPEN = !QR_PASTE_OPEN;
-var box = pfNode('pfbili-paste');
-if (box) box.style.display = QR_PASTE_OPEN ? '' : 'none';
-var btn = pfNode('pfsess-open');
-if (btn) btn.textContent = QR_PASTE_OPEN ? '收起粘贴框' : '改用粘贴 SESSDATA';
-if (QR_PASTE_OPEN) {
-var inp = pfNode('pfsess');
-if (inp) { try { inp.focus(); } catch (e) { /* 老浏览器忽略 */ } }
-}
-}
-document.addEventListener('visibilitychange', function () {
-if (document.visibilityState === 'hidden') { pfBiliQrPause(); return; }
-if (!QR_TIMER && QR_KEY && QR_TRIES < BILI_QR_MAX && pfNode('pfqrimg')) pfBiliQrPoll();
-});
-window.__biliBound = function () { BILI_ST = null; loadPfBili(true); };
-function loadPfBili(force) {
-var box = pfNode('pfbili');
-if (!box) return;
-if (!authToken()) { box.innerHTML = ''; return; }   // 未登录：不画这块
-if (BILI_ST && !force) { pfBiliPaint(BILI_ST); return; }
-box.innerHTML = '<div class="mnote">B 站账号读取中…</div>';
-authFetch(BILI_BIND_PATH, null, 12000, { authorization: 'Bearer ' + authToken() }, { method: 'GET' })
-.then(function (r) {
-var j = r.j || {};
-if (j.ok && j.bound) {
-BILI_ST = { bound: true, uname: j.uname, vip_type: j.vip_type };
-pfBiliPaint(BILI_ST);
-return;
-}
-if (j.ok && (j.bound === false || j.status === 'none')
-|| j.error === 'not_bound' || r.status === 404) {
-BILI_ST = { bound: false };
-pfBiliPaint(BILI_ST);
-return;
-}
-if (r.status === 401) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
-pfBiliFail('B 站账号状态读取失败（HTTP ' + r.status
-+ (j.error ? ' · ' + String(j.error).slice(0, 40) : '') + '）');
-}, function (e) {
-pfBiliFail((e && e.message) || 'B 站账号状态读取失败');
-});
-}
-function pfBiliSess(raw) {
-var s = String(raw == null ? '' : raw).trim();
-var m = /(?:^|[;\s])SESSDATA\s*=\s*([^;\s"']+)/i.exec(s);
-if (m) return m[1];
-return s.replace(/^SESSDATA\s*=\s*/i, '').replace(/[;,"'\s]+$/, '');
-}
-function pfBiliBindMsg(r) {
-var j = r.j || {};
-if (r.status === 401) return '登录已失效，请重新登录后再试';
-if (j.error === 'expired') return '这段 SESSDATA 已失效（或没复制全），请到 B 站重新复制';
-if (j.error) return '绑定失败：' + j.error;
-return '绑定失败（HTTP ' + r.status + '）';
-}
-function pfBiliDoBind(btn) {
-var inp = pfNode('pfsess');
-var sess = pfBiliSess(inp ? inp.value : '');
-if (inp) inp.value = '';                        // 提交即清空：DOM 里不留凭证
-if (!sess) { pfBiliMsg('请先粘贴 SESSDATA'); return; }
-var tk = authToken();
-if (!tk) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
-var done = setBusy(btn, '绑定中…');
-authFetch(BILI_BIND_PATH, { sess: sess }, 20000, { authorization: 'Bearer ' + tk }, { method: 'POST' })
-.then(function (r) {
-var j = r.j || {};
-if (r.ok && j.ok) {
-BILI_ST = { bound: true, uname: j.uname, vip_type: j.vip_type };
-pfBiliPaint(BILI_ST, '绑定成功');
-return;
-}
-done();
-pfBiliMsg(pfBiliBindMsg(r));
-}, function (e) {
-done();
-pfBiliMsg((e && e.message) || '绑定失败，请重试');
-});
-}
-function pfBiliDoUnbind(btn) {
-var tk = authToken();
-if (!tk) { pfBiliFail('登录已失效，请重新登录后再试'); return; }
-var done = setBusy(btn, '解绑中…');
-authFetch(BILI_BIND_PATH, null, 15000, { authorization: 'Bearer ' + tk }, { method: 'DELETE' })
-.then(function (r) {
-var j = r.j || {};
-if (r.ok && j.ok) {
-BILI_ST = { bound: false };
-pfBiliPaint(BILI_ST, '已解绑，可随时重新绑定');
-return;
-}
-done();
-pfBiliMsg(r.status === 401 ? '登录已失效，请重新登录后再试'
-: '解绑失败（HTTP ' + r.status + '），稍后重试');
-}, function (e) {
-done();
-pfBiliMsg((e && e.message) || '解绑失败，请重试');
-});
-}
 function userHTML(u) {
 var name = userName(u) || '未登录用户';
 var mail = maskEmail(u.email || (String(u.login || '').indexOf('@') >= 0 ? u.login : ''));
@@ -1071,7 +736,6 @@ return '<div class="pf-hero"></div>'
 + '<button class="btn" id="pfout" type="button">退出登录</button>'
 + '<button class="btn" id="pfquark" type="button">绑定夸克网盘</button>'
 + '</div>'
-+ '<div class="pf-bili" id="pfbili"></div>'
 + '<div class="mtabs pf-tabs">'
 + '<button class="mtab on" type="button" data-tab="fav">我的追番（' + rows.length + '）</button>'
 + '<button class="mtab" type="button" data-tab="cont">观看记录（' + cont.length + '）</button>'
@@ -1111,7 +775,6 @@ var out = document.getElementById('pfout');
 if (out) out.onclick = function () {
 logoutAccount();
 USER = null;
-BILI_ST = null;                 // 换账号后 B 站绑定状态要重新问一次
 var m = $('#main');
 if (m) { m.innerHTML = userLoginHTML(); bindUserLogin(); }
 };
@@ -1143,7 +806,6 @@ return;
 if (USER) {
 main.innerHTML = userHTML(USER);
 bindUserActions();
-loadPfBili();
 applyUserTab();
 return;
 }
@@ -1152,7 +814,6 @@ loadProfile().then(function (u) {
 USER = u;
 main.innerHTML = userHTML(u);
 bindUserActions();
-loadPfBili();
 applyUserTab();
 }).catch(function (e) {
 main.innerHTML = '<div class="empty">' + esc((e && e.message) || '资料加载失败')
@@ -1792,6 +1453,8 @@ m.innerHTML = '<nav class="dp-crumb"><a href="/anime">番剧</a><span>/</span><b
 +     '<div class="mcollect">' + collect + '</div>'
 +     '<div class="acts">'
 +       '<button class="btn pri" id="watch" type="button">▶ 开始观看</button>'
++       (ex[5] ? '<a class="btn" href="https://www.bilibili.com/video/' + esc(ex[5])
++ '" target="_blank" rel="noopener">去 B 站观看 ›</a>' : '')
 +       '<button class="btn" id="favbtn" type="button">☆ 追番</button>'
 +     '</div>'
 +   '</div>'
@@ -3172,7 +2835,6 @@ return (box && box.querySelector ? box.querySelector('#dpPlayer') : null) || box
 }
 function srcAbortOthers() {
 if (window.__qpAbort === 'function') window.__qpAbort();
-if (window.__biliAbort === 'function') window.__biliAbort();
 if (typeof window.__extAbort === 'function') window.__extAbort();
 if (window.QPlayer && typeof window.QPlayer.close === 'function') window.QPlayer.close();
 }
@@ -3188,53 +2850,6 @@ srcHint(box, cn === 1
 ? 'YouTube 官方频道 · 本集中国大陆可直连播放'
 : 'YouTube 官方频道 · 本集需港澳台/东南亚出口');
 return true;
-}
-function srcEmbedBvid(box, bvid) {
-if (!bvid) return false;
-var slot = srcPlayerSlot(box);
-srcAbortOthers();
-slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?bvid='
-+ encodeURIComponent(bvid) + '&page=1&high_quality=1&danmaku=1&autoplay=1');
-srcLineSet(box, 'B 站');
-srcHint(box, 'B 站官方播放器 · 登录 B 站后本页即可看更高清晰度');
-return true;
-}
-function srcEmbedPgc(box, sid, ep, epNo) {
-if (!box || !sid || !ep || !ep.id) return false;
-var slot = srcPlayerSlot(box);
-srcAbortOthers();
-slot.innerHTML = srcFrame('https://player.bilibili.com/player.html?episodeId='
-+ encodeURIComponent(ep.id) + '&seasonId=' + encodeURIComponent(sid)
-+ '&autoplay=1&high_quality=1&danmaku=1');
-srcLineSet(box, 'B 站官方番剧');
-srcHint(box, 'B 站官方番剧 · 第 ' + epNo + ' 集（免费集，免登录）');
-return true;
-}
-function srcPgc(title) {
-if (typeof biliGet !== 'function') return Promise.resolve(null);
-return biliGet('pgc', { t: title }).then(function (d) {
-return (d && d.ok && d.found && d.sid && (d.eps || []).length) ? d : null;
-}, function () { return null; });
-}
-function srcEmbedBili(box, id) {
-var exb = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
-return srcEmbedBvid(box, exb && exb[5]);
-}
-function biliFindBvid(title) {
-if (typeof biliGet !== 'function') return Promise.reject(new Error('no biliGet'));
-return biliGet('find', { t: title }).then(function (f) {
-if (!f || !f.found || !f.bvid) return '';
-var t = String(f.title || '');
-if (typeof BILI_NOISE === 'object' && BILI_NOISE.test && BILI_NOISE.test(t)) return '';
-if (!srcTitleOk(t, title)) return '';
-return String(f.bvid);
-}, function () { return ''; });
-}
-function srcTitleOk(cand, title) {
-var a = nrm(String(cand || '')), b = nrm(String(title || ''));
-if (!a || !b) return false;
-if (b.length < 2) return a.indexOf(b) >= 0;
-return a.indexOf(b) >= 0 || b.indexOf(a) >= 0;
 }
 function srcYtEps(id) {
 var ex = (typeof ANI !== 'undefined' && ANI.extra) ? ANI.extra[id] : null;
@@ -3259,7 +2874,7 @@ function () { clearTimeout(timer); fin(false); });
 setTimeout(function () { YT_REACH = null; }, 10 * 60 * 1000);
 return YT_REACH;
 }
-function srcStart(box, id, title, ep, skipExt) {
+function srcStart(box, id, title, ep) {
 var epNo = Math.max(1, Math.floor(Number(ep) || 1));
 var tk = (typeof authToken === 'function') ? authToken() : '';
 if (typeof window.__extAbort === 'function') window.__extAbort();
@@ -3282,7 +2897,6 @@ toQuark(why + ' · YouTube 不可达');
 });
 }
 function toExt(next) {
-if (skipExt) { next('已选 B 站'); return; }
 if (typeof extStart !== 'function') { next('无外部源'); return; }
 srcLineSet(box, '外部 · 自动');
 srcHint(box, '正在匹配外部线路…');
@@ -3293,40 +2907,29 @@ if (typeof window.__rulePlay !== 'function') { next(''); return; }
 srcHint(box, '正在尝试规则源…');
 window.__rulePlay(box, id, title, epNo, function (w) { next(w || '规则源未命中'); }, null, 3);
 }
-function anonChain() {
-srcHint(box, '正在匹配 B 站官方番剧…');
-srcPgc(title).then(function (p) {
-if (p) {
-var row = p.eps[Math.max(0, epNo - 1)] || p.eps[0];
-if (row && !row.vip && srcEmbedPgc(box, p.sid, row, epNo)) return;
-if (row && row.vip) srcHint(box, '第 ' + epNo + ' 集是 B 站大会员集（仅试看）· 已换下一个源');
+function toYoutube(why) {
+var eps = srcYtEps(id);
+if (!eps) { toQuark(why + ' · 无官方正片'); return; }
+var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
+srcHint(box, why + ' · 检测 YouTube 可达性…');
+ytReach().then(function (ok) {
+var pick = eps[idx] || [];
+if (ok && srcEmbedYT(box, pick[1], epNo, pick[2])) return;
+toQuark(why + ' · YouTube 不可达');
+});
 }
-if (srcEmbedBili(box, id)) return;
-toExt(function (why) {
+function toQuark(why) {
+srcLineSet(box, '夸克网盘');
+srcHint(box, why + ' · 使用网盘源');
+if (typeof openQuarkPlay === 'function') openQuarkPlay(srcPlayerSlot(box), id, title);
+if (typeof authToken === 'function' && !authToken() && typeof openAuthPanel === 'function') openAuthPanel('email');
+}
+srcHint(box, '正在匹配播放源…');
+toExt(function (why1) {
 toRule(function (why2) {
-srcHint(box, '正在 B 站搜索「' + title + '」…');
-biliFindBvid(title).then(function (bv) {
-if (bv && srcEmbedBvid(box, bv)) return;
-toYoutube(why + ' · B 站未找到');
-}, function () { toYoutube(why + ' · B 站搜索失败'); });
+toYoutube([why1, why2].filter(Boolean).join(' · '));
 });
 });
-});
-}
-if (tk && typeof biliPlayEp === 'function') {
-srcHint(box, '正在检查 B 站登录态…');
-srcGet('/bili/bind', tk).then(function (r) {
-var j = (r && r.j) || {};
-if (r && r.ok && j.ok && j.bound) {
-srcHint(box, 'B 站已绑定 · 用登录态播放');
-biliPlayEp(box, id, title, epNo);
-return;
-}
-anonChain();
-}, anonChain);
-return true;
-}
-anonChain();
 return true;
 }
 function srcLineBarHtml() {
@@ -3338,8 +2941,7 @@ return '<div class="line-bar">'
 }
 function srcLineMenuHtml(id) {
 var rows = [
-['auto', '自动（B站 → 外部 → YouTube → 网盘）'],
-['bili', 'B 站优先'],
+['auto', '自动（外部 → 规则源 → YouTube → 网盘）'],
 ['yt', 'YouTube 官方'],
 ['quark', '夸克网盘']
 ];
@@ -3391,7 +2993,6 @@ if (!menu.hidden && !host.contains(ev.target)) close();
 function srcLinePick(box, id, title, ep, line) {
 var slot = srcPlayerSlot(box);
 if (line === 'auto') { srcLineSet(box, '自动'); srcStart(box, id, title, ep, false); return; }
-if (line === 'bili') { srcLineSet(box, 'B 站优先'); srcStart(box, id, title, ep, true); return; }
 if (line === 'yt') {
 var eps = srcYtEps(id);
 if (!eps) { srcHint(box, '本季没有官方 YouTube 正片'); return; }
@@ -3427,46 +3028,6 @@ if (!mine.length) { srcHint(box, '这条线路还没有匹配结果'); return; }
 srcLineSet(box, '外部 · ' + (mine[0].name || pid));
 if (typeof extPlayEp === 'function') extPlayEp(box, id, title, ep, mine);
 }
-}
-function openBiliBindPanel() {
-if (document.getElementById('bbmask')) return;
-if (typeof authToken === 'function' && !authToken()) {
-if (typeof openAuthPanel === 'function') openAuthPanel('email');
-return;
-}
-var tk = (typeof authToken === 'function' && authToken()) || '';
-var mask = document.createElement('div');
-mask.className = 'authmask qbmask';
-mask.id = 'bbmask';
-mask.innerHTML = '<div class="authcard qbcard" role="dialog" aria-modal="true">'
-+ '<button class="authx" type="button" aria-label="关闭">×</button>'
-+ '<h3 class="qbtitle">绑定 B 站账号</h3>'
-+ '<p class="qbhint">用 B 站 App 扫码（也可以粘贴 SESSDATA）。绑定后本页播放走你的账号：1080p / 大会员集。</p>'
-+ '<div class="qbframe"><iframe src="' + esc(SRC_BASE + '/bili/qrpage?t=' + encodeURIComponent(tk) + '&embed=1') + '"'
-+ ' referrerpolicy="origin-when-cross-origin" allow="clipboard-write"></iframe></div>'
-+ '</div>';
-document.body.appendChild(mask);
-function cleanup() {
-if (mask.parentNode) mask.parentNode.removeChild(mask);
-window.removeEventListener('message', onMsg);
-document.removeEventListener('keydown', onKey);
-}
-function onMsg(ev) {
-if (String(ev.origin).indexOf('120.48.56.189') < 0) return;
-var d = ev.data || {};
-if (d && d.type === 'bili-bound' && d.ok) {
-cleanup();
-if (typeof window.__biliBound === 'function') window.__biliBound(d.uname || '');
-srcHint(document, 'B 站已绑定' + (d.uname ? '：' + d.uname : ''));
-}
-}
-function onKey(ev) { if (ev.key === 'Escape') cleanup(); }
-mask.onclick = function (ev) {
-var t = ev.target;
-if (t === mask || (t && String(t.className || '').indexOf('authx') >= 0)) cleanup();
-};
-window.addEventListener('message', onMsg);
-document.addEventListener('keydown', onKey);
 }
 window.__srcStart = srcStart;
 window.__srcLineBarHtml = srcLineBarHtml;
@@ -4134,142 +3695,6 @@ if (p === 'rp') biliLoadRp(m.querySelector('#prp'), id, title, year);
 });
 biliEntry(m, id, title);
 }
-var BILI_PLAY_GEN = 0;      // 连点两次：只让最后一次的异步结果落地
-window.__biliAbort = function () { BILI_PLAY_GEN += 1; };
-var BILI_EP_RE = /第\s*(\d+)\s*[话集]|\[(\d{1,3})\]|E(\d{1,3})|S\d+E(\d{1,3})|_(\d{1,3})/;
-function biliEpNo(part) {
-var m = BILI_EP_RE.exec(String(part == null ? '' : part));
-if (!m) return 0;
-for (var i = 1; i < m.length; i++) { if (m[i]) return Number(m[i]); }
-return 0;
-}
-function biliPickPage(pages, ep) {
-var want = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
-for (var i = 0; i < pages.length; i++) {
-if (pages[i] && biliEpNo(pages[i].part) === want) return pages[i];
-}
-return pages[want - 1] || pages[0] || null;
-}
-function biliAuth(path, method, body, ms) {
-var tk = '';
-try { tk = localStorage.getItem('gh_token') || ''; } catch (e) { tk = ''; }
-var opt = { method: method || 'GET', headers: { authorization: 'Bearer ' + tk } };
-if (body != null) {
-opt.headers['content-type'] = 'application/json';
-opt.body = JSON.stringify(body);
-}
-var ctl = typeof AbortController === 'function' ? new AbortController() : null;
-var timer = setTimeout(function () { if (ctl) ctl.abort(); }, ms || 15000);
-if (ctl) opt.signal = ctl.signal;
-return fetch(BILI_BASE + path, opt).then(function (r) {
-clearTimeout(timer);
-return r.json().catch(function () { return null; }).then(function (j) {
-return { status: r.status, ok: r.ok, j: j };
-});
-}, function (e) {
-clearTimeout(timer);
-if (ctl && ctl.signal && ctl.signal.aborted) throw new Error('网络慢，请重试');
-throw new Error('网络异常，请检查连接');
-});
-}
-function biliOpenPlayer(m, id, title, ep, cid, url, eps) {
-var list = eps || [];
-var ctx = {
-m: m,
-id: String(id),
-title: String(title || ''),
-ep: ep,
-sources: url ? [{ label: 'B 站（弹幕版）', url: String(url), type: 'mp4' }] : [],
-onProgress: function (p) {
-if (!p) return;
-var prev = null;
-try { prev = window.__prog && window.__prog.get ? window.__prog.get(id) : null; } catch (e) { prev = null; }
-var extra = prev && Number(prev.ep) === Number(p.ep)
-? { fid: prev.fid || '', pos: p.pos || 0, dur: p.dur || 0 }
-: { fid: '', pos: p.pos || 0, dur: p.dur || 0 };
-if (window.__prog && typeof window.__prog.report === 'function') {
-try { window.__prog.report(id, p.ep, extra); } catch (e) { /* 上报失败不影响播放 */ }
-}
-},
-onNext: function () {
-var curEp = Number(ep);
-if (!list.length) return;
-var i = -1;
-for (var k = 0; k < list.length; k++) { if (Number(list[k].ep) === curEp) { i = k; break; } }
-if (i >= 0 && i + 1 < list.length) biliPlayEp(m, id, title, Number(list[i + 1].ep));
-},
-onPickEp: function (ep) { biliPlayEp(m, id, title, Number(ep) || 1); }
-};
-if (cid) ctx.dm = { cid: String(cid) };
-var tok = window.QPlayer.open(ctx);
-if (list.length) window.QPlayer.setEpisodes(list, ep, '');
-else window.QPlayer.setEpisodes([], ep);
-return tok;
-}
-function biliPlayEp(m, id, title, ep) {
-var tk = '';
-try { tk = localStorage.getItem('gh_token') || ''; } catch (e) { tk = ''; }
-if (!tk) { if (window.__openLogin) window.__openLogin('email'); return; }
-if (!m || !window.QPlayer) return;
-var want = Number(ep) > 0 ? Math.floor(Number(ep)) : 1;
-var gen = ++BILI_PLAY_GEN;
-var eps = [];             // 分P 列表：resolve 回来才填，失败/超时路径保持空数组
-function fail(msg, state) {
-biliOpenPlayer(m, id, title, want, 0, '', eps);
-window.QPlayer.state(state || 'error', { msg: msg });
-}
-biliResolve(id, title).then(function (v) {
-if (gen !== BILI_PLAY_GEN) return;
-if (!v || !v.bvid || !v.pages || !v.pages.length) { fail('没找到这部番的 B 站源，换夸克源试试'); return; }
-eps = (v.pages || []).map(function (p) {
-var n = biliEpNo(p.part);
-return { ep: n || (p.page || 0), label: p.part || ('第 ' + (p.page || '') + ' 集') };
-}).filter(function (x) { return x.ep > 0; });
-var pg = biliPickPage(v.pages, want);
-if (!pg || !pg.cid) { fail('这一集没有可用的 B 站分P'); return; }
-return biliAuth('playurl', 'POST', { bvid: v.bvid, cid: pg.cid, qn: 80 }, 20000).then(function (r) {
-if (gen !== BILI_PLAY_GEN) return;
-var j = r.j || {};
-if (r.ok && j.ok && j.url) { biliOpenPlayer(m, id, title, want, pg.cid, j.url, eps); return; }
-if (r.status === 401) { fail('站点登录已失效，请重新登录', 'login'); return; }
-if (j.error === 'need_rebind' || j.error === 'not_bound') {
-biliOpenPlayer(m, id, title, want, 0, '', eps);
-window.QPlayer.state('rebind', {
-msg: 'B 站登录已失效，去个人主页重新粘贴 SESSDATA',
-actions: [{ label: '去个人主页', href: 'user' }]
-});
-return;
-}
-fail('B 站播放地址取不到，稍后再试');
-});
-}).catch(function () {
-if (gen !== BILI_PLAY_GEN) return;
-if (window.QPlayer && m) fail('B 站播放失败，稍后再试');
-});
-}
-function biliSavedEp(id) {
-try {
-var p = window.__prog && typeof window.__prog.get === 'function' ? window.__prog.get(id) : null;
-if (p && Number(p.ep) > 0) return Math.floor(Number(p.ep));
-} catch (e) { /* 进度坏了就从头播 */ }
-return 1;
-}
-function biliEntry(m, id, title) {
-var acts = m && m.querySelector ? m.querySelector('.acts') : null;
-if (!acts || acts.querySelector('#biliplay')) return;
-var b = document.createElement('span');
-b.className = 'btn';
-b.id = 'biliplay';
-b.setAttribute('role', 'button');
-b.setAttribute('tabindex', '0');
-b.textContent = '▶ B 站（弹幕版）';
-b.onclick = function () { biliPlayEp(m, id, title, biliSavedEp(id)); };
-b.onkeydown = function (ev) {
-if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); b.click(); }
-};
-acts.appendChild(b);
-}
-window.__biliPlay = biliPlayEp;
 var RULE_TTL = 10 * 60 * 1000;
 var RULE_MEM = {};              // 缓存：搜索 / 详情
 var RULE_SRC = [
