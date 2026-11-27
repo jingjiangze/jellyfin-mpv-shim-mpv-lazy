@@ -2,7 +2,7 @@
      契约（已上线实测）：GET /auth/follow → {ok:true, items:[{id,on,ts}]}、
      POST /auth/follow（body {id,on}）→ {ok:true, id, on, ts}，未登录一律 401。
      常量与 magnet-eps.js 各写一份：两个文件独立加载，不跨文件依赖。 */
-  var FOLLOW_API = 'https://120.48.56.189/auth/follow';
+  var FOLLOW_API = 'https://edge.jiangjiangze.icu/auth/follow';
   function followToken() {
     try { return localStorage.getItem('gh_token') || ''; } catch (e) { return ''; }
   }
@@ -74,7 +74,7 @@
      POST /auth/progress（body {id,ep,fid,pos,dur}），未登录一律跳过。
      URL/token 各用本文件常量与 followToken()：本文件排在 90-boot.js 之前执行，启动那一次
      那里的 var AUTH_BASE / TOKEN_KEY 还没赋值，直接引用会静默拼出 undefined 而不同步。 */
-  var PROG_API = 'https://120.48.56.189/auth/progress';
+  var PROG_API = 'https://edge.jiangjiangze.icu/auth/progress';
   var PROG_KEY = 'prog';
 
   /* 一条进度记录；ep 非正整数（0 / 负数 / 小数 / NaN）返回 null，调用方丢弃。
@@ -169,17 +169,6 @@
 
   /* 磁力层（magnet-eps.js）是独立 IIFE、拿不到本文件的闭包：点行复制后经这个入口
      上报「看到第几集」。id 传 #modal 的 data-bgm，ep 是行上的数字集号（合集行没有）。 */
-  /* 夸克绑定页现在要站点登录（服务端 /qr 门禁，2026-11-06）：
-     把当前 token 作为 ?t= 带过去，服务端校验后种 30 分钟 cookie，页面内 XHR 免再带。
-     未登录返回裸链接 —— 调用方应先弹登录面板，别把人扔到 401 页。 */
-  /* extra 用于追加查询参数（如内嵌弹窗用的 '&embed=1'） */
-  function quarkBindUrl(extra) {
-    var tk = '';
-    try { tk = (typeof authToken === 'function' && authToken()) || ''; } catch (e) { tk = ''; }
-    return 'https://120.48.56.189/qr/' + (tk ? '?t=' + encodeURIComponent(tk) : '?')
-      + (extra || '');
-  }
-
   window.__prog = {
     report: function (id, ep, extra) { return setProgress(id, ep, extra); },
     get: function (id) { return progressOf(id); }

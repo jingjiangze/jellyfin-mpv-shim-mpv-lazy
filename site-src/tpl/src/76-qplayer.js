@@ -58,12 +58,6 @@
       if (kind === 'login') {
         var l = s.querySelector('#nvLogin');
         if (l) l.onclick = function () { if (typeof window.__openLogin === 'function') window.__openLogin('email'); };
-      } else if (kind === 'rebind') {
-        var r = s.querySelector('#nvRebind');
-        if (r) r.onclick = function () {
-          if (typeof quarkBindUrl === 'function') { window.open(quarkBindUrl(), '_blank', 'noopener'); return; }
-          window.location.href = '/user';
-        };
       } else if (kind === 'error' && opt && !opt.actions) {
         var t = s.querySelector('#nvRetry');
         if (t && CUR && CUR.ctx && typeof CUR.ctx.onRetry === 'function') t.onclick = function () { CUR.ctx.onRetry(); };
@@ -98,7 +92,7 @@
        加载失败（全部候选都挂）时把错误交给 ctx.onPlayErr，由调用方换下一条线路。 */
     var HLS = null, HLS_PEND = null;
     function hlsSrcs() {
-      var base = (typeof SRC_BASE === 'string' && SRC_BASE) ? SRC_BASE : 'https://120.48.56.189';
+      var base = (typeof SRC_BASE === 'string' && SRC_BASE) ? SRC_BASE : 'https://edge.jiangjiangze.icu';
       return [base + '/ext/hls.js',
               'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js',
               'https://unpkg.com/hls.js@1.5.17/dist/hls.min.js',

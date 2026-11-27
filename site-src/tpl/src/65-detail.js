@@ -497,16 +497,15 @@
     /* 空闲时预加载 hls.js：点「开始观看」到出画面主要慢在这一步（组件 400KB） */
     setTimeout(function () { if (typeof window.__hlsPreload === 'function') window.__hlsPreload(); }, 1200);
 
-    /* 播放：与弹窗同一入口（75-quarkplay.js 的 openQuarkPlay(m, id, title)）。
+    /* 播放：与弹窗同一入口（78-sources.js 的自动链）。
        m 是挂载容器（76-qplayer.js 把 .trailer.qplayer append 到它上面）：整页详情传 16:9 的
        #dpPlayer 槽，播放器才落在框里；槽缺失（壳被换过）才回退到 #modal。
        没有可用播放源时它自己会写状态，这里不预先判。 */
     var wb = m.querySelector('#watch');
     if (wb) wb.onclick = function () {
-      /* 播放顺序（2026-11-07）：YouTube 官方正片 → B 站官方嵌入 → 夸克转存（幕后）。
+      /* 播放顺序（2026-11-27）：外部采集源 → 规则源 → YouTube 官方正片。
          用户不再手动切换；面板行保留为手动覆盖入口。 */
-      if (window.__srcStart && window.__srcStart(m, id, title, curEp)) return;
-      openQuarkPlay(m.querySelector('#dpPlayer') || m, id, title);
+      if (window.__srcStart) window.__srcStart(m, id, title, curEp);
     };
 
     /* 追番：复用卡片星标 / 弹窗同一套存储（key 用条目 id） */
@@ -528,9 +527,8 @@
     if (dpslot) {
       dpslot.onclick = function () {
         if (dpslot.childNodes.length) return;
-        /* 封面点击与「开始观看」同一条自动链（原来直接跳网盘，绕过了 B 站/外部源） */
-        if (window.__srcStart && window.__srcStart(m, id, title, curEp)) return;
-        openQuarkPlay(dpslot, id, title);
+        /* 封面点击与「开始观看」同一条自动链（外部采集源 → 规则源 → YouTube） */
+        if (window.__srcStart) window.__srcStart(m, id, title, curEp);
       };
     }
 

@@ -5,7 +5,7 @@
        · B 站只作出处（不再内嵌播放、不再要求绑定），详情页给「去 B 站观看」外链；
        · 状态文案写在播放器下面的 #dpStat（没有面板了，srcHint 落这里）。
      外部采集源的检测/匹配在 79-extsrc.js，本文件只负责编排。 */
-  var SRC_BASE = 'https://120.48.56.189';
+  var SRC_BASE = 'https://edge.jiangjiangze.icu';
 
   /* 统一 GET（79 / 46 共用）：网络失败、空体、非 JSON 一律退化成 {status, ok:false, j:{}} */
   function srcGet(path, tk) {
@@ -107,33 +107,30 @@
   /* ---------------- 自动播放链 ---------------- */
   /* 2026-11-15：站点不再内嵌 B 站、也不做 B 站账号绑定。
      B 站只作「出处」：详情页给「去 B 站观看」外链（bvid 由 CI 索引维护）。
-     自动链：外部采集源 → 规则源 → YouTube 官方 → 夸克网盘。 */
+     2026-11-27：夸克网盘链路随盒子退场（/pans、/tvplay 下线），自动链收敛为
+     外部采集源 → 规则源 → YouTube 官方；三跳都落空时给明确提示。 */
   function srcStart(box, id, title, ep) {
     var epNo = Math.max(1, Math.floor(Number(ep) || 1));
-    var tk = (typeof authToken === 'function') ? authToken() : '';
     if (typeof window.__extAbort === 'function') window.__extAbort();
     if (!box) return false;
 
-    function toQuark(why) {
-      srcLineSet(box, '夸克网盘');
-      srcHint(box, why + ' · 使用网盘源');
-      if (typeof openQuarkPlay === 'function') openQuarkPlay(srcPlayerSlot(box), id, title);
-      if (!tk && typeof openAuthPanel === 'function') openAuthPanel('email');
+    function fail(why) {
+      srcLineSet(box, '无可用线路');
+      srcHint(box, (why ? why + ' · ' : '') + '没有可用播放线路，可去 B 站或搜索页找');
     }
 
     function toYoutube(why) {
       var eps = srcYtEps(id);
-      if (!eps) { toQuark(why + ' · 无官方正片'); return; }
+      if (!eps) { fail(why + ' · 无官方正片'); return; }
       var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
       srcHint(box, why + ' · 检测 YouTube 可达性…');
       ytReach().then(function (ok) {
         var pick = eps[idx] || [];
         if (ok && srcEmbedYT(box, pick[1], epNo, pick[2])) return;
-        toQuark(why + ' · YouTube 不可达');
+        fail(why + ' · YouTube 不可达');
       });
     }
 
-    /* 外部采集源：浏览器并发探测，先回先播（79-extsrc） */
     /* 外部采集源（m3u8 API，浏览器并发探测，先回先播） */
     function toExt(next) {
       if (typeof extStart !== 'function') { next('无外部源'); return; }
@@ -147,25 +144,6 @@
       if (typeof window.__rulePlay !== 'function') { next(''); return; }
       srcHint(box, '正在尝试规则源…');
       window.__rulePlay(box, id, title, epNo, function (w) { next(w || '规则源未命中'); }, null, 3);
-    }
-
-    function toYoutube(why) {
-      var eps = srcYtEps(id);
-      if (!eps) { toQuark(why + ' · 无官方正片'); return; }
-      var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
-      srcHint(box, why + ' · 检测 YouTube 可达性…');
-      ytReach().then(function (ok) {
-        var pick = eps[idx] || [];
-        if (ok && srcEmbedYT(box, pick[1], epNo, pick[2])) return;
-        toQuark(why + ' · YouTube 不可达');
-      });
-    }
-
-    function toQuark(why) {
-      srcLineSet(box, '夸克网盘');
-      srcHint(box, why + ' · 使用网盘源');
-      if (typeof openQuarkPlay === 'function') openQuarkPlay(srcPlayerSlot(box), id, title);
-      if (typeof authToken === 'function' && !authToken() && typeof openAuthPanel === 'function') openAuthPanel('email');
     }
 
     srcHint(box, '正在匹配播放源…');
@@ -195,9 +173,8 @@
 
   function srcLineMenuHtml(id) {
     var rows = [
-      ['auto', '自动（外部 → 规则源 → YouTube → 网盘）'],
-      ['yt', 'YouTube 官方'],
-      ['quark', '夸克网盘']
+      ['auto', '自动（外部 → 规则源 → YouTube）'],
+      ['yt', 'YouTube 官方']
     ];
     var items = (typeof window.__extItems === 'function') ? window.__extItems(id) : [];
     if (items.length) {
@@ -257,11 +234,6 @@
       if (srcEmbedYT(box, pick[1], ep, pick[2])) srcLineSet(box, 'YouTube');
       return;
     }
-    if (line === 'quark') {
-      srcLineSet(box, '夸克网盘');
-      if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
-      return;
-    }
     if (line.indexOf('rule:') === 0) {
       if (typeof window.__rulePlay === 'function') {
         window.__rulePlay(box, id, title, ep, null, line.slice(5));
@@ -291,43 +263,3 @@
   window.__srcLineBarHtml = srcLineBarHtml;
   window.__srcLineBind = srcLineBind;
 
-  /* ---------------- 夸克绑定入口（「我的」页用；详情页面板已删除） ---------------- */
-  function openQuarkBindPanel() {
-    if (document.getElementById('qbmask')) return;
-    if (typeof authToken === 'function' && !authToken()) {
-      if (typeof openAuthPanel === 'function') openAuthPanel('email');
-      return;
-    }
-    var mask = document.createElement('div');
-    mask.className = 'authmask qbmask';
-    mask.id = 'qbmask';
-    mask.innerHTML = '<div class="authcard qbcard" role="dialog" aria-modal="true">'
-      + '<button class="authx" type="button" aria-label="关闭">×</button>'
-      + '<h3 class="qbtitle">绑定夸克网盘</h3>'
-      + '<p class="qbhint">用夸克 App 扫码，扫完自动绑定（只需一次）。绑定后网盘源可直接播放。</p>'
-      + '<div class="qbframe"><iframe src="' + esc(quarkBindUrl('&embed=1')) + '"'
-      + ' referrerpolicy="origin-when-cross-origin" allow="clipboard-write"></iframe></div>'
-      + '</div>';
-    document.body.appendChild(mask);
-
-    function cleanup() {
-      if (mask.parentNode) mask.parentNode.removeChild(mask);
-      window.removeEventListener('message', onMsg);
-      document.removeEventListener('keydown', onKey);
-    }
-    function onMsg(ev) {
-      if (String(ev.origin).indexOf('120.48.56.189') < 0) return;
-      var d = ev.data || {};
-      if (d && d.type === 'quark-bound' && d.ok) {
-        cleanup();
-        srcHint(document, '夸克网盘已绑定');
-      }
-    }
-    function onKey(ev) { if (ev.key === 'Escape') cleanup(); }
-    mask.onclick = function (ev) {
-      var t = ev.target;
-      if (t === mask || (t && String(t.className || '').indexOf('authx') >= 0)) cleanup();
-    };
-    window.addEventListener('message', onMsg);
-    document.addEventListener('keydown', onKey);
-  }

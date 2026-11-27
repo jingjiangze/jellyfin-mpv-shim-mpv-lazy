@@ -97,7 +97,8 @@ jobs:
         run: python -u fetch_bili_fresh.py
 
       - name: Fetch magnet links
-        if: ${{ env.FAST != '1' && success() }}
+        # 2026-11-27：盒子 pan-hub 退役，磁力索引冻结（仓库里的 magnet-eps.json 作快照）
+        if: false
         timeout-minutes: 25
         continue-on-error: true
         working-directory: site-src
@@ -246,7 +247,7 @@ jobs:
           pull() {
             TMP="$RUNNER_TEMP/$1"
             rm -f "$TMP"
-            if ! curl -sfk -m 40 "https://120.48.56.189/ytdata/$1" -o "$TMP"; then
+            if ! curl -sfk -m 40 "https://edge.jiangjiangze.icu/ytdata/$1" -o "$TMP"; then
               echo "::warning::$1 拉取失败，保留上一版"
               return 0
             fi

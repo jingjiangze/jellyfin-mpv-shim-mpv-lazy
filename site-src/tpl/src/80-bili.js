@@ -1,9 +1,9 @@
   /* ---------------- 详情弹窗：详情 / 弹幕 / 评论 三 tab ----------------
-     数据全部走盒子的 B 站代理（https://120.48.56.189/bili/*，带 buvid3 cookie
+     数据全部走盒子的 B 站代理（https://edge.jiangjiangze.icu/bili/*，带 buvid3 cookie
      与 SQLite 缓存）；静态资源仍旧走 CDN，这里只有动态取数。 */
   var BILI = {};          // id -> {bvid, aid, pages:[{page,cid,part}]}
   var BILI_P = {};        // id -> 在途的 resolve：同 id 并发共用一次请求
-  var BILI_BASE = 'https://120.48.56.189/bili/';
+  var BILI_BASE = 'https://edge.jiangjiangze.icu/bili/';
 
   function biliGet(path, params) {
     var q = Object.keys(params || {}).map(function (k) {

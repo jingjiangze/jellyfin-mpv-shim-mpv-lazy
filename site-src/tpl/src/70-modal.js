@@ -94,12 +94,12 @@
     if (m && m.setAttribute) m.setAttribute('data-bgm', String(id));
     m.querySelector('.x').onclick = close;
 
-    /* 「▶ 播放」= 自研播放器（75-quarkplay.js 的 openQuarkPlay）：只跟盒子服务要一条 CDN
-       mp4 地址，字节不经服务器。同 IIFE 内的函数声明会提升，这里直接调用。
+    /* 「▶ 播放」= 自动链（78-sources.js 的 srcStart：外部源 → 规则源 → YouTube）。
+       夸克直连播放器随盒子退场（2026-11-27）。同 IIFE 内的函数声明会提升。
        span 的 role=button 不会自带键盘激活，键位一并补上。 */
     var wb = m.querySelector('#watch');
     if (wb) {
-      wb.onclick = function () { openQuarkPlay(m, id, title); };
+      wb.onclick = function () { if (window.__srcStart) window.__srcStart(m, id, title, 1); };
       wb.onkeydown = function (ev) {
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); wb.click(); }
       };

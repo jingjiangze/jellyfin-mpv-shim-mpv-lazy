@@ -61,16 +61,12 @@
       +   '</div>'
       +   '<div class="dp-srcs"><div class="qp-line-list" id="extList"></div></div>'
       + '</section>'
-      + '<section class="sect"><div class="sec-h"><h2>网盘资源</h2>'
-      +   '<span class="sec-sub" id="panSub">夸克网盘 · 全网分享</span></div>'
-      +   '<div class="qp-line-list" id="panList"></div></section>'
       + '<section class="sect"><div class="sec-h"><h2>规则源</h2>'
       +   '<span class="sec-sub" id="ruleSub">HTML 解析 · 站外播放器</span></div>'
       +   '<div class="qp-line-list" id="ruleList"></div></section>';
 
     var grid = $('#locGrid'), locSub = $('#locSub');
     var list = $('#extList'), extSub = $('#extSub');
-    var panList = $('#panList'), panSub = $('#panSub');
     var ruleList = $('#ruleList'), ruleSub = $('#ruleSub');
     var qEl = $('#q');
     var GROUPS = [], GEN = 0;
@@ -122,28 +118,6 @@
       }, function () { ruleSub.textContent = '规则源不可用'; });
     }
 
-    /* 夸克网盘资源：与「全网源」并行查（盒子 10 分钟缓存），转存直接播 */
-    function runPan(v) {
-      if (!panList) return;
-      if (!v || String(v).replace(/s+/g, '').length < 2) { panList.innerHTML = ''; return; }
-      panSub.textContent = '正在搜索夸克分享…';
-      panList.innerHTML = '';
-      window.__panSearch(window.__panKw(v), false, function () {
-        panSub.textContent = '正在搜索夸克分享…首次约 10–25 秒';
-      }).then(function (d) {
-        var items = (d && d.items) || [];
-        panSub.textContent = d && d.err
-          ? (d.err === 'timeout' ? '搜索超时 · 回车重试' : ('搜索失败（' + d.err + '）'))
-          : (items.length + ' 条夸克分享');
-        panList.innerHTML = window.__panListHtml(items);
-        window.__panBind(panList, items, $('#srchPlayWrap') || $('#srchPlay'), 'search', v, function () {
-          var wrap = $('#srchPlayWrap');
-          if (wrap) wrap.hidden = false;
-          try { wrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { }
-        });
-      });
-    }
-
     function playGroup(i) {
       var g = GROUPS[i];
       if (!g) return;
@@ -191,7 +165,6 @@
         try { history.replaceState(null, '', '/search' + (v ? '?q=' + encodeURIComponent(v) : '')); } catch (e) { }
         srchLocal(v, grid, locSub);
         runExt(v);
-        runPan(v);
         runRules(v);
       };
       qEl.oninput = function () {
@@ -203,5 +176,5 @@
 
     /* 首屏：URL 带 q 直接跑 */
     srchLocal(q0, grid, locSub);
-    if (q0) { runExt(q0); runPan(q0); runRules(q0); }
+    if (q0) { runExt(q0); runRules(q0); }
   }

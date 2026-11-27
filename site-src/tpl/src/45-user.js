@@ -79,7 +79,6 @@
       + '<div class="empty">登录后查看我的主页 —— 追番、观看进度和账号设置都在这里</div>'
       + '<div class="pf-acts-note">'
       + '<p><b>B 站扫码绑定</b>：绑定结果记在你的账号下（每人对自己的绑定负责），登录后才会出现扫码按钮。</p>'
-      + '<p><b>夸克网盘</b>：绑在站点服务器上，全站共用一份，入口是本页的「绑定夸克网盘」按钮。</p>'
       + '</div>'
       + '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录 / 注册</button></div>';
   }
@@ -135,7 +134,6 @@
       + '<div class="pf-actions">'
       + '<button class="btn" id="pfpw" type="button">修改密码</button>'
       + '<button class="btn" id="pfout" type="button">退出登录</button>'
-      + '<button class="btn" id="pfquark" type="button">绑定夸克网盘</button>'
       + '</div>'
       + '<div class="mtabs pf-tabs">'
       + '<button class="mtab on" type="button" data-tab="fav">我的追番（' + rows.length + '）</button>'
@@ -175,9 +173,6 @@
   function bindUserActions() {
     var pw = document.getElementById('pfpw');
     if (pw) pw.onclick = function () { openAuthPanel('account'); };
-    /* 夸克绑定：站内弹窗扫码（原来是一个 target=_blank 的链接，用户抱怨「怎么还跳转页面」） */
-    var qk = document.getElementById('pfquark');
-    if (qk) qk.onclick = function () { openQuarkBindPanel(); };
     var out = document.getElementById('pfout');
     if (out) out.onclick = function () {
       /* logoutAccount() 的 token 清理在请求返回后的 .then 里（最长等 12s），

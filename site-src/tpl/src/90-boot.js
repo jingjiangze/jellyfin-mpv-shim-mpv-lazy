@@ -29,7 +29,7 @@
      回调落地时 URL 末尾可能带 #t=<token>，由下方 grabToken 收进 localStorage；
      /auth/me 与 /auth/logout 都要 Authorization: Bearer <token>，未登录回 401。
      常量与 magnet-eps.js 各写一份：两个文件独立加载，不跨文件依赖。 */
-  var AUTH_BASE = 'https://120.48.56.189';
+  var AUTH_BASE = 'https://edge.jiangjiangze.icu';
   var TOKEN_KEY = 'gh_token';
   /* 待验证邮箱：/auth/register 或 /auth/login 回 need_verify 时记下，
      后续 /auth/verify 与 /auth/resend 都拿它当 email（此时面板已切到验证码视图，拿不到邮箱框）。 */
