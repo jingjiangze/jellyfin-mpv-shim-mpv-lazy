@@ -113,7 +113,7 @@ function flushTagCounts() {
 var w = TAGCNT_WAIT; TAGCNT_WAIT = [];
 w.forEach(function (f) { try { f(); } catch (e) { /* 单个回调失败不影响其它 */ } });
 }
-var FOLLOW_API = 'https://120.48.56.189/auth/follow';
+var FOLLOW_API = 'https://edge.jiangjiangze.icu/auth/follow';
 function followToken() {
 try { return localStorage.getItem('gh_token') || ''; } catch (e) { return ''; }
 }
@@ -162,7 +162,7 @@ fetch(FOLLOW_API, { headers: { authorization: 'Bearer ' + tk } })
 .then(function (d) { if (d && d.ok && d.items) mergeRemote(d.items); })
 .catch(function () { /* 静默：追番是增值功能，拉不到不影响任何页面渲染 */ });
 }
-var PROG_API = 'https://120.48.56.189/auth/progress';
+var PROG_API = 'https://edge.jiangjiangze.icu/auth/progress';
 var PROG_KEY = 'prog';
 function progRec(ep, extra, nowTs) {
 var n = Number(ep);
@@ -228,12 +228,6 @@ fetch(PROG_API, { headers: { authorization: 'Bearer ' + tk } })
 }
 pullFollow();
 pullProgress();
-function quarkBindUrl(extra) {
-var tk = '';
-try { tk = (typeof authToken === 'function' && authToken()) || ''; } catch (e) { tk = ''; }
-return 'https://120.48.56.189/qr/' + (tk ? '?t=' + encodeURIComponent(tk) : '?')
-+ (extra || '');
-}
 window.__prog = {
 report: function (id, ep, extra) { return setProgress(id, ep, extra); },
 get: function (id) { return progressOf(id); }
@@ -694,7 +688,6 @@ return '<div class="sec-h"><h2>我的</h2><span class="sec-sub">未登录</span>
 + '<div class="empty">登录后查看我的主页 —— 追番、观看进度和账号设置都在这里</div>'
 + '<div class="pf-acts-note">'
 + '<p><b>B 站扫码绑定</b>：绑定结果记在你的账号下（每人对自己的绑定负责），登录后才会出现扫码按钮。</p>'
-+ '<p><b>夸克网盘</b>：绑在站点服务器上，全站共用一份，入口是本页的「绑定夸克网盘」按钮。</p>'
 + '</div>'
 + '<div class="pf-actions"><button class="btn pri" id="pflogin" type="button">登录 / 注册</button></div>';
 }
@@ -734,7 +727,6 @@ return '<div class="pf-hero"></div>'
 + '<div class="pf-actions">'
 + '<button class="btn" id="pfpw" type="button">修改密码</button>'
 + '<button class="btn" id="pfout" type="button">退出登录</button>'
-+ '<button class="btn" id="pfquark" type="button">绑定夸克网盘</button>'
 + '</div>'
 + '<div class="mtabs pf-tabs">'
 + '<button class="mtab on" type="button" data-tab="fav">我的追番（' + rows.length + '）</button>'
@@ -769,8 +761,6 @@ watchLogin();
 function bindUserActions() {
 var pw = document.getElementById('pfpw');
 if (pw) pw.onclick = function () { openAuthPanel('account'); };
-var qk = document.getElementById('pfquark');
-if (qk) qk.onclick = function () { openQuarkBindPanel(); };
 var out = document.getElementById('pfout');
 if (out) out.onclick = function () {
 logoutAccount();
@@ -867,15 +857,11 @@ main.innerHTML = '<section class="sect">'
 +   '</div>'
 +   '<div class="dp-srcs"><div class="qp-line-list" id="extList"></div></div>'
 + '</section>'
-+ '<section class="sect"><div class="sec-h"><h2>网盘资源</h2>'
-+   '<span class="sec-sub" id="panSub">夸克网盘 · 全网分享</span></div>'
-+   '<div class="qp-line-list" id="panList"></div></section>'
 + '<section class="sect"><div class="sec-h"><h2>规则源</h2>'
 +   '<span class="sec-sub" id="ruleSub">HTML 解析 · 站外播放器</span></div>'
 +   '<div class="qp-line-list" id="ruleList"></div></section>';
 var grid = $('#locGrid'), locSub = $('#locSub');
 var list = $('#extList'), extSub = $('#extSub');
-var panList = $('#panList'), panSub = $('#panSub');
 var ruleList = $('#ruleList'), ruleSub = $('#ruleSub');
 var qEl = $('#q');
 var GROUPS = [], GEN = 0;
@@ -923,26 +909,6 @@ ruleList.innerHTML = rows.length ? rows.join('')
 : '<p class="plot">规则源没搜到（换主标题或去掉季号再试）。</p>';
 }, function () { ruleSub.textContent = '规则源不可用'; });
 }
-function runPan(v) {
-if (!panList) return;
-if (!v || String(v).replace(/s+/g, '').length < 2) { panList.innerHTML = ''; return; }
-panSub.textContent = '正在搜索夸克分享…';
-panList.innerHTML = '';
-window.__panSearch(window.__panKw(v), false, function () {
-panSub.textContent = '正在搜索夸克分享…首次约 10–25 秒';
-}).then(function (d) {
-var items = (d && d.items) || [];
-panSub.textContent = d && d.err
-? (d.err === 'timeout' ? '搜索超时 · 回车重试' : ('搜索失败（' + d.err + '）'))
-: (items.length + ' 条夸克分享');
-panList.innerHTML = window.__panListHtml(items);
-window.__panBind(panList, items, $('#srchPlayWrap') || $('#srchPlay'), 'search', v, function () {
-var wrap = $('#srchPlayWrap');
-if (wrap) wrap.hidden = false;
-try { wrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { }
-});
-});
-}
 function playGroup(i) {
 var g = GROUPS[i];
 if (!g) return;
@@ -985,7 +951,6 @@ var v = String(qEl.value || '').trim();
 try { history.replaceState(null, '', '/search' + (v ? '?q=' + encodeURIComponent(v) : '')); } catch (e) { }
 srchLocal(v, grid, locSub);
 runExt(v);
-runPan(v);
 runRules(v);
 };
 qEl.oninput = function () {
@@ -995,7 +960,7 @@ qEl.__t = setTimeout(function () { srchLocal(v, grid, locSub); }, 220);
 };
 }
 srchLocal(q0, grid, locSub);
-if (q0) { runExt(q0); runPan(q0); runRules(q0); }
+if (q0) { runExt(q0); runRules(q0); }
 }
 var BROWSE = { view: [], shown: 0, page: 120, busy: false };
 function renderBrowse(mode) {
@@ -1566,8 +1531,7 @@ prt.innerHTML = '<p class="plot">暂无评分分布</p>';
 setTimeout(function () { if (typeof window.__hlsPreload === 'function') window.__hlsPreload(); }, 1200);
 var wb = m.querySelector('#watch');
 if (wb) wb.onclick = function () {
-if (window.__srcStart && window.__srcStart(m, id, title, curEp)) return;
-openQuarkPlay(m.querySelector('#dpPlayer') || m, id, title);
+if (window.__srcStart) window.__srcStart(m, id, title, curEp);
 };
 var fb = m.querySelector('#favbtn');
 if (fb) {
@@ -1584,8 +1548,7 @@ var dpslot = m.querySelector('#dpPlayer');
 if (dpslot) {
 dpslot.onclick = function () {
 if (dpslot.childNodes.length) return;
-if (window.__srcStart && window.__srcStart(m, id, title, curEp)) return;
-openQuarkPlay(dpslot, id, title);
+if (window.__srcStart) window.__srcStart(m, id, title, curEp);
 };
 }
 var tslot = m.querySelector('#dpTrailerSlot');
@@ -1719,7 +1682,7 @@ if (m && m.setAttribute) m.setAttribute('data-bgm', String(id));
 m.querySelector('.x').onclick = close;
 var wb = m.querySelector('#watch');
 if (wb) {
-wb.onclick = function () { openQuarkPlay(m, id, title); };
+wb.onclick = function () { if (window.__srcStart) window.__srcStart(m, id, title, 1); };
 wb.onkeydown = function (ev) {
 if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); wb.click(); }
 };
@@ -1888,375 +1851,6 @@ h += window.__epsApi.epsListHtml(entry);
 body.innerHTML = h || '<div class="eps-none">暂无按集索引</div>';
 }).catch(fail);
 }
-var QP_BASE = 'https://120.48.56.189';
-var QP_FID_KEY = 'qp_fid';             // {"<bgm id>:<ep>": {fid,name,size,ts}}
-var QP_FID_TTL = 60 * 60 * 1000;       // fid 缓存 1h：文件不会每分钟改名，地址才会过期
-var QP_TIMER = 0;                      // 挂起的转码 / 转存轮询（模块级：新播放 / 关播放器都要能掐掉）
-var QP_GEN = 0;                        // 每次开播自增：异步回调据此判断自己是否已被后来的一次播放取代
-window.__qpAbort = function () { QP_GEN += 1; };
-function qpReq(method, path, tk, body, keepalive) {
-var opt = { method: method, headers: { authorization: 'Bearer ' + tk } };
-if (body != null) {
-opt.headers['content-type'] = 'application/json';
-opt.body = JSON.stringify(body);
-}
-if (keepalive) opt.keepalive = true;      // pagehide 时普通请求会被浏览器掐掉
-return fetch(QP_BASE + path, opt).then(function (res) {
-return res.text().then(function (t) {
-var j = null;
-try { j = JSON.parse(t); } catch (e) { j = null; }
-if (!j || typeof j !== 'object') j = {};
-if (!j.state) {
-if (res.status === 401) j.state = 'unauthorized';
-else if (res.status === 409) j.state = 'need_rebind';
-else if (res.status === 202) j.state = 'transcoding';
-else j.state = 'error';
-}
-return j;
-});
-}).then(null, function () { return { state: 'error' }; });
-}
-function qpJson(path, tk) { return qpReq('GET', path, tk, null, false); }
-function qpPost(path, tk, body, keepalive) { return qpReq('POST', path, tk, body, keepalive); }
-function qpCacheAll() {
-try {
-var v = JSON.parse(localStorage.getItem(QP_FID_KEY) || '{}');
-return v && typeof v === 'object' && Object.prototype.toString.call(v) !== '[object Array]' ? v : {};
-} catch (e) { return {}; }
-}
-function qpCacheGet(id, ep) {
-var c = qpCacheAll()[String(id) + ':' + String(ep)];
-if (!c || !c.fid) return null;
-if (!(Date.now() - Number(c.ts) < QP_FID_TTL)) return null;
-return c;
-}
-function qpCachePut(id, ep, rec) {
-var all = qpCacheAll(), k = String(id) + ':' + String(ep), now = Date.now(), out = {};
-all[k] = { fid: String(rec.fid), name: String(rec.name || ''), size: Number(rec.size) || 0, ts: now };
-Object.keys(all).forEach(function (key) {             // 顺手清掉过期项，别让缓存无限长
-var r = all[key];
-if (r && now - Number(r.ts) < QP_FID_TTL) out[key] = r;
-});
-try { localStorage.setItem(QP_FID_KEY, JSON.stringify(out)); } catch (e) { /* 忽略 */ }
-}
-var QP_EP_RES = [
-/[Ss]\d{1,2}\s*[Ee](\d{1,3})/,                 // S01E03
-/第\s*(\d{1,3})\s*[话話集期]/,                   // 第3话 / 第3集
-/\[(\d{1,3})(?:v\d)?\]/,                       // [03] / [03v2]
-/(?:^|[^0-9A-Za-z])[Ee][Pp]?(\d{1,3})(?![0-9])/, // E03 / EP03
-/_(\d{1,3})(?![0-9])/,                         // _03
-/[-–—]\s*(\d{1,3})(?![0-9])/                   // - 03
-];
-function qpEpNo(name) {
-var s = String(name || '');
-for (var i = 0; i < QP_EP_RES.length; i++) {
-var m = QP_EP_RES[i].exec(s);
-if (!m) continue;
-var n = Number(m[1]);
-if (n > 0 && n < 1000) return n;              // 1080 / 264 这类不会进（前面限了位数与后缀）
-}
-return 0;
-}
-function qpStripSeason(s) {
-return String(s || '')
-.replace(/第[一二三四五六七八九十0-9]{1,2}[季期部]/g, '')
-.replace(/season\s*[0-9]{1,2}/g, '')
-.replace(/[0-9]{1,2}(?:nd|rd|st|th)season/g, '')
-.replace(/s[0-9]{1,2}(?![0-9])/g, '');
-}
-function qpContains(hay, needle) {
-if (!hay || !needle) return false;
-if (hay.indexOf(needle) >= 0) return true;
-return hay.length >= 4 && needle.length >= 4 && needle.indexOf(hay) >= 0
-&& hay.length >= needle.length * 0.6;
-}
-function qpTitleOk(name, title) {
-var nt = nrm(name), tt = nrm(title);
-if (!nt || !tt) return false;
-if (qpContains(nt, tt)) return true;
-return qpContains(qpStripSeason(nt), qpStripSeason(tt));
-}
-function qpPickEp(items, title, ep) {
-var list = items || [], best = null, single = null;
-for (var i = 0; i < list.length; i++) {
-var it = list[i];
-if (!it || it.fid == null || it.fid === '') continue;
-var name = String(it.name || '');
-if (!qpTitleOk(name, title)) continue;
-var ne = qpEpNo(name);
-if (ne === ep) {
-if (!best || Number(it.size) > Number(best.size)) best = it;
-} else if (!ne) {
-single = single || it;
-}
-}
-if (best) return best;
-if (list.length === 1 && single) return single;
-return null;
-}
-function qpEpList(entry) {
-if (!entry || !entry.eps || typeof entry.eps !== 'object') return [];
-var out = [];
-Object.keys(entry.eps).forEach(function (k) {
-var n = Number(k);
-if (!(n > 0) || n !== Math.floor(n)) return;
-var cands = entry.eps[k] || [], mag = '', bestSize = -1;
-(cands || []).forEach(function (c) {
-var m = String((c && (c.m || c.magnet)) || '');
-if (m.indexOf('magnet:') !== 0) return;
-var sz = Number(c && c.s) || 0;
-if (sz > bestSize) { bestSize = sz; mag = m; }
-});
-out.push({ ep: n, label: (n < 10 ? '0' : '') + n, magnet: mag });
-});
-out.sort(function (a, b) { return a.ep - b.ep; });
-return out;
-}
-function qpHasEp(list, ep) {
-for (var i = 0; i < list.length; i++) if (Number(list[i].ep) === Number(ep)) return true;
-return false;
-}
-function qpEpAt(list, ep) {
-for (var i = 0; i < list.length; i++) if (Number(list[i].ep) === Number(ep)) return list[i];
-return null;
-}
-function qpCopy(text) {
-var api = window.__epsApi;
-if (api && typeof api.copyText === 'function') { api.copyText(text); return; }
-try {
-if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text);
-} catch (e) { /* 非安全上下文：无从复制，保持静默 */ }
-}
-function openQuarkPlay(m, id, title) {
-if (!m || !window.QPlayer) return;
-var tk = followToken();                       // 20-state.js：读 localStorage.gh_token
-var gen = ++QP_GEN;                           // 换代：上一代在飞的请求与轮询全部作废
-if (QP_TIMER) { clearTimeout(QP_TIMER); QP_TIMER = 0; }
-var saved = null;
-try { saved = window.__prog && typeof window.__prog.get === 'function' ? window.__prog.get(id) : null; }
-catch (e) { saved = null; }
-var S = {
-m: m,
-id: String(id),
-title: String(title || ''),
-tk: tk,
-gen: gen,
-tok: 0,
-ep: saved && Number(saved.ep) > 0 ? Number(saved.ep) : 1,
-startAt: saved && Number(saved.pos) > 0 ? Number(saved.pos) : 0,
-fid: '',
-name: '',
-size: 0,
-entry: null,
-eps: [],
-epsHint: ''
-};
-S.tok = QPlayer.open({
-m: m,
-id: S.id,
-title: S.title,
-ep: S.ep,
-sources: [],                                // 官方源要等 find + url，先给空数组
-startAt: S.startAt,
-onProgress: function (p) { qpReport(S, p); },
-onPickEp: function (ep) { if (qpAlive(S)) qpSetEp(S, ep); },
-onNext: function () { qpNext(S); },
-onEnded: function () { qpNext(S); },
-onRetry: function () { if (qpAlive(S)) qpResolve(S); }
-});
-if (!tk) {
-QPlayer.state('login', { msg: '登录后才能使用夸克网盘播放' });
-return;
-}
-qpLoadEps(S).then(function () {
-if (!qpAlive(S)) return;
-qpResolve(S);
-});
-}
-function qpAlive(S) {
-return !!(S && S.gen === QP_GEN && S.tok && window.QPlayer && window.QPlayer.isCurrent(S.tok));
-}
-function qpLoadEps(S) {
-var api = window.__epsApi;
-if (!api || typeof api.resolveEntry !== 'function') {
-S.epsHint = '选集信息不可用';
-QPlayer.setEpisodes([], S.ep, S.epsHint);
-return Promise.resolve(null);
-}
-return api.resolveEntry(S.title, S.id).then(function (entry) {
-if (!qpAlive(S)) return null;
-S.entry = entry || null;
-S.eps = qpEpList(entry);
-if (S.eps.length && !qpHasEp(S.eps, S.ep)) S.ep = S.eps[0].ep;
-S.epsHint = S.eps.length ? '' : '暂无按集索引（可在「线路」里自备播放地址）';
-QPlayer.setEpisodes(S.eps, S.ep, S.epsHint);
-return entry;
-}, function () {
-if (!qpAlive(S)) return null;
-S.eps = [];
-S.epsHint = '选集信息加载失败，仍可在线路里自备源';
-QPlayer.setEpisodes([], S.ep, S.epsHint);
-return null;
-});
-}
-function qpSetEp(S, ep) {
-if (!qpAlive(S)) return;
-QPlayer.pause();                              // 先把旧集的进度按旧 ep / 旧 fid 落盘，再改这两个字段
-S.ep = Number(ep) > 0 ? Number(ep) : S.ep;
-S.startAt = 0;                                // 换集不续播：上一集的秒数是另一条视频的
-S.fid = '';
-QPlayer.setFid('');
-QPlayer.setEpisodes(S.eps, S.ep, S.epsHint);
-if (QP_TIMER) { clearTimeout(QP_TIMER); QP_TIMER = 0; }
-qpResolve(S);
-}
-function qpNext(S) {
-if (!qpAlive(S)) return;
-var i = -1;
-for (var k = 0; k < S.eps.length; k++) if (Number(S.eps[k].ep) === Number(S.ep)) i = k;
-if (i < 0 || i + 1 >= S.eps.length) return;   // 没有下一集：不弹任何东西
-qpSetEp(S, S.eps[i + 1].ep);
-}
-function qpResolve(S) {
-if (!qpAlive(S)) return;
-S.fid = '';
-S.name = '';
-S.size = 0;
-QPlayer.setFid('');
-var hit = qpCacheGet(S.id, S.ep);
-if (hit) {
-S.fid = String(hit.fid);
-S.name = String(hit.name || '');
-S.size = Number(hit.size) || 0;
-QPlayer.setFid(S.fid);
-QPlayer.state('loading', { msg: '正在获取播放地址…' });
-qpAskUrl(S, 0);
-return;
-}
-QPlayer.state('loading', { msg: '正在网盘里查找第 ' + S.ep + ' 集…' });
-qpJson('/tvplay/find?q=' + encodeURIComponent(S.title) + '&limit=20', S.tk).then(function (j) {
-if (!qpAlive(S)) return;
-if (j.state === 'found') {
-var pick = qpPickEp(j.items || [], S.title, S.ep);
-if (!pick) { qpNotFound(S, '网盘里没有匹配第 ' + S.ep + ' 集的文件'); return; }
-S.fid = String(pick.fid);
-S.name = String(pick.name || '');
-S.size = Number(pick.size) || 0;
-QPlayer.setFid(S.fid);
-qpCachePut(S.id, S.ep, { fid: S.fid, name: S.name, size: S.size });
-QPlayer.state('loading', { msg: '找到「' + (S.name || '文件') + '」，正在获取地址…' });
-qpAskUrl(S, 0);
-return;
-}
-if (j.state === 'none') { qpNotFound(S, '夸克网盘里还没有这一集'); return; }
-if (j.state === 'need_rebind') { QPlayer.state('rebind'); return; }
-if (j.state === 'unauthorized') { QPlayer.state('login'); return; }
-QPlayer.state('error', { msg: '播放服务暂时不可用' });
-});
-}
-function qpAskUrl(S, tries) {
-if (!qpAlive(S)) return;
-if (!S.fid) { QPlayer.state('error', { msg: '缺少文件 id，请重试' }); return; }
-if (tries > 10) { QPlayer.state('error', { msg: '转码超时，稍后再试' }); return; }
-qpJson('/tvplay/url?fid=' + encodeURIComponent(S.fid) + '&wait=45', S.tk).then(function (j) {
-if (!qpAlive(S)) return;
-if (j.state === 'ready' && j.url) {
-QPlayer.play(String(j.url), '夸克网盘', { fid: S.fid, startAt: S.startAt });
-S.startAt = 0;                            // 续播只作用于这一次；重试时不该再跳回老位置
-return;
-}
-if (j.state === 'transcoding') {
-QPlayer.state('transcoding', { msg: '转码中… 约 1 分钟（' + (tries + 1) + '/10）' });
-var wait = Number(j.retry_after);
-if (!(wait > 0)) wait = 5;
-QP_TIMER = setTimeout(function () {
-QP_TIMER = 0;
-if (!qpAlive(S)) return;               // 弹窗已关 / 已换集：不再排下一轮
-qpAskUrl(S, tries + 1);
-}, Math.min(wait, 60) * 1000);
-return;
-}
-if (j.state === 'need_rebind') { QPlayer.state('rebind'); return; }
-if (j.state === 'unauthorized') { QPlayer.state('login'); return; }
-QPlayer.state('error', { msg: '播放服务暂时不可用' });
-});
-}
-function qpNotFound(S, msg) {
-var actions = [];
-var epInfo = qpEpAt(S.eps, S.ep);
-if (epInfo && epInfo.magnet) {
-actions.push({ label: '复制磁力', fn: function () { qpCopy(epInfo.magnet); } });
-actions.push({ label: '离线转存到网盘', fn: function () { qpAddMagnet(S, epInfo.magnet); } });
-}
-actions.push({ label: '重试', fn: function () { qpResolve(S); } });
-QPlayer.state('none', {
-msg: msg + '。可以粘贴自备播放地址，或复制磁力到夸克离线下载后再试。',
-actions: actions
-});
-}
-function qpAddMagnet(S, magnet) {
-if (!qpAlive(S)) return;
-QPlayer.state('transcoding', { msg: '正在提交离线转存…' });
-qpPost('/tvplay/add', S.tk, { magnet: magnet, title: S.title, ep: String(S.ep) }).then(function (j) {
-if (!qpAlive(S)) return;
-if (j.state === 'queued' && j.task_id) { qpPollTask(S, String(j.task_id), 0); return; }
-if (j.state === 'no_quota') { QPlayer.state('quota', { msg: '网盘离线空间已满，清理后再试' }); return; }
-if (j.state === 'duplicate') {
-QPlayer.state('transcoding', { msg: '网盘里已有这个任务，正在查找文件…' });
-QP_TIMER = setTimeout(function () {
-QP_TIMER = 0;
-if (qpAlive(S)) qpResolve(S);
-}, 4000);
-return;
-}
-if (j.state === 'need_rebind') { QPlayer.state('rebind'); return; }
-if (j.state === 'unauthorized') { QPlayer.state('login'); return; }
-QPlayer.state('error', { msg: '离线转存失败' + (j.msg ? '：' + j.msg : '') });
-});
-}
-function qpPollTask(S, taskId, n) {
-if (!qpAlive(S)) return;
-if (n > 40) { QPlayer.state('error', { msg: '离线转存超时，稍后去网盘里看看' }); return; }
-qpJson('/tvplay/task?id=' + encodeURIComponent(taskId), S.tk).then(function (j) {
-if (!qpAlive(S)) return;
-if (j.state === 'ready' && j.fid) {
-S.fid = String(j.fid);
-S.name = String(j.name || '');
-S.size = Number(j.size) || 0;
-QPlayer.setFid(S.fid);
-qpCachePut(S.id, S.ep, { fid: S.fid, name: S.name, size: S.size });
-qpAskUrl(S, 0);
-return;
-}
-if (j.state === 'pending' || j.state === 'queued') {
-QPlayer.state('transcoding', { msg: '离线转存中… ' + (Number(j.progress) || 0) + '%' });
-QP_TIMER = setTimeout(function () {
-QP_TIMER = 0;
-qpPollTask(S, taskId, n + 1);
-}, 3000);
-return;
-}
-if (j.state === 'need_rebind') { QPlayer.state('rebind'); return; }
-if (j.state === 'unauthorized') { QPlayer.state('login'); return; }
-QPlayer.state('error', { msg: '离线转存失败，稍后去网盘里看看' });
-});
-}
-function qpReport(S, p) {
-if (!p) return;
-var ep = Number(p.ep) > 0 ? Number(p.ep) : S.ep;
-var fid = String(p.fid || '');
-var pos = Math.max(0, Number(p.pos) || 0);
-var dur = Math.max(0, Number(p.dur) || 0);
-if (window.__prog && typeof window.__prog.report === 'function') {
-try { window.__prog.report(S.id, ep, { fid: fid, pos: pos, dur: dur }); } catch (e) { /* 忽略 */ }
-}
-if (!fid) return;                             // 没有 fid 时后端无法定位记录
-qpPost('/tvplay/share/progress', S.tk, { fid: fid, pos: pos, dur: dur }, !!p.final)
-.then(function (j) {
-if (j && j.state === 'unauthorized' && qpAlive(S)) QPlayer.state('login');
-}, function () { /* 静默 */ });
-}
-window.__qp = openQuarkPlay;
 var QPlayer = (function () {
 var CUR = null;                            // {gen, m, ctx, ep, fid, last}
 var GEN = 0;
@@ -2308,12 +1902,6 @@ if (!s) return;
 if (kind === 'login') {
 var l = s.querySelector('#nvLogin');
 if (l) l.onclick = function () { if (typeof window.__openLogin === 'function') window.__openLogin('email'); };
-} else if (kind === 'rebind') {
-var r = s.querySelector('#nvRebind');
-if (r) r.onclick = function () {
-if (typeof quarkBindUrl === 'function') { window.open(quarkBindUrl(), '_blank', 'noopener'); return; }
-window.location.href = '/user';
-};
 } else if (kind === 'error' && opt && !opt.actions) {
 var t = s.querySelector('#nvRetry');
 if (t && CUR && CUR.ctx && typeof CUR.ctx.onRetry === 'function') t.onclick = function () { CUR.ctx.onRetry(); };
@@ -2344,7 +1932,7 @@ if (CUR && CUR.ctx && typeof CUR.ctx.onPickEp === 'function') CUR.ctx.onPickEp(e
 }
 var HLS = null, HLS_PEND = null;
 function hlsSrcs() {
-var base = (typeof SRC_BASE === 'string' && SRC_BASE) ? SRC_BASE : 'https://120.48.56.189';
+var base = (typeof SRC_BASE === 'string' && SRC_BASE) ? SRC_BASE : 'https://edge.jiangjiangze.icu';
 return [base + '/ext/hls.js',
 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js',
 'https://unpkg.com/hls.js@1.5.17/dist/hls.min.js',
@@ -2515,280 +2103,7 @@ clear();
 };
 })();
 window.QPlayer = QPlayer;
-var PAN_MEM = {};                 // kw -> {ts, data}
-var PAN_TTL = 10 * 60 * 1000;
-var PAN_BASE = (typeof SRC_BASE === 'string' && SRC_BASE) ? SRC_BASE : 'https://120.48.56.189';
-function panKw(title) {
-return String(title || '')
-.replace(/第\s*[一二三四五六七八九十两兩\d]{1,3}\s*[季期部]/g, '')
-.replace(/\bseason\s*\d{1,2}\b/gi, '')
-.replace(/剧场版|劇場版/gi, '')
-.replace(/\s+/g, ' ')
-.trim();
-}
-function panSearch(kw, force, onWait) {
-kw = String(kw || '').trim();
-if (kw.length < 2) return Promise.resolve({ items: [], err: 'short' });
-var rec = PAN_MEM[kw];
-if (!force && rec && Date.now() - rec.ts < PAN_TTL) {
-return rec.pend || Promise.resolve(rec.data);
-}
-var o = { ts: Date.now(), data: null, pend: null };
-PAN_MEM[kw] = o;
-o.pend = new Promise(function (resolve) {
-var done = false, deadline = Date.now() + 90000, timer = 0;
-function finish(data) {
-if (done) return;
-done = true;
-if (timer) { clearTimeout(timer); timer = 0; }
-if (PAN_MEM[kw] === o) { o.data = data; o.ts = Date.now(); }
-resolve(data);
-}
-function poll() {
-panReq('/pans/result?kw=' + encodeURIComponent(kw) + '&n=20&_=' + Date.now(), 'GET', null)
-.then(function (r) {
-var j = (r && r.j) || {};
-if (j.pending) {
-if (Date.now() > deadline) { finish({ items: [], err: 'timeout' }); return; }
-if (typeof onWait === 'function') onWait();
-timer = setTimeout(poll, 1500);
-return;
-}
-if (!r || !r.ok || !j.ok) { finish({ items: [], err: (j && j.error) || ('HTTP ' + (r && r.status)) }); return; }
-finish({ items: j.items || [], err: '' });
-}, function () {
-if (Date.now() > deadline) { finish({ items: [], err: 'network' }); return; }
-timer = setTimeout(poll, 2000);
-});
-}
-panReq('/pans/search?kw=' + encodeURIComponent(kw) + '&n=20&_=' + Date.now(), 'GET', null)
-.then(function (r) {
-var j = (r && r.j) || {};
-if (j.ok && !j.pending) { finish({ items: j.items || [], err: '' }); return; }
-if (!j.ok) { finish({ items: [], err: j.error || ('HTTP ' + (r && r.status)) }); return; }
-if (typeof onWait === 'function') onWait();
-poll();
-}, function () { finish({ items: [], err: 'network' }); });
-});
-return o.pend;
-}
-function panUrlOf(it) {
-var u = String(it.url || '');
-if (it.pass && !/[?&]pwd=/i.test(u)) {
-u += (u.indexOf('?') >= 0 ? '&' : '?') + 'pwd=' + encodeURIComponent(it.pass);
-}
-return u;
-}
-function panRow(it, i) {
-var meta = [it.source, (it.time || '').slice(0, 10)].filter(Boolean).join(' · ');
-return '<div class="qp-line-row pan-row" data-pan="' + i + '">'
-+ '<button class="qp-line" type="button" data-act="open" title="在夸克打开">'
-+ esc(it.title || it.url)
-+ (it.pass ? '（提取码 ' + esc(it.pass) + '）' : '')
-+ (meta ? '（' + esc(meta) + '）' : '') + '</button>'
-+ '<button class="btn" type="button" data-act="copy">复制链接</button>'
-+ '<button class="btn pri" type="button" data-act="save">转存并播放</button>'
-+ '</div>';
-}
-function panListHtml(items) {
-if (!items || !items.length) return '<p class="plot">没有找到夸克分享 —— 换个片名再试试。</p>';
-return items.map(panRow).join('');
-}
-function panBind(listEl, items, box, sid, title, beforeSave) {
-if (!listEl) return;
-listEl.onclick = function (ev) {
-var t = ev.target;
-while (t && t !== listEl && !(t.getAttribute && t.getAttribute('data-act'))) t = t.parentNode;
-if (!t || t === listEl) return;
-var row = t.parentNode;
-var i = Number(row && row.getAttribute ? row.getAttribute('data-pan') : -1);
-var it = items[i];
-if (!it) return;
-var act = t.getAttribute('data-act');
-if (act === 'open') {
-try { window.open(panUrlOf(it), '_blank', 'noopener'); } catch (e) { location.href = panUrlOf(it); }
-return;
-}
-if (act === 'copy') {
-panCopy(panUrlOf(it) + (it.pass ? (' 提取码 ' + it.pass) : ''));
-srcHint(box, '链接已复制');
-return;
-}
-if (act === 'save') {
-if (typeof beforeSave === 'function') beforeSave();
-panSave(it, box, sid, title);
-}
-};
-}
-function panCopy(text) {
-try {
-if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text); return; }
-} catch (e) { }
-try {
-var ta = document.createElement('textarea');
-ta.value = text; ta.setAttribute('readonly', '');
-ta.style.position = 'fixed'; ta.style.opacity = '0';
-document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-document.body.removeChild(ta);
-} catch (e2) { }
-}
-function panSave(it, box, sid, title, retried) {
-if (typeof authToken !== 'function' || !authToken()) {
-srcHint(box, '先登录，再在「我的」页绑定夸克网盘');
-if (typeof openAuthPanel === 'function') openAuthPanel('email');
-return;
-}
-srcHint(box, '正在转存到你的夸克网盘…');
-panReq('/tvplay/share/add', 'POST', { url: panUrlOf(it), sid: String(sid || 'quark'), title: String(title || '') })
-.then(function (r) {
-var j = (r && r.j) || {};
-if (r && r.status === 401) { srcHint(box, '登录状态失效，重新登录一次'); if (typeof openAuthPanel === 'function') openAuthPanel('email'); return; }
-if (j.state === 'need_rebind' || (r && r.status === 409)) {
-srcHint(box, '还没绑定夸克网盘 · 扫码后自动继续转存');
-panAwaitBind(function () { panSave(it, box, sid, title, true); });
-return;
-}
-if (j.state === 'invalid_share') { srcHint(box, '这条分享已失效，换一条试试'); return; }
-if (!r || !r.ok || j.state !== 'queued' || !j.task_id) { srcHint(box, '转存失败：' + (j.state || (r && r.status) || 'error')); return; }
-panPoll(j.task_id, box, it, title, 0);
-}, function () { srcHint(box, '转存请求失败，稍后再试'); });
-}
-function panPoll(taskId, box, it, title, n, retried) {
-if (n > 40) { srcHint(box, '转存超时（网盘可能还在下载），稍后到「我的」页看'); return; }
-var wait = n ? 3000 : 1200;
-setTimeout(function () {
-panReq('/tvplay/share/task?id=' + encodeURIComponent(taskId), 'GET', null).then(function (r) {
-var j = (r && r.j) || {};
-if (j.state === 'pending') { srcHint(box, '转存中… 第 ' + (n + 1) + ' 次查询'); panPoll(taskId, box, it, title, n + 1); return; }
-if (j.state === 'failed') { srcHint(box, '转存失败（分享可能已失效或网盘限流）'); return; }
-if (j.state === 'need_rebind') {
-srcHint(box, '夸克绑定失效 · 扫码后自动继续');
-panAwaitBind(function () { panPoll(taskId, box, it, title, n); });
-return;
-}
-if (j.state === 'no_space') { srcHint(box, '夸克网盘空间不足'); return; }
-if (j.state === 'invalid_share') { srcHint(box, '这条分享已失效'); return; }
-var files = (j.files || []).filter(function (f) { return f && f.fid; });
-if (!files.length) { srcHint(box, '转存完成但没有可播放的视频文件'); return; }
-panPlayFile(box, files[0], it, title);
-}, function () { panPoll(taskId, box, it, title, n + 1); });
-}, wait);
-}
-function panPlayFile(box, file, it, title) {
-if (!window.QPlayer) return;
-QPlayer.open({ m: box, id: 'pan', title: String(title || it.title || ''), ep: 1, sources: [] });
-QPlayer.state('loading', { msg: '正在获取播放地址…' });
-panAskUrl(box, file, 0);
-}
-function panAskUrl(box, file, n) {
-if (n > 10) { QPlayer.state('error', { msg: '转码超时，稍后再试' }); return; }
-panReq('/tvplay/url?fid=' + encodeURIComponent(file.fid) + '&wait=45', 'GET', null).then(function (r) {
-var j = (r && r.j) || {};
-if (j.state === 'ready' && j.url) {
-QPlayer.play(String(j.url), String(file.name || '夸克网盘'));
-srcHint(box, '网盘资源 · ' + (file.name || '已转存') + ' · 播放中');
-return;
-}
-if (j.state === 'transcoding') {
-QPlayer.state('transcoding', { msg: '转码中… 约 1 分钟（' + (n + 1) + '/10）' });
-var wait = Number(j.retry_after) > 0 ? Number(j.retry_after) : 5;
-setTimeout(function () { panAskUrl(box, file, n + 1); }, Math.min(wait, 60) * 1000);
-return;
-}
-if (j.state === 'need_rebind') { QPlayer.state('rebind'); return; }
-if (j.state === 'unauthorized') { QPlayer.state('login'); return; }
-QPlayer.state('error', { msg: '播放地址获取失败' });
-}, function () { QPlayer.state('error', { msg: '播放地址获取失败' }); });
-}
-function panAwaitBind(cb) {
-if (typeof openQuarkBindPanel !== 'function') { return; }
-var done = false;
-function once(ev) {
-if (String(ev.origin).indexOf('120.48.56.189') < 0) return;
-var d = ev.data || {};
-if (!d || d.type !== 'quark-bound' || !d.ok) return;
-done = true;
-window.removeEventListener('message', once);
-setTimeout(cb, 800);
-}
-window.addEventListener('message', once);
-setTimeout(function () { if (!done) window.removeEventListener('message', once); }, 180000);
-openQuarkBindPanel();
-}
-function panReq(path, method, body) {
-var tk = (typeof authToken === 'function' && authToken()) || '';
-var headers = { 'content-type': 'application/json' };
-if (tk) headers.authorization = 'Bearer ' + tk;
-var opt = { method: method || 'GET', headers: headers, cache: 'no-store' };
-if (body && opt.method !== 'GET') opt.body = JSON.stringify(body);
-var ctl = typeof AbortController === 'function' ? new AbortController() : null;
-var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 30000);
-if (ctl) opt.signal = ctl.signal;
-return fetch(PAN_BASE + path, opt).then(function (r) {
-clearTimeout(timer);
-return r.text().then(function (t) {
-var j = null;
-try { j = JSON.parse(t); } catch (e) { j = null; }
-return { status: Number(r.status) || 0, ok: !!r.ok, j: (j && typeof j === 'object') ? j : {} };
-});
-}, function () {
-clearTimeout(timer);
-return { status: 0, ok: false, j: {} };
-});
-}
-function panSectionHtml() {
-return '<section class="sect dp-pan" id="dpPan">'
-+ '<div class="sec-h"><h2>网盘资源</h2><span class="sec-sub" id="panSub">夸克网盘 · 点开才搜索</span></div>'
-+ '<div class="qp-line-list" id="panList" hidden></div>'
-+ '<div class="pan-acts"><button class="btn" id="panFind" type="button">查找夸克网盘资源</button></div>'
-+ '</section>';
-}
-function panMount(host, id, title) {
-var btn = host.querySelector('#panFind');
-var list = host.querySelector('#panList');
-var sub = host.querySelector('#panSub');
-if (!btn || !list) return;
-var box = host.querySelector('#modal') ? host.querySelector('#modal') : host;
-try {
-if (window.IntersectionObserver) {
-var io = new IntersectionObserver(function (es) {
-for (var i = 0; i < es.length; i++) {
-if (es[i].isIntersecting) { io.disconnect(); panSearch(panKw(title)); return; }
-}
-}, { rootMargin: '240px' });
-io.observe(btn);
-}
-} catch (e) { }
-btn.onclick = function () {
-var kw = panKw(title);
-if (btn.getAttribute('data-open') === '1') {          // 再点收起
-list.hidden = true;
-btn.setAttribute('data-open', '0');
-btn.textContent = '查找夸克网盘资源';
-return;
-}
-btn.disabled = true;
-if (sub) sub.textContent = '正在搜索「' + kw + '」…';
-panSearch(kw, false, function () {
-if (sub) sub.textContent = '正在搜索夸克分享…首次约 10–25 秒（后台任务）';
-}).then(function (d) {
-btn.disabled = false;
-btn.setAttribute('data-open', '1');
-btn.textContent = '收起网盘资源';
-list.hidden = false;
-if (sub) sub.textContent = d.err
-? (d.err === 'timeout' ? '搜索超时 · 再点一次刷新' : ('搜索失败（' + d.err + '）'))
-: (d.items.length + ' 条夸克分享 · 来自全网');
-list.innerHTML = panListHtml(d.items);
-panBind(list, d.items, box, id, title);
-});
-};
-}
-window.__panSearch = panSearch;
-window.__panListHtml = panListHtml;
-window.__panBind = panBind;
-window.__panKw = panKw;
-var SRC_BASE = 'https://120.48.56.189';
+var SRC_BASE = 'https://edge.jiangjiangze.icu';
 function srcGet(path, tk) {
 var headers = {};
 if (tk) headers.authorization = 'Bearer ' + tk;
@@ -2876,24 +2191,21 @@ return YT_REACH;
 }
 function srcStart(box, id, title, ep) {
 var epNo = Math.max(1, Math.floor(Number(ep) || 1));
-var tk = (typeof authToken === 'function') ? authToken() : '';
 if (typeof window.__extAbort === 'function') window.__extAbort();
 if (!box) return false;
-function toQuark(why) {
-srcLineSet(box, '夸克网盘');
-srcHint(box, why + ' · 使用网盘源');
-if (typeof openQuarkPlay === 'function') openQuarkPlay(srcPlayerSlot(box), id, title);
-if (!tk && typeof openAuthPanel === 'function') openAuthPanel('email');
+function fail(why) {
+srcLineSet(box, '无可用线路');
+srcHint(box, (why ? why + ' · ' : '') + '没有可用播放线路，可去 B 站或搜索页找');
 }
 function toYoutube(why) {
 var eps = srcYtEps(id);
-if (!eps) { toQuark(why + ' · 无官方正片'); return; }
+if (!eps) { fail(why + ' · 无官方正片'); return; }
 var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
 srcHint(box, why + ' · 检测 YouTube 可达性…');
 ytReach().then(function (ok) {
 var pick = eps[idx] || [];
 if (ok && srcEmbedYT(box, pick[1], epNo, pick[2])) return;
-toQuark(why + ' · YouTube 不可达');
+fail(why + ' · YouTube 不可达');
 });
 }
 function toExt(next) {
@@ -2906,23 +2218,6 @@ function toRule(next) {
 if (typeof window.__rulePlay !== 'function') { next(''); return; }
 srcHint(box, '正在尝试规则源…');
 window.__rulePlay(box, id, title, epNo, function (w) { next(w || '规则源未命中'); }, null, 3);
-}
-function toYoutube(why) {
-var eps = srcYtEps(id);
-if (!eps) { toQuark(why + ' · 无官方正片'); return; }
-var idx = Math.max(0, Math.min(eps.length - 1, epNo - 1));
-srcHint(box, why + ' · 检测 YouTube 可达性…');
-ytReach().then(function (ok) {
-var pick = eps[idx] || [];
-if (ok && srcEmbedYT(box, pick[1], epNo, pick[2])) return;
-toQuark(why + ' · YouTube 不可达');
-});
-}
-function toQuark(why) {
-srcLineSet(box, '夸克网盘');
-srcHint(box, why + ' · 使用网盘源');
-if (typeof openQuarkPlay === 'function') openQuarkPlay(srcPlayerSlot(box), id, title);
-if (typeof authToken === 'function' && !authToken() && typeof openAuthPanel === 'function') openAuthPanel('email');
 }
 srcHint(box, '正在匹配播放源…');
 toExt(function (why1) {
@@ -2941,9 +2236,8 @@ return '<div class="line-bar">'
 }
 function srcLineMenuHtml(id) {
 var rows = [
-['auto', '自动（外部 → 规则源 → YouTube → 网盘）'],
-['yt', 'YouTube 官方'],
-['quark', '夸克网盘']
+['auto', '自动（外部 → 规则源 → YouTube）'],
+['yt', 'YouTube 官方']
 ];
 var items = (typeof window.__extItems === 'function') ? window.__extItems(id) : [];
 if (items.length) {
@@ -3000,11 +2294,6 @@ var pick = eps[Math.max(0, Math.min(eps.length - 1, ep - 1))] || [];
 if (srcEmbedYT(box, pick[1], ep, pick[2])) srcLineSet(box, 'YouTube');
 return;
 }
-if (line === 'quark') {
-srcLineSet(box, '夸克网盘');
-if (typeof openQuarkPlay === 'function') openQuarkPlay(slot, id, title);
-return;
-}
 if (line.indexOf('rule:') === 0) {
 if (typeof window.__rulePlay === 'function') {
 window.__rulePlay(box, id, title, ep, null, line.slice(5));
@@ -3032,44 +2321,6 @@ if (typeof extPlayEp === 'function') extPlayEp(box, id, title, ep, mine);
 window.__srcStart = srcStart;
 window.__srcLineBarHtml = srcLineBarHtml;
 window.__srcLineBind = srcLineBind;
-function openQuarkBindPanel() {
-if (document.getElementById('qbmask')) return;
-if (typeof authToken === 'function' && !authToken()) {
-if (typeof openAuthPanel === 'function') openAuthPanel('email');
-return;
-}
-var mask = document.createElement('div');
-mask.className = 'authmask qbmask';
-mask.id = 'qbmask';
-mask.innerHTML = '<div class="authcard qbcard" role="dialog" aria-modal="true">'
-+ '<button class="authx" type="button" aria-label="关闭">×</button>'
-+ '<h3 class="qbtitle">绑定夸克网盘</h3>'
-+ '<p class="qbhint">用夸克 App 扫码，扫完自动绑定（只需一次）。绑定后网盘源可直接播放。</p>'
-+ '<div class="qbframe"><iframe src="' + esc(quarkBindUrl('&embed=1')) + '"'
-+ ' referrerpolicy="origin-when-cross-origin" allow="clipboard-write"></iframe></div>'
-+ '</div>';
-document.body.appendChild(mask);
-function cleanup() {
-if (mask.parentNode) mask.parentNode.removeChild(mask);
-window.removeEventListener('message', onMsg);
-document.removeEventListener('keydown', onKey);
-}
-function onMsg(ev) {
-if (String(ev.origin).indexOf('120.48.56.189') < 0) return;
-var d = ev.data || {};
-if (d && d.type === 'quark-bound' && d.ok) {
-cleanup();
-srcHint(document, '夸克网盘已绑定');
-}
-}
-function onKey(ev) { if (ev.key === 'Escape') cleanup(); }
-mask.onclick = function (ev) {
-var t = ev.target;
-if (t === mask || (t && String(t.className || '').indexOf('authx') >= 0)) cleanup();
-};
-window.addEventListener('message', onMsg);
-document.addEventListener('keydown', onKey);
-}
 var EXT_TTL = 10 * 60 * 1000;                 // 同一关键词的原始响应缓存
 var EXT_GEN = 0;
 var EXT_PROV = null, EXT_PROV_P = null, EXT_PROV_TS = 0;
@@ -3548,7 +2799,7 @@ window.__extSeason = extSeason;
 window.__extNorm = extNorm;
 var BILI = {};          // id -> {bvid, aid, pages:[{page,cid,part}]}
 var BILI_P = {};        // id -> 在途的 resolve：同 id 并发共用一次请求
-var BILI_BASE = 'https://120.48.56.189/bili/';
+var BILI_BASE = 'https://edge.jiangjiangze.icu/bili/';
 function biliGet(path, params) {
 var q = Object.keys(params || {}).map(function (k) {
 return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
@@ -3962,7 +3213,7 @@ try { localStorage.setItem(THEME_KEY, next); } catch (e) { }
 applyTheme(next);
 }
 applyTheme(currentTheme());
-var AUTH_BASE = 'https://120.48.56.189';
+var AUTH_BASE = 'https://edge.jiangjiangze.icu';
 var TOKEN_KEY = 'gh_token';
 var AUTH_PENDING = '';
 var AUTH_LOGIN = '';
